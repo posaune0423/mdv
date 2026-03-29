@@ -173,3 +173,21 @@ fn keeps_inline_html_as_plain_text() {
         }] if text.plain() == "Before <br/> after."
     ));
 }
+
+#[test]
+fn preserves_math_text_in_plain_document_normalization() {
+    let source = "Inline $e^{i\\pi} + 1 = 0$ and $$a^2 + b^2 = c^2$$.\n";
+
+    let document = match parse_document("docs/example.md".into(), source) {
+        Ok(document) => document,
+        Err(error) => panic!("document should parse: {error}"),
+    };
+
+    assert!(matches!(
+        document.blocks.as_slice(),
+        [mdv::core::document::Block {
+            kind: BlockKind::Paragraph { text },
+            ..
+        }] if text.plain() == "Inline $e^{i\\pi} + 1 = 0$ and $$a^2 + b^2 = c^2$$."
+    ));
+}

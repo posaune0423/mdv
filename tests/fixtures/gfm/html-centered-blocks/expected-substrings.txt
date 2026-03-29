@@ -1,0 +1,7 @@
+<p align="center">
+<img src="../../../../examples/pixel.png" alt="marry.fun" width="240" />
+<br/>
+<img src="../../../../examples/pixel.png" alt="Claw-chan" width="360" />
+</p>
+<a href="https://example.com/live"><img src="../badges-local/badge-ci.svg" alt="Live Demo" height="28" /></a>
+<a href="https://example.com/x"><img src="../badges-local/badge-license.svg" alt="X @Marrydotfun" height="28" /></a>

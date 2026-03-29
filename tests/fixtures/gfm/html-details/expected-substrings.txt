@@ -1,0 +1,4 @@
+<details open>
+<summary>Architecture Notes</summary>
+<p>Hidden body rendered through GitHub HTML.</p>
+</details>

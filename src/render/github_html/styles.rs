@@ -115,6 +115,8 @@ body {
 }
 .markdown-body img {
   max-width: 100%;
+}
+.markdown-body img:not([height]) {
   height: auto;
 }
 .markdown-body [align="center"] {
@@ -125,6 +127,28 @@ body {
 }
 .markdown-body [align="right"] {
   text-align: right;
+}
+.markdown-body [align] > img:only-child {
+  display: block;
+}
+.markdown-body [align="center"] > img:only-child {
+  margin-left: auto;
+  margin-right: auto;
+}
+.markdown-body [align="right"] > img:only-child {
+  margin-left: auto;
+}
+.markdown-body [align="left"] > img:only-child {
+  margin-right: auto;
+}
+.markdown-body span[data-math-style="inline"] {
+  white-space: nowrap;
+}
+.markdown-body span[data-math-style="display"] {
+  display: block;
+  margin: 16px 0;
+  text-align: center;
+  white-space: pre-wrap;
 }
 .markdown-body p > img:only-child {
   display: block;

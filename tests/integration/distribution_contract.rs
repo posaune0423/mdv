@@ -111,6 +111,21 @@ fn lefthook_config_uses_repo_quality_gates() {
     );
 }
 
+#[test]
+fn make_build_refreshes_the_local_bin_copy() {
+    let makefile = fs::read_to_string("Makefile")
+        .unwrap_or_else(|error| panic!("Makefile should be readable: {error}"));
+
+    assert!(
+        makefile.contains("build:\n\tcargo build --release\n\tmkdir -p bin"),
+        "make build should still compile the release binary and prepare the local bin directory"
+    );
+    assert!(
+        makefile.contains("cp target/release/mdv bin/mdv"),
+        "make build should refresh ./bin/mdv so the local runnable path is not stale"
+    );
+}
+
 fn parse_yaml(source: &str) -> Value {
     serde_yaml::from_str::<Value>(source)
         .unwrap_or_else(|error| panic!("workflow should be valid YAML: {error}"))

@@ -8,6 +8,8 @@ pub(crate) fn gfm_options() -> Options<'static> {
     options.extension.tasklist = true;
     options.extension.footnotes = true;
     options.extension.alerts = true;
+    options.extension.math_dollars = true;
+    options.extension.math_code = true;
     options.render.tasklist_classes = true;
     options.render.github_pre_lang = true;
     options

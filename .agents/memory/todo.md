@@ -1,5 +1,89 @@
 ## Current Task
 
+- [x] raw HTML 復元後に `&nbsp;` などの double-escaped entity が残る再現点を固定する
+- [x] supported raw HTML の text segment で entity を 1 段だけ戻す最小修正を入れる
+- [x] 関連テストと build/run 経路で混入が消えたことを確認する
+
+## Current Task Review
+
+- Root cause: `restore_supported_raw_html` は `&lt;...&gt;` の tag だけを復元しており、raw HTML 内テキストに含まれる `&amp;nbsp;` のような double-escaped entity はそのまま残っていた。その結果、復元後の HTML に literal `&nbsp;` が混入した。
+- Fix: `src/render/github_html/postprocess.rs` に double-escaped HTML entity を 1 段だけ戻す処理を追加し、code/pre の外側テキスト segment にだけ適用した。これで `&amp;nbsp;` は `&nbsp;` に戻り、ブラウザ側で通常どおり non-breaking space として解釈される。
+- Regression coverage:
+- `tests/unit/render_pipeline/github_html.rs` に raw HTML 内の `&nbsp;` が `&amp;nbsp;` のまま残らないことを確認するテストを追加した。
+- 既存の centered fixture テストも再実行し、README 風 badge row の復元が壊れていないことを確認した。
+- Exact-path verification:
+- `make build && TERM=xterm-kitty ./bin/mdv ~/Work/daikolabs/marry-fun/README.md` を再実行し、出力上に literal `&nbsp;` が混入していないことを確認した。
+- Verification:
+- `cargo test github_html_decodes_double_escaped_entities_inside_restored_raw_html -- --nocapture` passed
+- `cargo test centered_block_fixture_ignores_extra_attrs_but_restores_centered_html -- --nocapture` passed
+- `cargo fmt --all --check` passed
+- `make build && TERM=xterm-kitty ./bin/mdv ~/Work/daikolabs/marry-fun/README.md` passed
+
+## Current Task
+
+- [x] Reproduce the user's exact local run path and verify whether `bin/mdv` was stale
+- [x] Make `make build` refresh `bin/mdv` so `make build && ./bin/mdv ...` uses the latest local binary
+- [x] Re-run the user's command path and record the verification outcome below
+
+## Current Task Review
+
+- Root cause: `make build` only refreshed `target/release/mdv`, while the user's actual command ran `./bin/mdv`. The two binaries were different before the fix, so the user was launching a stale executable.
+- Workflow fix: [`Makefile`](/Users/asumayamada/Private/posaune0423/mdv/Makefile) now refreshes `bin/mdv` as part of `make build`; `build-tracked-bin` remains as an alias name for the same local packaging path.
+- Docs/tests: [`docs/DEVELOPMENT.md`](/Users/asumayamada/Private/posaune0423/mdv/docs/DEVELOPMENT.md) now states that `make build` refreshes the local runnable `bin/mdv`, and [`tests/integration/distribution_contract.rs`](/Users/asumayamada/Private/posaune0423/mdv/tests/integration/distribution_contract.rs) now requires that contract.
+- Exact-path verification:
+- `make build && ./bin/mdv ~/Work/daikolabs/marry-fun/README.md` was executed before the fix and showed that `./bin/mdv` was being used while stale.
+- After the fix, `make build && shasum -a 256 target/release/mdv bin/mdv && ./bin/mdv ~/Work/daikolabs/marry-fun/README.md` produced matching SHA-256 values for `target/release/mdv` and `bin/mdv`.
+- This exec environment is not Ghostty/Kitty, so the exact command still stops at `interactive mode requires Ghostty or Kitty`; however `TERM=xterm-kitty ./bin/mdv ~/Work/daikolabs/marry-fun/README.md` was also executed and entered the alternate-screen graphics path successfully.
+- Verification:
+- `cargo test make_build_refreshes_the_local_bin_copy -- --nocapture` passed
+- `cargo fmt --all --check` passed
+
+## Current Task
+
+- [x] Add dedicated fixtures for `details/summary`, `picture/source`, and GitHub math expressions
+- [x] Add regression tests proving those constructs render in GitHub HTML and math survives plain-text normalization
+- [x] Extend raw HTML restoration and Comrak options to support those cases
+- [x] Run targeted tests/formatting and record the outcome below
+
+## Current Task Review
+
+- Fixture coverage: added `tests/fixtures/gfm/html-details/`, `tests/fixtures/gfm/html-picture/`, and `tests/fixtures/gfm/math/` so GitHub-style disclosure markup, responsive image markup, and math syntax each have dedicated regression inputs.
+- Raw HTML fix: `src/render/github_html/postprocess.rs` now restores `details`, `summary`, `picture`, and `source` tags in the rich HTML path, preserving only a safe subset of attributes such as `open`, `media`, and `srcset`.
+- Math support: `src/render/markdown_pipeline.rs` now enables Comrak `math_dollars` and `math_code`, and `src/render/markdown.rs` preserves math nodes in plain-text normalization so headless output does not drop equations.
+- Presentation tweak: `src/render/github_html/styles.rs` now gives display math a block layout in the GitHub HTML path so `$$...$$` formulas remain visibly separate.
+- Docs: `docs/MARKDOWN.md` now lists GitHub-style math expressions as a supported feature.
+- Verification:
+- `cargo test details_fixture_restores_details_and_summary_markup -- --nocapture` passed
+- `cargo test picture_fixture_restores_picture_and_source_markup -- --nocapture` passed
+- `cargo test github_html_emits_github_style_math_markup -- --nocapture` passed
+- `cargo test gfm_fixtures_generate_expected_html_fragments -- --nocapture` passed
+- `cargo test preserves_math_text_in_plain_document_normalization -- --nocapture` passed
+- `cargo test headless_render_keeps_math_expressions_visible -- --nocapture` passed
+- `cargo test gfm_fixtures_render_through_webkit_and_terminal_graphics_path -- --nocapture` passed
+- `cargo fmt --all --check` passed
+
+## Current Task
+
+- [x] Add a README-style raw HTML fixture covering centered block wrappers with extra attributes
+- [x] Add regression tests that require those wrappers and nested images/links to be restored instead of escaped
+- [x] Generalize raw HTML restoration so supported GitHub-style tags survive harmless extra attributes
+- [x] Run targeted tests/formatting and record the outcome below
+
+## Current Task Review
+
+- Fixture coverage: added `tests/fixtures/gfm/html-centered-blocks/` with a README-style `<p align="center" style="...">` wrapper, stacked local images, and linked badge images that also carry ignored `style` attributes.
+- Root cause: raw HTML restoration only accepted exact single-attribute forms such as `<p align="center">` and rejected otherwise-supported tags as soon as extra attributes appeared, so GitHub-style markup with harmless extras stayed escaped.
+- Sanitization fix: `src/render/github_html/postprocess.rs` now restores supported block tags, anchors, and images after strictly parsing attributes, preserving the safe subset and dropping harmless extras instead of escaping the whole tag.
+- Layout fix: `src/render/github_html/styles.rs` now centers singleton images for any `[align]` wrapper, instead of only handling the paragraph-specific case.
+- Verification:
+- `cargo test centered_block_fixture_ignores_extra_attrs_but_restores_centered_html -- --nocapture` passed
+- `cargo test gfm_fixtures_generate_expected_html_fragments -- --nocapture` passed
+- `cargo test github_html_uses_generic_align_rules_for_singleton_images -- --nocapture` passed
+- `cargo test webkit_snapshot_renders_centered_block_fixture_assets -- --nocapture` passed
+- `cargo fmt --all --check` passed
+
+## Current Task
+
 - [x] Add crates.io-oriented package metadata to `Cargo.toml`
 - [x] Run a minimal manifest verification
 - [x] Commit the metadata update

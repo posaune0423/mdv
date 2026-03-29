@@ -224,3 +224,62 @@ fn github_html_uses_viewport_relative_article_width() {
     assert!(html.contains("width: calc(100vw - 16px);"));
     assert!(html.contains("max-width: none;"));
 }
+
+#[test]
+fn github_html_uses_generic_align_rules_for_singleton_images() {
+    let html = build_github_html(
+        "<div align=\"center\"><img src=\"pixel.png\" alt=\"fixture\" width=\"120\" /></div>\n",
+        std::path::Path::new("."),
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("html should render: {error}"));
+
+    assert!(html.contains(r#".markdown-body [align] > img:only-child {"#));
+    assert!(html.contains(r#".markdown-body [align="center"] > img:only-child {"#));
+    assert!(html.contains("margin-left: auto;"));
+    assert!(html.contains("margin-right: auto;"));
+}
+
+#[test]
+fn github_html_does_not_force_auto_height_on_images_with_explicit_height() {
+    let html = build_github_html(
+        r#"<p align="center"><img src="badge.svg" alt="badge" height="28" /></p>"#,
+        std::path::Path::new("."),
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("html should render: {error}"));
+
+    assert!(html.contains(".markdown-body img {\n  max-width: 100%;\n}"));
+    assert!(html.contains(".markdown-body img:not([height]) {\n  height: auto;\n}"));
+    assert!(!html.contains(".markdown-body img {\n  max-width: 100%;\n  height: auto;\n}"));
+}
+
+#[test]
+fn github_html_decodes_double_escaped_entities_inside_restored_raw_html() {
+    let html = build_github_html(
+        r#"<p align="center"><a href="https://example.com/one">one</a>&nbsp;<a href="https://example.com/two">two</a></p>"#,
+        std::path::Path::new("."),
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("html should render: {error}"));
+
+    assert!(html.contains(r#"<a href="https://example.com/one">one</a>&nbsp;<a href="https://example.com/two">two</a>"#));
+    assert!(!html.contains("&amp;nbsp;"));
+}
+
+#[test]
+fn github_html_emits_github_style_math_markup() {
+    let html = build_github_html(
+        "Inline $e^{i\\pi} + 1 = 0$.\n\nDisplay $$a^2 + b^2 = c^2$$.\n",
+        std::path::Path::new("."),
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("html should render: {error}"));
+
+    assert!(html.contains(r#"<span data-math-style="inline">e^{i\pi} + 1 = 0</span>"#));
+    assert!(html.contains(r#"<span data-math-style="display">a^2 + b^2 = c^2</span>"#));
+}
