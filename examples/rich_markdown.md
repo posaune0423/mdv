@@ -73,7 +73,7 @@ flowchart TD
 
 ## Image
 
-![Fixture image](pixel.ppm "PPM sample image")
+![Fixture image](pixel.png "PNG sample image")
 
 ## Footnotes
 

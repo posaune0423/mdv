@@ -1,6 +1,6 @@
 use std::{
-    collections::BTreeSet,
     cmp,
+    collections::BTreeSet,
     io::{self, Write},
     sync::OnceLock,
     time::{Duration, SystemTime},
@@ -26,16 +26,16 @@ use syntect::{
 
 use crate::{
     core::{config::AppConfig, document::Document, theme::ThemeTokens},
-    io::{browser, mermaid_cli::MermaidCliRenderer},
     io::fs::FileSystemDocumentSource,
     io::kitty_graphics::{
         DeleteCommand, KittyImagePlacement, encode_delete, encode_place, encode_transmit_png,
     },
+    io::{browser, image_decoder::ImageDecoder, mermaid_cli::MermaidCliRenderer},
     render::{
         markdown::parse_document,
         text::{
             RenderedDocument, RenderedGraphic, RenderedGraphicContent, RenderedLine,
-            RenderedLineKind, render_document,
+            RenderedLineKind, render_document, scaled_graphic_height,
         },
     },
 };
@@ -43,6 +43,15 @@ use crate::{
 static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
 static THEME_SET: OnceLock<ThemeSet> = OnceLock::new();
 static FALLBACK_THEME: OnceLock<SyntectTheme> = OnceLock::new();
+
+#[derive(Clone, Copy)]
+struct GraphicViewport {
+    scroll: usize,
+    content_height: usize,
+    article_x: u16,
+    article_width: u16,
+    viewport_width: u16,
+}
 
 pub struct TerminalViewer {
     config: AppConfig,
@@ -228,11 +237,13 @@ impl TerminalViewer {
         let visible_lines = &self.rendered.lines[self.scroll..visible_end];
         let (graphic_commands, visible_placement_ids) = collect_graphics_commands(
             &self.rendered,
-            self.scroll,
-            content_height,
-            article_x,
-            article_width,
-            width,
+            GraphicViewport {
+                scroll: self.scroll,
+                content_height,
+                article_x,
+                article_width,
+                viewport_width: width,
+            },
             &self.visible_placements,
             &mut self.transmitted_graphics,
         );
@@ -340,35 +351,57 @@ impl TerminalViewer {
     fn render_next_visible_graphic(&mut self) -> bool {
         let content_height = self.page_height();
         let visible_end = self.scroll.saturating_add(content_height);
-
-        for graphic in &mut self.rendered.graphics {
-            if graphic.line_index < self.scroll || graphic.line_index >= visible_end {
-                continue;
-            }
-
-            let RenderedGraphicContent::Mermaid { source, png_bytes, failed } = &mut graphic.content
-            else {
-                continue;
-            };
-
-            if png_bytes.is_some() || *failed {
-                continue;
-            }
-
-            match self.mermaid_renderer.render_png(source) {
-                Ok(rendered) => {
-                    *png_bytes = Some(rendered);
-                    self.warning = None;
+        let Some((graphic_index, source)) =
+            self.rendered.graphics.iter().enumerate().find_map(|(index, graphic)| {
+                if graphic.line_index < self.scroll || graphic.line_index >= visible_end {
+                    return None;
                 }
-                Err(error) => {
+
+                match &graphic.content {
+                    RenderedGraphicContent::Mermaid { source, png_bytes: None, failed: false } => {
+                        Some((index, source.clone()))
+                    }
+                    _ => None,
+                }
+            })
+        else {
+            return false;
+        };
+
+        match self.mermaid_renderer.render_png(&source) {
+            Ok(rendered_png) => {
+                let image_decoder = ImageDecoder::new();
+                let new_height = image_decoder
+                    .dimensions_from_png_bytes(&rendered_png)
+                    .map(|(width, height)| {
+                        scaled_graphic_height(
+                            self.rendered.graphics[graphic_index].width_cells,
+                            width,
+                            height,
+                        )
+                    })
+                    .unwrap_or(self.rendered.graphics[graphic_index].height_cells);
+
+                resize_graphic_space(&mut self.rendered, graphic_index, new_height);
+                if let RenderedGraphicContent::Mermaid { png_bytes, failed, .. } =
+                    &mut self.rendered.graphics[graphic_index].content
+                {
+                    *png_bytes = Some(rendered_png);
+                    *failed = false;
+                }
+                self.warning = None;
+            }
+            Err(error) => {
+                if let RenderedGraphicContent::Mermaid { failed, .. } =
+                    &mut self.rendered.graphics[graphic_index].content
+                {
                     *failed = true;
-                    self.warning = Some(format!("mermaid render failed: {error}"));
                 }
+                self.warning = Some(format!("mermaid render failed: {error}"));
             }
-            return true;
         }
 
-        false
+        true
     }
 
     fn draw_line(
@@ -594,16 +627,13 @@ fn visible_graphic_placements(
 
 fn collect_graphics_commands(
     rendered: &RenderedDocument,
-    scroll: usize,
-    content_height: usize,
-    article_x: u16,
-    article_width: u16,
-    viewport_width: u16,
+    viewport: GraphicViewport,
     previous_visible_placements: &[(u32, u32)],
     transmitted_graphics: &mut BTreeSet<u32>,
 ) -> (Vec<String>, Vec<(u32, u32)>) {
     let mut commands = Vec::new();
-    let visible_placements = visible_graphic_placements(rendered, scroll, content_height);
+    let visible_placements =
+        visible_graphic_placements(rendered, viewport.scroll, viewport.content_height);
 
     for (image_id, placement_id) in previous_visible_placements
         .iter()
@@ -614,11 +644,11 @@ fn collect_graphics_commands(
     }
 
     for (index, graphic) in rendered.graphics.iter().enumerate() {
-        if graphic.line_index < scroll {
+        if graphic.line_index < viewport.scroll {
             continue;
         }
-        let relative_row = graphic.line_index - scroll;
-        if relative_row >= content_height {
+        let relative_row = graphic.line_index - viewport.scroll;
+        if relative_row >= viewport.content_height {
             continue;
         }
 
@@ -634,13 +664,14 @@ fn collect_graphics_commands(
         let placement = KittyImagePlacement {
             image_id,
             placement_id: image_id,
-            columns: graphic.width_cells.min(viewport_width),
+            columns: graphic.width_cells.min(viewport.viewport_width),
             rows: graphic.height_cells,
             cursor_x: 0,
             cursor_y: 0,
             z_index: -1,
         };
-        let graphic_x = article_x + article_width.saturating_sub(graphic.width_cells) / 2;
+        let graphic_x =
+            viewport.article_x + viewport.article_width.saturating_sub(graphic.width_cells) / 2;
         commands.push(format!(
             "{}{}",
             ansi_cursor_move(graphic_x, relative_row as u16),
@@ -663,9 +694,45 @@ fn ansi_cursor_move(x: u16, y: u16) -> String {
     format!("\u{1b}[{};{}H", y + 1, x + 1)
 }
 
+fn resize_graphic_space(rendered: &mut RenderedDocument, graphic_index: usize, new_height: u16) {
+    let line_index = rendered.graphics[graphic_index].line_index;
+    let current_height = rendered.graphics[graphic_index].height_cells;
+    if new_height == current_height {
+        return;
+    }
+
+    if new_height > current_height {
+        let extra = usize::from(new_height - current_height);
+        rendered.lines.splice(
+            line_index + usize::from(current_height)..line_index + usize::from(current_height),
+            std::iter::repeat_n(
+                RenderedLine {
+                    plain_text: String::new(),
+                    display_text: String::new(),
+                    kind: RenderedLineKind::Blank,
+                },
+                extra,
+            ),
+        );
+    } else {
+        let remove_start = line_index + usize::from(new_height);
+        let remove_end = line_index + usize::from(current_height);
+        rendered.lines.drain(remove_start..remove_end);
+    }
+
+    let delta = new_height as isize - current_height as isize;
+    rendered.graphics[graphic_index].height_cells = new_height;
+    for graphic in rendered.graphics.iter_mut().skip(graphic_index + 1) {
+        graphic.line_index = graphic.line_index.saturating_add_signed(delta);
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{article_wrap_width, collect_graphics_commands, visible_graphic_placements};
+    use super::{
+        GraphicViewport, article_wrap_width, collect_graphics_commands, resize_graphic_space,
+        visible_graphic_placements,
+    };
     use std::fs;
 
     use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -675,7 +742,7 @@ mod tests {
         cli::Theme,
         core::config::{AppConfig, MermaidMode},
         io::fs::FileSystemDocumentSource,
-        render::text::{RenderedDocument, RenderedGraphic},
+        render::text::{RenderedDocument, RenderedGraphic, RenderedLine, RenderedLineKind},
         ui::terminal::TerminalViewer,
     };
 
@@ -723,19 +790,20 @@ mod tests {
         };
         let mut transmitted = std::collections::BTreeSet::new();
 
+        let viewport = GraphicViewport {
+            scroll: 0,
+            content_height: 5,
+            article_x: 0,
+            article_width: 20,
+            viewport_width: 80,
+        };
         let (first_commands, _) =
-            collect_graphics_commands(&rendered, 0, 5, 0, 20, 80, &[], &mut transmitted);
+            collect_graphics_commands(&rendered, viewport, &[], &mut transmitted);
         let (second_commands, _) =
-            collect_graphics_commands(&rendered, 0, 5, 0, 20, 80, &[], &mut transmitted);
+            collect_graphics_commands(&rendered, viewport, &[], &mut transmitted);
 
-        assert_eq!(
-            first_commands.iter().filter(|command| command.contains("a=t")).count(),
-            1
-        );
-        assert_eq!(
-            second_commands.iter().filter(|command| command.contains("a=t")).count(),
-            0
-        );
+        assert_eq!(first_commands.iter().filter(|command| command.contains("a=t")).count(), 1);
+        assert_eq!(second_commands.iter().filter(|command| command.contains("a=t")).count(), 0);
         assert!(second_commands.iter().any(|command| command.contains("a=p")));
     }
 

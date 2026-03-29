@@ -1,7 +1,18 @@
-use mdv::io::kitty_graphics::{DeleteCommand, KittyImagePlacement, encode_delete, encode_png};
+use mdv::io::kitty_graphics::{
+    DeleteCommand, KittyImagePlacement, encode_delete, encode_place, encode_transmit_png,
+};
 
 #[test]
-fn encodes_png_transfer_with_placement_metadata() {
+fn encodes_png_transfer_command() {
+    let escape = encode_transmit_png(7, &[1, 2, 3, 4]);
+
+    assert!(escape.contains("a=t"));
+    assert!(escape.contains("f=100"));
+    assert!(escape.contains("i=7"));
+}
+
+#[test]
+fn encodes_image_placement_command() {
     let placement = KittyImagePlacement {
         image_id: 7,
         placement_id: 3,
@@ -12,10 +23,9 @@ fn encodes_png_transfer_with_placement_metadata() {
         z_index: -1,
     };
 
-    let escape = encode_png(&placement, &[1, 2, 3, 4]);
+    let escape = encode_place(&placement);
 
-    assert!(escape.contains("a=T"));
-    assert!(escape.contains("f=100"));
+    assert!(escape.contains("a=p"));
     assert!(escape.contains("i=7"));
     assert!(escape.contains("p=3"));
     assert!(escape.contains("c=12"));

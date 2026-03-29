@@ -80,17 +80,14 @@ fn terminal_render_formats_lists_links_and_tables_for_interactive_view() {
 
 #[test]
 fn terminal_render_defers_mermaid_rasterization_for_interactive_view() {
-    let document = parse_document(
-        "docs/example.md".into(),
-        "```mermaid\ngraph TD\n    A --> B\n```\n",
-    )
-    .unwrap_or_else(|error| panic!("document should parse: {error}"));
+    let document =
+        parse_document("docs/example.md".into(), "```mermaid\ngraph TD\n    A --> B\n```\n")
+            .unwrap_or_else(|error| panic!("document should parse: {error}"));
 
     let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 48);
-    let graphic = rendered.graphics.first().expect("mermaid graphic should exist");
+    let Some(graphic) = rendered.graphics.first() else {
+        panic!("mermaid graphic should exist");
+    };
 
-    assert!(matches!(
-        &graphic.content,
-        RenderedGraphicContent::Mermaid { png_bytes: None, .. }
-    ));
+    assert!(matches!(&graphic.content, RenderedGraphicContent::Mermaid { png_bytes: None, .. }));
 }

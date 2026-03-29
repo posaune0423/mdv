@@ -20,11 +20,7 @@ pub enum DeleteCommand {
 #[must_use]
 pub fn encode_transmit_png(image_id: u32, png_bytes: &[u8]) -> String {
     let payload = STANDARD.encode(png_bytes);
-    format!(
-        "\u{1b}_Ga=t,t=d,f=100,i={},q=2;{}\u{1b}\\",
-        image_id,
-        payload
-    )
+    format!("\u{1b}_Ga=t,t=d,f=100,i={},q=2;{}\u{1b}\\", image_id, payload)
 }
 
 #[must_use]

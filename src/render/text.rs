@@ -573,12 +573,7 @@ fn push_graphic_placeholder(
             kind: RenderedLineKind::Blank,
         });
     }
-    graphics.push(RenderedGraphic {
-        line_index,
-        width_cells,
-        height_cells,
-        content,
-    });
+    graphics.push(RenderedGraphic { line_index, width_cells, height_cells, content });
 }
 
 #[must_use]

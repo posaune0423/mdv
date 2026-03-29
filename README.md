@@ -119,15 +119,9 @@ Release notes and version history live in [CHANGELOG.md](./CHANGELOG.md).
 
 Issues and pull requests are welcome. Please run `make ci` before opening a PR so formatting, Clippy, and tests match what GitHub Actions enforces.
 
-### Changelog & releases (Changesets)
+### Releases
 
-User-visible changes should include a **changeset** so the [Changesets](https://github.com/changesets/changesets) automation can version `package.json`, `Cargo.toml`, and [CHANGELOG.md](./CHANGELOG.md) together.
-
-1. Install the **[Changeset bot](https://github.com/apps/changeset-bot)** on this GitHub org/repo (same idea as [this Zenn walkthrough](https://zenn.dev/hayato94087/articles/a0598a8816f25c#4.changeset-bot%E3%82%92%E8%A8%AD%E5%AE%9A)).
-2. In **Settings → Actions → General → Workflow permissions**, enable **Allow GitHub Actions to create and approve pull requests** so the [Changesets workflow](.github/workflows/changeset-release.yml) can open the “Version Packages” PR.
-3. Locally: `npm ci` then `npx changeset` (or use the bot on a PR).
-
-After merges to `main`, the bot opens/updates a release PR; merging it runs `changeset publish`, creates the `mdv@x.y.z` tag, and the [Release](.github/workflows/release.yml) workflow uploads binaries. GitHub Releases themselves are created by that Rust workflow only (`createGithubReleases: false` on the Changesets action avoids duplicate releases).
+Versioning is **Cargo-first**: update `Cargo.toml` and [CHANGELOG.md](./CHANGELOG.md), then create and push an annotated tag `vMAJOR.MINOR.PATCH`. [`.github/workflows/release.yml`](.github/workflows/release.yml) builds archives and attaches them to a GitHub Release for that tag.
 
 ### Contributors
 
