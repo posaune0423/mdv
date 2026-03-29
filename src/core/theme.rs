@@ -17,7 +17,7 @@ impl ThemeTokens {
     #[must_use]
     pub const fn for_theme(theme: Theme) -> Self {
         match theme {
-            Theme::Light => Self {
+            Theme::Light | Theme::System => Self {
                 foreground: Color::Black,
                 muted: Color::DarkGrey,
                 accent: Color::DarkBlue,

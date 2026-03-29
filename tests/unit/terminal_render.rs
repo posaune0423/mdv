@@ -3,7 +3,7 @@ use mdv::{
     core::config::MermaidMode,
     render::{
         markdown::parse_document,
-        text::{RenderedGraphicContent, RenderedLineKind, render_document},
+        text::{RenderedGraphicContent, RenderedInlineStyle, RenderedLineKind, render_document},
     },
 };
 
@@ -15,7 +15,7 @@ fn terminal_render_strips_raw_markdown_markers_from_headings_and_quotes() {
     )
     .unwrap_or_else(|error| panic!("document should parse: {error}"));
 
-    let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 40);
+    let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 40, 0.5);
 
     assert_eq!(rendered.lines[0].display_text, "Title");
     assert_eq!(rendered.lines[0].kind, RenderedLineKind::Heading { level: 1 });
@@ -36,7 +36,7 @@ fn terminal_render_wraps_long_lines_to_view_width() {
     )
     .unwrap_or_else(|error| panic!("document should parse: {error}"));
 
-    let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 20);
+    let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 20, 0.5);
 
     assert!(rendered.lines.len() > 2);
     assert!(rendered.lines[0].display_text.chars().count() <= 20);
@@ -48,7 +48,7 @@ fn terminal_render_carries_code_language_into_code_lines() {
     let document = parse_document("docs/example.md".into(), "```rust\nlet answer = 42;\n```\n")
         .unwrap_or_else(|error| panic!("document should parse: {error}"));
 
-    let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 40);
+    let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 40, 0.5);
 
     assert_eq!(
         rendered.lines[1].kind,
@@ -64,7 +64,7 @@ fn terminal_render_formats_lists_links_and_tables_for_interactive_view() {
     )
     .unwrap_or_else(|error| panic!("document should parse: {error}"));
 
-    let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 48);
+    let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 48, 0.5);
     let display_lines =
         rendered.lines.iter().map(|line| line.display_text.clone()).collect::<Vec<_>>();
 
@@ -84,10 +84,31 @@ fn terminal_render_defers_mermaid_rasterization_for_interactive_view() {
         parse_document("docs/example.md".into(), "```mermaid\ngraph TD\n    A --> B\n```\n")
             .unwrap_or_else(|error| panic!("document should parse: {error}"));
 
-    let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 48);
+    let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 48, 0.5);
     let Some(graphic) = rendered.graphics.first() else {
         panic!("mermaid graphic should exist");
     };
 
     assert!(matches!(&graphic.content, RenderedGraphicContent::Mermaid { png_bytes: None, .. }));
+}
+
+#[test]
+fn terminal_render_preserves_inline_emphasis_segments() {
+    let document = parse_document(
+        "docs/example.md".into(),
+        "Paragraph with **bold**, *italic*, and `code`.\n",
+    )
+    .unwrap_or_else(|error| panic!("document should parse: {error}"));
+
+    let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 80, 0.5);
+    let paragraph = rendered
+        .lines
+        .iter()
+        .find(|line| matches!(line.kind, RenderedLineKind::Paragraph))
+        .unwrap_or_else(|| panic!("paragraph line should exist"));
+
+    assert_eq!(paragraph.display_text.trim_end(), "Paragraph with bold, italic, and code.");
+    assert!(paragraph.spans.iter().any(|span| span.style == RenderedInlineStyle::BOLD));
+    assert!(paragraph.spans.iter().any(|span| span.style == RenderedInlineStyle::ITALIC));
+    assert!(paragraph.spans.iter().any(|span| span.style == RenderedInlineStyle::CODE));
 }

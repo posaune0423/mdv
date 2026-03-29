@@ -30,3 +30,22 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --all-targets --all-features
+
+  release-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release-smoke
+
+      - name: Smoke-test release packaging
+        run: make release-smoke

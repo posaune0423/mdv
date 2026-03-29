@@ -1,0 +1,4 @@
+<img src="badge-ci.svg" alt="CI"
+<img src="badge-license.svg" alt="License"
+href="https://example.com/ci"
+href="https://example.com/license"

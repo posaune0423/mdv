@@ -1,0 +1,3 @@
+data-footnote-ref
+<section class="footnotes" data-footnotes>
+Footnote text.

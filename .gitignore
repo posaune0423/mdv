@@ -2,3 +2,4 @@
 mdv
 .cargo
 node_modules
+bin

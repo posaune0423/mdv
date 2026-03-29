@@ -13,8 +13,8 @@ mod tests {
     use crate::cli::{MdvArgs, Theme};
 
     #[test]
-    fn default_theme_is_light() {
+    fn default_theme_is_system() {
         let args = MdvArgs::parse_from(["mdv", "README.md"]);
-        assert_eq!(args.theme, Theme::Light);
+        assert_eq!(args.theme, Theme::System);
     }
 }

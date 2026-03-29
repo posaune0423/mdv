@@ -1,0 +1,4 @@
+<table>
+<thead>
+<th>Syntax</th>
+<td>Yes</td>

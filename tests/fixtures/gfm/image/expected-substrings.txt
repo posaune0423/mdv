@@ -1,0 +1,1 @@
+<img src="../../../../examples/pixel.png" alt="Fixture image" title="PNG sample image" />

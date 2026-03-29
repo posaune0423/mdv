@@ -1,0 +1,2 @@
+<img src="http://127.0.0.1:1/ci-badge.svg" alt="CI"
+href="https://example.com/ci"
