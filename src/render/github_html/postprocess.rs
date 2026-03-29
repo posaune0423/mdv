@@ -404,7 +404,7 @@ fn restore_anchor(tag: &str) -> Option<String> {
     let attrs = tag.strip_prefix('a')?.trim();
     let attrs = parse_attributes_strict(attrs)?;
     let href = attrs.iter().find(|(name, _)| name == "href").map(|(_, value)| value.as_str())?;
-    if !is_safe_href(&href) {
+    if !is_safe_href(href) {
         return None;
     }
 
