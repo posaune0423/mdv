@@ -2,7 +2,7 @@ use std::path::Path;
 
 use super::{
     SnapshotDiagnostics,
-    paths::{create_workspace, snapshot_asset_root},
+    paths::{cleanup_workspace, create_workspace, snapshot_asset_root},
 };
 
 #[test]
@@ -30,4 +30,29 @@ fn snapshot_workspace_uses_temp_dir() {
 
     assert!(workspace.starts_with(Path::new("/tmp")));
     let _ = std::fs::remove_dir_all(workspace);
+}
+
+#[test]
+fn cleanup_workspace_removes_empty_mdv_webkit_parent() {
+    let base = std::env::temp_dir().join(format!(
+        "mdv-webkit-cleanup-test-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&base)
+        .unwrap_or_else(|error| panic!("base directory should be created: {error}"));
+    let workspace = create_workspace(&base, &base)
+        .unwrap_or_else(|error| panic!("workspace should be created: {error}"));
+    let parent = workspace
+        .parent()
+        .unwrap_or_else(|| panic!("workspace should have a parent"))
+        .to_path_buf();
+
+    cleanup_workspace(&workspace)
+        .unwrap_or_else(|error| panic!("workspace cleanup should succeed: {error}"));
+
+    assert!(!parent.exists(), "empty .mdv-webkit parent should be removed");
+    let _ = std::fs::remove_dir_all(base);
 }
