@@ -1,6 +1,12 @@
 #![forbid(unsafe_code)]
 
+pub mod app;
 pub mod cli;
+pub mod core;
+pub mod io;
+pub mod render;
+pub mod support;
+pub mod ui;
 
 #[cfg(test)]
 mod tests {

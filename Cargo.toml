@@ -19,7 +19,17 @@ unwrap_used = "deny"
 expect_used = "deny"
 
 [dependencies]
+anyhow = "1.0.98"
+base64 = "0.22.1"
 clap = { version = "4.5.39", features = ["derive"] }
+comrak = "0.39.1"
+crossterm = "0.29.0"
+image = { version = "0.25.6", default-features = true, features = ["png", "jpeg", "gif", "webp"] }
+resvg = "0.45.1"
+syntect = { version = "5.2.0", default-features = true, features = ["default-fancy"] }
+thiserror = "2.0.12"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["fmt", "env-filter"] }
 
 [dev-dependencies]
 assert_cmd = "2.0.17"

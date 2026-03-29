@@ -1,1 +1,12 @@
+mod browser;
 mod cli_args;
+mod diff;
+mod image_decoder;
+mod kitty_graphics;
+mod layout;
+mod markdown_normalize;
+mod mermaid_cli;
+mod plain_text_render;
+mod svg_render;
+mod terminal_render;
+mod terminal_support;

@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: fmt fmt-check lint test test-unit test-integration test-e2e check ci install-local
+.PHONY: fmt fmt-check lint test test-unit test-integration test-e2e check ci install-local run-local
 
 fmt:
 	cargo fmt --all
@@ -30,3 +30,6 @@ ci: fmt-check lint test
 
 install-local:
 	cargo install --path . --force
+
+run-local:
+	./mdv $(FILE)

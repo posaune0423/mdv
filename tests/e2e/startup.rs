@@ -23,6 +23,5 @@ fn cli_starts_with_a_real_file_path() {
         .arg("dark")
         .assert()
         .success()
-        .stdout(contains("theme=dark"))
-        .stdout(contains("path="));
+        .stdout(contains("sample"));
 }
