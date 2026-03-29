@@ -257,7 +257,7 @@ fn webkit_snapshot_renders_html_img_tag_with_local_image() {
 #[cfg(target_os = "macos")]
 #[test]
 fn webkit_snapshot_renders_html_img_from_project_readme() {
-    // Reproduce the actual README.md scenario: <img src="docs/screenshot.jpg" ...>
+    // Reproduce the actual README.md scenario: <img src="docs/demo.gif" ...>
     // with base_dir = project root
     // Simulate what happens when document.path = "README.md" -> parent = ""
     // The fix normalizes "" to "."
@@ -271,9 +271,9 @@ fn webkit_snapshot_renders_html_img_from_project_readme() {
         eprintln!("skipping: README.md not found");
         return;
     }
-    let screenshot_path = project_root.join("docs/screenshot.jpg");
-    if !screenshot_path.exists() {
-        eprintln!("skipping: docs/screenshot.jpg not found");
+    let demo_path = project_root.join("docs/demo.gif");
+    if !demo_path.exists() {
+        eprintln!("skipping: docs/demo.gif not found");
         return;
     }
 
@@ -295,31 +295,27 @@ fn webkit_snapshot_renders_html_img_from_project_readme() {
         &body[..body.len().min(500)]
     );
     assert!(
-        body.contains(r#"<img src="docs/screenshot.jpg""#),
+        body.contains(r#"<img src="docs/demo.gif""#),
         "README <img> tag should be restored in github html"
     );
 
     let snapshot = render_html_to_png(&html, project_root, 960)
         .unwrap_or_else(|error| panic!("README webkit snapshot should render: {error}"));
 
-    // The screenshot image should load successfully
-    let screenshot_assets: Vec<_> = snapshot
-        .diagnostics
-        .images
-        .iter()
-        .filter(|img| img.source.contains("screenshot"))
-        .collect();
+    // The README hero image should load successfully.
+    let demo_assets: Vec<_> =
+        snapshot.diagnostics.images.iter().filter(|img| img.source.contains("demo")).collect();
     assert!(
-        !screenshot_assets.is_empty(),
-        "should detect screenshot image in diagnostics, got: {:?}",
+        !demo_assets.is_empty(),
+        "should detect README hero image in diagnostics, got: {:?}",
         snapshot.diagnostics.images.iter().map(|i| &i.source).collect::<Vec<_>>()
     );
     assert!(
-        screenshot_assets[0].natural_width_px > 0.0,
-        "screenshot natural width should be > 0, got {}. complete={}, source={}",
-        screenshot_assets[0].natural_width_px,
-        screenshot_assets[0].complete,
-        screenshot_assets[0].source,
+        demo_assets[0].natural_width_px > 0.0,
+        "README hero image natural width should be > 0, got {}. complete={}, source={}",
+        demo_assets[0].natural_width_px,
+        demo_assets[0].complete,
+        demo_assets[0].source,
     );
 }
 
