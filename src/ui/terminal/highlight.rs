@@ -40,7 +40,7 @@ fn syntax_for_token<'a>(syntax_set: &'a SyntaxSet, language: Option<&str>) -> &'
 fn syntect_theme(theme: Theme) -> &'static SyntectTheme {
     let themes = THEME_SET.get_or_init(ThemeSet::load_defaults);
     let preferred = match theme {
-        Theme::Light => "InspiredGitHub",
+        Theme::Light | Theme::System => "InspiredGitHub",
         Theme::Dark => "base16-ocean.dark",
     };
 

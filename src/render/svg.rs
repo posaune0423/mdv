@@ -53,7 +53,7 @@ pub fn render_viewport_png(
 
 fn build_svg(lines: &[RenderedLine], theme: Theme, width_px: u32, height_px: u32) -> String {
     let palette = match theme {
-        Theme::Light => Palette {
+        Theme::Light | Theme::System => Palette {
             page_background: "#f6f8fa",
             article_background: "#ffffff",
             foreground: "#1f2328",
@@ -361,7 +361,7 @@ fn syntax_for_token<'a>(syntax_set: &'a SyntaxSet, language: Option<&str>) -> &'
 fn syntect_theme(theme: Theme) -> &'static SyntectTheme {
     let themes = THEME_SET.get_or_init(ThemeSet::load_defaults);
     let preferred = match theme {
-        Theme::Light => "InspiredGitHub",
+        Theme::Light | Theme::System => "InspiredGitHub",
         Theme::Dark => "base16-ocean.dark",
     };
 

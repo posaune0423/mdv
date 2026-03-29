@@ -10,6 +10,8 @@ use std::{
 use anyhow::{Context, Result, bail};
 use tracing::info_span;
 
+use crate::cli::Theme;
+
 static WORKSPACE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug)]
@@ -67,8 +69,8 @@ impl MermaidCliRenderer {
         Self { command: command.into(), base_args: Vec::new(), cache_dir }
     }
 
-    pub fn render_png(&self, source: &str) -> Result<Vec<u8>> {
-        self.render_png_sized(source, None, None)
+    pub fn render_png(&self, source: &str, theme: Theme) -> Result<Vec<u8>> {
+        self.render_png_sized(source, None, None, theme)
     }
 
     pub fn render_svg_sized(
@@ -76,8 +78,9 @@ impl MermaidCliRenderer {
         source: &str,
         width_px: Option<u32>,
         scale: Option<f32>,
+        theme: Theme,
     ) -> Result<String> {
-        let svg_bytes = self.render_bytes_sized(source, "svg", width_px, scale)?;
+        let svg_bytes = self.render_bytes_sized(source, "svg", width_px, scale, theme)?;
         String::from_utf8(svg_bytes).context("mermaid svg output was not valid utf-8")
     }
 
@@ -86,8 +89,9 @@ impl MermaidCliRenderer {
         source: &str,
         width_px: Option<u32>,
         scale: Option<f32>,
+        theme: Theme,
     ) -> Result<Vec<u8>> {
-        self.render_bytes_sized(source, "png", width_px, scale)
+        self.render_bytes_sized(source, "png", width_px, scale, theme)
     }
 
     fn render_bytes_sized(
@@ -96,15 +100,17 @@ impl MermaidCliRenderer {
         extension: &str,
         width_px: Option<u32>,
         scale: Option<f32>,
+        theme: Theme,
     ) -> Result<Vec<u8>> {
         let _span = info_span!(
             "mermaid.render",
             extension,
             width_px = width_px.unwrap_or_default(),
-            scale = scale.unwrap_or_default()
+            scale = scale.unwrap_or_default(),
+            theme = theme.as_str()
         )
         .entered();
-        let cache_path = self.cache_path(source, extension, width_px, scale);
+        let cache_path = self.cache_path(source, extension, width_px, scale, theme);
         if let Ok(cached) = fs::read(&cache_path) {
             return Ok(cached);
         }
@@ -122,7 +128,9 @@ impl MermaidCliRenderer {
             .arg("-o")
             .arg(&output)
             .arg("-b")
-            .arg("transparent");
+            .arg("transparent")
+            .arg("-t")
+            .arg(mermaid_theme_name(theme));
 
         if let Some(width_px) = width_px.filter(|width_px| *width_px > 0) {
             command.arg("-w").arg(width_px.to_string());
@@ -161,12 +169,14 @@ impl MermaidCliRenderer {
         extension: &str,
         width_px: Option<u32>,
         scale: Option<f32>,
+        theme: Theme,
     ) -> PathBuf {
         let scale_key = scale
             .filter(|value| value.is_finite() && *value > 0.0)
             .map(|value| format!("{value:.3}"))
             .unwrap_or_else(|| "default".to_string());
         let width_key = width_px.unwrap_or_default().to_string();
+        let theme_key = mermaid_theme_name(theme);
         let base_args = self
             .base_args
             .iter()
@@ -179,10 +189,18 @@ impl MermaidCliRenderer {
             extension,
             width_key.as_str(),
             scale_key.as_str(),
+            theme_key,
             source,
         ]);
 
         self.cache_dir.join(format!("{key}.{extension}"))
+    }
+}
+
+fn mermaid_theme_name(theme: Theme) -> &'static str {
+    match theme {
+        Theme::Light | Theme::System => "default",
+        Theme::Dark => "dark",
     }
 }
 

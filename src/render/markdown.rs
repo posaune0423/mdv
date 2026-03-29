@@ -58,10 +58,7 @@ fn normalize_block<'a>(node: &'a AstNode<'a>) -> Option<BlockKind> {
         NodeValue::BlockQuote => Some(normalize_quote(node)),
         NodeValue::List(list) => Some(normalize_list(node, list)),
         NodeValue::CodeBlock(code) => Some(normalize_code_block(code)),
-        NodeValue::HtmlBlock(block) => {
-            let text = StyledText::from_plain(trim_html_block_literal(&block.literal));
-            (!text.is_empty()).then_some(BlockKind::Paragraph { text })
-        }
+        NodeValue::HtmlBlock(block) => normalize_html_block(&block.literal),
         NodeValue::ThematicBreak => Some(BlockKind::Rule),
         NodeValue::Table(_) => Some(normalize_table(node)),
         NodeValue::FootnoteDefinition(definition) => Some(BlockKind::Footnote {
@@ -266,8 +263,48 @@ fn normalize_segments(parts: Vec<InlineSegment>) -> Vec<InlineSegment> {
     normalized
 }
 
-fn trim_html_block_literal(literal: &str) -> String {
-    literal.trim_end_matches(['\r', '\n']).to_string()
+fn normalize_html_block(literal: &str) -> Option<BlockKind> {
+    if let Some(image) = extract_html_img(literal) {
+        return Some(image);
+    }
+
+    let trimmed = literal.trim();
+    if is_layout_only_html(trimmed) {
+        return None;
+    }
+
+    let text = StyledText::from_plain(literal.trim_end_matches(['\r', '\n']).to_string());
+    (!text.is_empty()).then_some(BlockKind::Paragraph { text })
+}
+
+fn is_layout_only_html(html: &str) -> bool {
+    let tag = html
+        .trim_start_matches('<')
+        .split(|c: char| c.is_whitespace() || c == '>' || c == '/')
+        .next()
+        .unwrap_or("");
+    matches!(tag, "div" | "p" | "br" | "center" | "details" | "summary" | "section" | "span")
+}
+
+fn extract_html_img(html: &str) -> Option<BlockKind> {
+    let trimmed = html.trim();
+    let img_start = trimmed.find("<img")?;
+    let after_img = trimmed[img_start + 4..].trim();
+    let img_end = after_img.find("/>").or_else(|| after_img.find('>'))?;
+    let img_content = after_img[..img_end].trim();
+
+    let src = extract_html_attr(img_content, "src")?;
+    let alt = extract_html_attr(img_content, "alt").unwrap_or_default();
+    let title = extract_html_attr(img_content, "title");
+
+    Some(BlockKind::Image { src, alt, title })
+}
+
+fn extract_html_attr(html: &str, name: &str) -> Option<String> {
+    let needle = format!(r#"{name}=""#);
+    let start = html.find(&needle)? + needle.len();
+    let end = html[start..].find('"')?;
+    Some(html[start..start + end].to_string())
 }
 
 fn collect_links<'a>(node: &'a AstNode<'a>, links: &mut Vec<String>) {

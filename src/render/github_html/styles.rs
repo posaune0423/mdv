@@ -11,7 +11,7 @@ static DARK_SYNTAX_ADAPTER: OnceLock<SyntectAdapter> = OnceLock::new();
 pub(super) fn theme_styles(theme: Theme) -> String {
     let font_faces = font_face_css();
     match theme {
-        Theme::Light => [
+        Theme::Light | Theme::System => [
             font_faces.as_str(),
             "\n",
             LIGHT_CSS,
@@ -36,7 +36,7 @@ pub(super) fn theme_styles(theme: Theme) -> String {
 
 pub(super) fn syntax_adapter(theme: Theme) -> &'static SyntectAdapter {
     match theme {
-        Theme::Light => LIGHT_SYNTAX_ADAPTER
+        Theme::Light | Theme::System => LIGHT_SYNTAX_ADAPTER
             .get_or_init(|| SyntectAdapterBuilder::new().theme("InspiredGitHub").build()),
         Theme::Dark => DARK_SYNTAX_ADAPTER
             .get_or_init(|| SyntectAdapterBuilder::new().theme("base16-ocean.dark").build()),

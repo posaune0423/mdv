@@ -2,7 +2,7 @@ use crate::cli::Theme;
 
 pub(super) fn retint_code_tokens(html: &str, theme: Theme) -> String {
     match theme {
-        Theme::Light => html.to_string(),
+        Theme::Light | Theme::System => html.to_string(),
         Theme::Dark => [
             ("#b48ead", "#ff7b72"),
             ("#8fa1b3", "#79c0ff"),
@@ -182,11 +182,24 @@ fn restore_supported_tag(escaped_tag: &str) -> Option<String> {
         _ => {}
     }
 
+    if decoded == "p" {
+        return Some("<p>".to_string());
+    }
+    if decoded == "/p" {
+        return Some("</p>".to_string());
+    }
+
     if let Some(div) = restore_div_with_align(decoded) {
         return Some(div);
     }
+    if let Some(p) = restore_p_with_align(decoded) {
+        return Some(p);
+    }
     if let Some(anchor) = restore_anchor(decoded) {
         return Some(anchor);
+    }
+    if let Some(img) = restore_img(decoded) {
+        return Some(img);
     }
 
     None
@@ -216,6 +229,73 @@ fn restore_anchor(tag: &str) -> Option<String> {
     Some(format!(r#"<a href="{href}">"#))
 }
 
+fn restore_p_with_align(tag: &str) -> Option<String> {
+    let attrs = tag.strip_prefix('p')?.trim();
+    if attrs.is_empty() {
+        return Some("<p>".to_string());
+    }
+
+    let align = parse_single_attribute(attrs, "align")?;
+    if !matches!(align.as_str(), "left" | "center" | "right") {
+        return None;
+    }
+
+    Some(format!(r#"<p align="{align}">"#))
+}
+
+fn restore_img(tag: &str) -> Option<String> {
+    let body = tag.strip_prefix("img")?.trim();
+    let body = body.strip_suffix('/').unwrap_or(body).trim();
+
+    let attrs = parse_attributes(body);
+    let src = attrs.iter().find(|(name, _)| *name == "src").map(|(_, value)| value.as_str())?;
+    if !is_safe_src(src) {
+        return None;
+    }
+
+    let mut result = format!(r#"<img src="{src}""#);
+    for (name, value) in &attrs {
+        match name.as_str() {
+            "src" => {}
+            "alt" | "width" | "height" => {
+                result.push_str(&format!(r#" {name}="{value}""#));
+            }
+            _ => return None,
+        }
+    }
+    result.push_str(" />");
+
+    Some(result)
+}
+
+fn parse_attributes(input: &str) -> Vec<(String, String)> {
+    let mut attrs = Vec::new();
+    let mut rest = input.trim();
+
+    while !rest.is_empty() {
+        let (name, after_name) = match rest.split_once('=') {
+            Some((name, after)) => (name.trim(), after.trim()),
+            None => break,
+        };
+        let quoted = match after_name.strip_prefix('"') {
+            Some(after_quote) => match after_quote.split_once('"') {
+                Some((value, remainder)) => {
+                    rest = remainder.trim();
+                    value
+                }
+                None => break,
+            },
+            None => break,
+        };
+        if quoted.contains('<') || quoted.contains('>') {
+            break;
+        }
+        attrs.push((name.to_string(), quoted.to_string()));
+    }
+
+    attrs
+}
+
 fn parse_single_attribute(attrs: &str, expected_name: &str) -> Option<String> {
     let (name, value) = attrs.split_once('=')?;
     if name.trim() != expected_name {
@@ -237,4 +317,13 @@ fn is_safe_href(href: &str) -> bool {
         || href.starts_with("./")
         || href.starts_with("../")
         || href.starts_with('#')
+}
+
+fn is_safe_src(src: &str) -> bool {
+    if is_safe_href(src) {
+        return true;
+    }
+    // Allow bare relative paths (e.g. "docs/screenshot.jpg", "image.png")
+    // but reject anything that looks like a protocol other than http(s)
+    !src.contains("://") && !src.starts_with("javascript:")
 }
