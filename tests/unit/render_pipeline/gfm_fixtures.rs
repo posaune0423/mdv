@@ -1,10 +1,6 @@
 use std::{fs, path::Path};
 
-use mdv::{
-    cli::Theme,
-    core::config::MermaidMode,
-    render::github_html::build_github_html,
-};
+use mdv::{cli::Theme, core::config::MermaidMode, render::github_html::build_github_html};
 
 #[cfg(target_os = "macos")]
 use mdv::{
