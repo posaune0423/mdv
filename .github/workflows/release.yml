@@ -33,7 +33,7 @@ jobs:
     needs: release-please
     permissions:
       contents: read
-    uses: ./.github/workflows/package-artifacts.yml
+    uses: ./.github/workflows/release-assets.yml
     with:
       artifact-prefix: release
       checkout-ref: ${{ needs.release-please.outputs.tag_name }}

@@ -241,9 +241,9 @@ tests/
 | `release-please-config.json` | stable release の version / changelog 設定 |
 | `.release-please-manifest.json` | release-please が追跡する現在 version |
 | `scripts/install.sh` | rolling `main` channel を既定にしたインストール |
-| `.github/workflows/ci.yml` | CI と packaging 検証 |
+| `.github/workflows/ci.yml` | CI と release-assets 検証 |
 | `.github/workflows/main-channel.yml` | rolling `main` channel の配布物 publish |
-| `.github/workflows/package-artifacts.yml` | reusable な multi-target packaging |
+| `.github/workflows/release-assets.yml` | reusable な multi-target release asset build |
 | `.github/workflows/release.yml` | `release-please` と stable asset publish |
 
 ## 7. 設計上の見どころ

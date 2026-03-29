@@ -17,17 +17,17 @@ fn install_script_downloads_the_main_channel_binary() {
 }
 
 #[test]
-fn ci_workflow_uses_packaging_naming() {
+fn ci_workflow_uses_release_assets_naming() {
     let workflow = fs::read_to_string(".github/workflows/ci.yml")
         .unwrap_or_else(|error| panic!("ci workflow should be readable: {error}"));
 
     assert!(
-        workflow.contains("  packaging:\n"),
-        "ci workflow should use a plain packaging job name"
+        workflow.contains("  release_assets:\n"),
+        "ci workflow should use a release_assets job name"
     );
     assert!(
-        !workflow.contains("release-smoke"),
-        "ci workflow should not use the old release-smoke name"
+        workflow.contains("make release-assets-check"),
+        "ci workflow should verify the release-assets check path"
     );
 }
 

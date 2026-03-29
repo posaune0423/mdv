@@ -31,7 +31,7 @@ jobs:
       - name: Test
         run: cargo test --workspace --all-targets --all-features
 
-  packaging:
+  release_assets:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -45,7 +45,7 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          key: packaging
+          key: release-assets
 
-      - name: Verify packaging path
-        run: make package-check
+      - name: Verify release asset flow
+        run: make release-assets-check

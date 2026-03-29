@@ -11,7 +11,7 @@ env:
 
 jobs:
   build:
-    uses: ./.github/workflows/package-artifacts.yml
+    uses: ./.github/workflows/release-assets.yml
     with:
       artifact-prefix: main-channel
       checkout-ref: ${{ github.sha }}

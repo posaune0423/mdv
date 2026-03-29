@@ -172,7 +172,7 @@ GitHub Actions の `ci.yml` は次を実行する。
 - format check
 - clippy
 - test
-- host-native packaging check
+- host-native release-asset check
 
 Rust toolchain は `1.92.0` に固定されている。
 
@@ -180,7 +180,7 @@ Rust toolchain は `1.92.0` に固定されている。
 
 `main-channel.yml` は `main` push を契機に各 target の archive を作り、`main` tag の rolling release を更新する。
 
-`release.yml` は `main` push ごとに `release-please` を実行し、release PR の更新または stable release の作成を行う。`release_created` のときだけ reusable packaging workflow を呼び出して次を行う。
+`release.yml` は `main` push ごとに `release-please` を実行し、release PR の更新または stable release の作成を行う。`release_created` のときだけ reusable release-assets workflow を呼び出して次を行う。
 
 - Linux x86_64 / arm64 ビルド
 - macOS x86_64 / arm64 ビルド

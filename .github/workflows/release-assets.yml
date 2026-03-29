@@ -1,4 +1,4 @@
-name: Package Artifacts
+name: Release Assets
 
 on:
   workflow_call:
@@ -48,13 +48,13 @@ jobs:
         with:
           key: ${{ inputs.artifact-prefix }}-${{ matrix.target }}
 
-      - name: Package archive
+      - name: Build release archive
         run: ./scripts/package-release.sh "${{ matrix.target }}" dist
 
-      - name: Verify packaged archive
+      - name: Verify release archive
         run: ./scripts/verify-release-archive.sh "dist/mdv-${{ matrix.target }}.tar.gz" dist/SHA256SUMS.part
 
-      - name: Upload packaged binary
+      - name: Upload release asset
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.artifact-prefix }}-${{ matrix.target }}

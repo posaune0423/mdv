@@ -21,7 +21,7 @@ make ci    # fmt-check, clippy -D warnings, full test suite
 | `make lint` | `clippy` with warnings denied |
 | `make test` | All tests |
 | `make test-unit` / `test-integration` / `test-e2e` | Split suites |
-| `make package-check` | Validate release metadata, package a host-native archive, and verify the packaged binary |
+| `make release-assets-check` | Validate release metadata, build a host-native release archive, and verify the extracted binary |
 
 ## Contributing
 
@@ -36,16 +36,16 @@ Typical commit prefixes:
 ```text
 feat: add watch-mode reload debounce
 fix: preserve inline HTML in README rendering
-chore: tighten packaging checks
+chore: tighten release asset checks
 ```
 
 Before merging a release PR, run:
 
 ```bash
-make package-check
+make release-assets-check
 ```
 
-The release workflow only builds and uploads stable assets after `release-please` reports `release_created=true`. Archive packaging is shared with the rolling `main` channel, and `make package-check` mirrors that packaging path locally.
+The release workflow only builds and uploads stable assets after `release-please` reports `release_created=true`. Archive creation is shared with the rolling `main` channel, and `make release-assets-check` mirrors that release-asset path locally.
 
 Once a release exists, installed users can update in place with:
 

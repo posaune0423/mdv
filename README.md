@@ -89,7 +89,7 @@ mdv ./CHANGELOG.md | head -n 50         # plain-text output (pipe/CI)
 | Symptom | What to try |
 |---------|-------------|
 | `mdv: command not found` | Ensure `$HOME/.local/bin` is on `PATH`, then restart the terminal. |
-| `mdv update` fails | Confirm the current `mdv` location is writable and the host platform has a matching published build for the selected channel (`main` by default, or `MDV_CHANNEL`). |
+| `mdv update` fails | Confirm the current `mdv` location is writable and the host platform has a matching published release asset for the selected channel (`main` by default, or `MDV_CHANNEL`). |
 | Plain text instead of rich viewer | Requires a TTY in Ghostty or Kitty. Pipes and redirects trigger headless mode by design. |
 | Mermaid diagrams show placeholders | Install `mmdc` or use `npx @mermaid-js/mermaid-cli`. Use `--no-mermaid` to skip entirely. |
 | Graphic / snapshot issues | Rich rendering uses WebKit (macOS only). See [docs/TECH.md](docs/TECH.md). |
