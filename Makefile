@@ -1,7 +1,7 @@
 SHELL := /bin/sh
 UNAME_S := $(shell uname -s)
 
-.PHONY: build build-tracked-bin fmt fmt-check lint test test-unit test-integration test-e2e check ci install-local run-local
+.PHONY: build build-tracked-bin fmt fmt-check lint test test-unit test-integration test-e2e check ci hooks-install install-local run-local
 
 build:
 	cargo build --release
@@ -41,6 +41,9 @@ check:
 	cargo check --workspace --all-targets --all-features
 
 ci: fmt-check lint test
+
+hooks-install:
+	lefthook install
 
 install-local:
 	cargo install --path . --force

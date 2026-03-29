@@ -69,6 +69,40 @@ fn release_automation_files_are_removed() {
     );
 }
 
+#[test]
+fn lefthook_config_uses_repo_quality_gates() {
+    let config = fs::read_to_string("lefthook.yml")
+        .unwrap_or_else(|error| panic!("lefthook config should be readable: {error}"));
+    let parsed = parse_yaml(&config);
+    let root = parsed.as_mapping().unwrap_or_else(|| panic!("lefthook root should be a mapping"));
+    let pre_commit = mapping_field(root, "pre-commit");
+    let pre_push = mapping_field(root, "pre-push");
+    let pre_commit_commands = mapping_field(pre_commit, "commands");
+    let pre_push_commands = mapping_field(pre_push, "commands");
+
+    assert!(
+        config.contains("cargo fmt --all -- --check"),
+        "pre-commit should run rustfmt in check mode"
+    );
+    assert!(
+        config.contains("cargo check --workspace --all-targets --all-features"),
+        "pre-commit should run cargo check across the full workspace"
+    );
+    assert!(config.contains("make ci"), "pre-push should reuse the repo CI entrypoint");
+    assert!(
+        pre_commit_commands.contains_key(Value::String("fmt".to_string())),
+        "pre-commit should define the fmt command"
+    );
+    assert!(
+        pre_commit_commands.contains_key(Value::String("check".to_string())),
+        "pre-commit should define the check command"
+    );
+    assert!(
+        pre_push_commands.contains_key(Value::String("ci".to_string())),
+        "pre-push should define the ci command"
+    );
+}
+
 fn parse_yaml(source: &str) -> Value {
     serde_yaml::from_str::<Value>(source)
         .unwrap_or_else(|error| panic!("workflow should be valid YAML: {error}"))

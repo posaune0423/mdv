@@ -15,6 +15,20 @@ chmod +x ./mdv   # once, if needed
 make ci    # fmt-check, clippy -D warnings, full test suite
 ```
 
+## Git hooks
+
+This repo uses [`lefthook`](https://github.com/evilmartians/lefthook) for local git hooks.
+
+```bash
+brew install lefthook
+make hooks-install
+```
+
+Configured hooks:
+
+- `pre-commit`: `cargo fmt --all -- --check` and `cargo check --workspace --all-targets --all-features`
+- `pre-push`: `make ci`
+
 | Command | Purpose |
 |---------|---------|
 | `make fmt` / `make fmt-check` | `rustfmt` |
@@ -23,6 +37,7 @@ make ci    # fmt-check, clippy -D warnings, full test suite
 | `make test-unit` / `test-integration` / `test-e2e` | Split suites |
 | `make build` | Build `target/release/mdv` |
 | `make build-tracked-bin` | Build `target/release/mdv` and refresh the local `bin/mdv` copy using the same path CI uses on `main` |
+| `make hooks-install` | Install git hooks from `lefthook.yml` into `.git/hooks` |
 
 ## Contributing
 
