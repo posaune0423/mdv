@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 description = "A high-fidelity Markdown viewer for Ghostty and Kitty"
 license = "MIT"
+repository = "https://github.com/posaune0423/mdv"
+readme = "README.md"
 
 [lints.rust]
 unsafe_code = "forbid"

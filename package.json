@@ -1,0 +1,24 @@
+{
+  "name": "mdv",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Release metadata and changelog tooling for the mdv Rust CLI (see Cargo.toml for the crate).",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/posaune0423/mdv.git"
+  },
+  "bugs": {
+    "url": "https://github.com/posaune0423/mdv/issues"
+  },
+  "homepage": "https://github.com/posaune0423/mdv#readme",
+  "scripts": {
+    "changeset": "changeset",
+    "version-packages": "changeset version && node scripts/sync-cargo-version.mjs && cargo check",
+    "release": "changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.5.2",
+    "@changesets/cli": "^2.30.0"
+  }
+}
