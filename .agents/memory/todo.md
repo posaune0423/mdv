@@ -1,28 +1,303 @@
+## Documentation Task
+
+- [x] Audit the repository entrypoints, rendering pipeline, packaging, and tests for `mdv`
+- [x] Rewrite `docs/PRD.md` to describe the product from the current repository state
+- [x] Create `docs/TECH.md` covering runtime architecture, dependencies, pipelines, and constraints
+- [x] Create `docs/STRUCTURE.md` covering the source tree, module responsibilities, and test layout
+- [x] Review the generated docs for accuracy against the implementation and record the outcome below
+
+## Documentation Task Review
+
+- Replaced the old PRD with an implementation-based description of the current product contract, including real runtime behavior, CLI options, supported blocks, and known scope limits.
+- Added `docs/TECH.md` to document the actual dual rendering pipeline, key crates, external runtime dependencies, diagnostics flow, CI/release process, and current platform constraints.
+- Added `docs/STRUCTURE.md` to map the repository layout, module boundaries, important files, and test organization from `src/` through `tests/`.
+- Explicitly documented the current mismatch between README claims and runtime reality: rich interactive rendering depends on the macOS WebKit snapshot path and does not currently have a runtime fallback.
+- Verification:
+- `git diff --check` passed
+- Reviewed `docs/PRD.md`, `docs/TECH.md`, and `docs/STRUCTURE.md` against the current implementation and test layout
+
 # Current Task
 
-- [x] Inspect the current interactive rendering path and identify the latest regressions from user feedback
-- [x] Add or update tests that prove first-frame rendering does not eagerly execute off-screen Mermaid work
-- [x] Stop re-sending visible graphics on every redraw and cache Kitty image transfers/placements
-- [x] Defer Mermaid rasterization until needed so startup is fast again
-- [x] Re-run fmt/test/clippy and TTY smoke checks, then update this review
+- [x] Identify the heading and bold font-weight regression in the GitHub HTML rendering path
+- [x] Restore GitHub-compatible heading and bold weight behavior and add regression coverage
+- [x] Instrument the WebKit snapshot path so image and Mermaid render failures surface actionable diagnostics
+- [x] Fix the WebKit snapshot helper execution path so local assets render reliably during the full test suite
+- [x] Add regression tests for image rendering, Mermaid metrics, broken asset diagnostics, and GitHub typography matrices across headings and inline emphasis
+- [x] Run `cargo fmt --all`, `cargo test --workspace --all-targets`, and `cargo clippy --workspace --all-targets -- -D warnings`
 
 ## Review
 
-- Latest correction: the terminal-native rewrite improved fidelity, but the user still sees sluggish scrolling and a slower startup than before.
-- Primary suspected root causes:
-- `render_document()` eagerly renders Mermaid PNGs for the whole document before the first frame.
-- `draw()` re-encodes and re-transmits visible PNG payloads on each redraw instead of transmitting once and placing cheaply.
-- Target outcome for this pass:
-- first frame appears without waiting on off-screen Mermaid diagrams
-- scrolling while a graphic is visible does not resend the full image payload every frame
-- Keep the terminal-native text path, but make the graphics path visible-first and cache-aware.
-- Implemented changes:
-- interactive Mermaid blocks now stay deferred in `render_document()` and are rendered only when they become visible during idle time
-- resolved Mermaid graphics now resize their reserved blank region to the actual aspect ratio, preventing stretched diagrams
-- Kitty graphics transfers are split into transmit-once plus place-per-draw, so scroll no longer base64-encodes and re-sends the same PNG payload every frame
-- the rich fixture now references a normal `png` asset instead of `ppm`
+- Root cause for typography: `src/render/github_html.rs` pinned `.markdown-body` to `font-variation-settings: "wght" 400`, which overrode GitHub's selector-specific `font-weight` rules and kept headings and `<strong>` text from reaching their intended weight.
+- Typography fix: removed the prose-level weight lock while preserving the embedded GitHub font faces and added WebKit regression coverage that checks computed GitHub typography for `h1` through `h6`, `strong`, `em`, and inline `code`.
+- Root cause for missing image and Mermaid diagnostics: the snapshot helper only returned a PNG and Mermaid CLI discarded stderr, so failures were hard to debug and tests could not assert rendered dimensions or aspect ratio.
+- Diagnostics fix: `src/io/webkit_snapshot.rs` now emits a JSON report with font readiness, image metrics, Mermaid metrics, and computed typography weights; snapshot failures now include broken asset details instead of failing silently.
+- Reliability fix: simplified the macOS snapshot helper execution path to always run a workspace-local `snapshot.swift` script. This removed the cached helper path that was triggering `WKWebView` sandbox failures in the full suite.
+- Mermaid fix: `src/io/mermaid_cli.rs` now preserves stderr on renderer failures, so parse/runtime errors surface in logs and tests.
 - Verification:
 - `cargo fmt --all` passed
-- `cargo test --workspace --all-targets --all-features` passed
-- `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed
-- TTY smoke check: `cargo run --quiet -- examples/rich_markdown.md` started and exited immediately on `q`
+- `cargo test --workspace --all-targets` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+
+## Current Task
+
+- [x] Confirm whether the current runtime path uses embedded fonts or falls back to system fonts
+- [x] Add a regression test for the remaining GitHub typography mismatch before changing implementation
+- [x] Apply the minimum typography fix needed for closer GitHub fidelity
+- [x] Run targeted tests and capture whether external font downloads are necessary
+
+## Current Task Review
+
+- Runtime font sourcing: the GitHub HTML snapshot path still embeds bundled `Mona Sans VF` and `Monaspace Neon Var` via `@font-face` data URLs, so no external font download is required for snapshot rendering.
+- Root cause for the remaining mismatch: the renderer was overriding GitHub's own body and monospace font stacks, which made the output diverge from github.com even though the font assets were present.
+- Root cause for the "default text looks too thin" follow-up: the renderer was also forcing `-webkit-font-smoothing: antialiased` and `text-rendering: optimizeLegibility` on `body`, which makes macOS WebKit text appear lighter than GitHub's own markdown styling.
+- Typography fix: removed the `.markdown-body` body/code font-family overrides and kept GitHub's shipped CSS stacks in control so WebKit can resolve the same weight and family rules GitHub expects.
+- Smoothing fix: removed the extra text smoothing overrides and added a regression test to keep the body typography closer to GitHub's default appearance.
+- Regression coverage: `tests/unit/render_pipeline/github_html.rs` now asserts we do not reintroduce those font-stack overrides, and the WebKit typography diagnostics test expects the GitHub monospace stack instead of a forced custom mono face.
+- Verification:
+- `cargo test github_html_ -- --nocapture` passed
+- `cargo test webkit_snapshot_matches_github_typography_for_headings_and_inline_emphasis -- --nocapture` passed
+
+## Refactor Task
+
+- [x] Stabilize the partial `src/ui/terminal` split and move tests into `src/ui/terminal/tests.rs`
+- [x] Extract shared GFM parser options into a reusable render pipeline module
+- [x] Split `src/render/github_html` into focused submodules
+- [x] Split `src/io/webkit_snapshot` into focused submodules
+- [x] Rewire moved render-pipeline tests under `tests/unit/render_pipeline/`
+- [x] Run `cargo fmt --all`, `cargo test --workspace --all-targets`, and `cargo clippy --workspace --all-targets -- -D warnings`
+
+## Refactor Review
+
+- The refactor preserved behavior at the module boundaries by keeping the existing render-pipeline fixtures, WebKit snapshot diagnostics tests, and terminal viewer tests green after the file splits.
+- During verification, two pre-existing contract gaps surfaced and were fixed instead of papered over:
+- Headless plain-text output now keeps Markdown link destinations as `label <url>`, matching the integration and plain-text tests.
+- Interactive terminal rendering strips those link destinations back out and preserves punctuation spacing, so the TUI keeps the previous visible text contract.
+- Verification:
+- `cargo fmt --all` passed
+- `cargo test --workspace --all-targets` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+
+## Current Task
+
+- [x] Add a regression test that captures the GitHub-compatible `caution` alert icon markup
+- [x] Replace the hardcoded `caution` SVG with the GitHub-compatible icon path
+- [x] Run targeted render-pipeline tests and record the outcome below
+
+## Current Task Review
+
+- Root cause: `src/render/github_html/postprocess.rs` injected a bespoke `octicon-stop` path for `Caution` that did not match GitHub's current stop icon, so the callout badge rendered with the wrong silhouette and looked crushed.
+- Fix: replaced the hardcoded `Caution` SVG path with the GitHub-compatible stop octicon path while preserving the existing DOM shape and classes.
+- Regression coverage: `tests/unit/render_pipeline/github_html.rs` now asserts that `CAUTION` alerts include the GitHub stop icon class and path fragment.
+- Verification:
+- `cargo test github_html_ -- --nocapture` passed
+- `cargo fmt --all --check` passed
+- `cargo check --workspace --all-targets` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+
+## Current Task
+
+- [x] Add a regression that requires the rich fixture image to render at a visibly non-trivial size
+- [x] Replace the tiny example image fixture with a visible PNG asset
+- [x] Run targeted snapshot and render checks and record the outcome below
+
+## Current Task Review
+
+- Root cause: the image pipeline was working, but `examples/rich_markdown.md` referenced a `4x4` fixture image. The GitHub HTML path renders images at intrinsic size, so the final WebKit snapshot only painted a `4px` image, which is effectively invisible in terminal viewing.
+- Fix: replaced `examples/pixel.png` with a visible `96x96` PNG fixture while keeping the same filename and Markdown source, so the rich example now demonstrates image rendering instead of an almost invisible pixel.
+- Regression coverage: [tests/unit/render_pipeline/webkit_snapshot.rs](/Users/asumayamada/Private/posaune0423/mdv/tests/unit/render_pipeline/webkit_snapshot.rs#L271) now requires the rich fixture image to render at least `32px` wide and tall in the snapshot path.
+- Verification:
+- `cargo test webkit_snapshot_keeps_rich_fixture_image_and_mermaid_visible -- --nocapture` passed
+- `cargo test webkit_snapshot_renders_local_markdown_images -- --nocapture` passed
+- `cargo fmt --all --check` passed
+
+## Current Task
+
+- [x] Re-check the HTML typography path against live GitHub styles instead of the old local assumptions
+- [x] Add regression coverage for the prose font stack and rendered heading/code typography
+- [x] Update the HTML render CSS so headings and bold text resolve to the same stack and weight family GitHub uses
+- [x] Run full verification and record the outcome below
+
+## Current Task Review
+
+- Root cause: the previous follow-up fix over-corrected toward the older vendored markdown CSS and away from GitHub's current live prose stack. The HTML renderer still looked off because the local expectations were stale, not because `font-weight: 600` was missing.
+- Live GitHub verification: inspected `github.com` directly and confirmed current `.markdown-body` prose resolves to `Mona Sans VF` with the GitHub sans-serif fallback stack, while inline code resolves to GitHub's `ui-monospace` stack. Headings and `strong` remain `600`.
+- HTML typography fix: `src/render/github_html/styles.rs` now explicitly applies the GitHub prose stack with `Mona Sans VF` to `.markdown-body`, uses the GitHub monospace stack for `code`/`pre`/`kbd`/`samp`, and keeps the embedded prose font face in standard `format('woff2')` form so WebKit loads it reliably.
+- Regression coverage: `tests/unit/render_pipeline/github_html.rs` now checks for the embedded GitHub prose stack and valid WOFF2 syntax, while `tests/unit/render_pipeline/webkit_snapshot.rs` verifies rendered headings and strong/em text resolve to `Mona Sans VF`, and inline code resolves to the GitHub monospace stack with the expected metrics.
+- Verification:
+- `cargo fmt --all` passed
+- `cargo test --workspace --all-targets` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+
+## Current Task
+
+- [x] Inspect the README source and current raw HTML handling in the markdown normalization path
+- [x] Add a regression test for raw HTML blocks and inline HTML being preserved as plain text
+- [x] Fix markdown normalization so raw HTML is visible instead of being dropped
+- [x] Run targeted verification and record the outcome below
+
+## Current Task Review
+
+- Root cause: `src/render/markdown.rs` treated `NodeValue::HtmlBlock` like a normal AST subtree and collected children, but raw HTML blocks keep their source in `literal` and have no text children. `NodeValue::HtmlInline` was also ignored, so inline tags disappeared inside paragraphs.
+- Fix: map `HtmlBlock` directly to a paragraph containing the block literal as plain text, trimming only trailing line endings, and keep `HtmlInline` literals as inline text segments.
+- README impact: headless and structured TUI rendering now show the README's wrapper tags like `<div align="center">` and `<br/>` as plain text instead of silently dropping them, which matches the README's own contract for raw HTML.
+- Regression coverage: `tests/unit/markdown_normalize.rs` now asserts both block HTML and inline HTML survive normalization as plain text.
+- Verification:
+- `cargo fmt --all --check` passed
+- `cargo check --workspace --all-targets` passed
+- `cargo test markdown_normalize -- --nocapture` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+
+## Current Task
+
+- [x] Reproduce the README display failure from an actual user-facing invocation path
+- [x] Add an integration test for `mdv -` reading README-like Markdown from stdin
+- [x] Implement stdin support for headless rendering
+- [x] Run verification and record the outcome below
+
+## Current Task Review
+
+- Reproduction path: `cat README.md | mdv -` failed with `No such file or directory (os error 2)` because the CLI treated `-` as a literal filename instead of standard input.
+- Fix: `src/app/mod.rs` now detects `-`, reads Markdown from stdin in headless mode, parses it using a virtual cwd-based path, and returns a clear error when `-` is used without piped stdin.
+- README impact: piping the repository README through `mdv -` now renders the document correctly, including the raw HTML tags that the previous normalization fix preserved as plain text.
+- Regression coverage: `tests/integration/render_features.rs` now asserts `mdv -` succeeds with stdin content that includes README-like inline HTML.
+- Verification:
+- `cargo test --test integration -- --nocapture` passed
+- `cat README.md | cargo run --quiet -- - | sed -n '1,24p'` showed the README content correctly
+- `cargo fmt --all --check` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+
+## Current Task
+
+- [x] Re-check the actual `mdv README.md` interactive path instead of only headless rendering
+- [x] Add a regression test that requires runtime fallback when graphic page rendering is unavailable
+- [x] Make interactive startup and reload fall back to terminal rendering instead of failing
+- [x] Run verification and record the outcome below
+
+## Current Task Review
+
+- Root cause: the previous fixes only covered headless rendering and stdin input. In the real `mdv README.md` path, interactive startup still required `render_graphic_page()` to succeed. If snapshot rendering failed on the user's machine, the viewer failed instead of opening the README in the terminal-native renderer.
+- Fix: `src/ui/terminal/mod.rs` now uses a shared render-state builder so both startup and rerender fall back to `render_document()` with a warning when graphic page rendering is unavailable.
+- README impact: `mdv README.md` still uses the full graphic page path when it works, but now degrades to the structured terminal renderer instead of failing to display the README.
+- Regression coverage: `src/ui/terminal/tests.rs` now asserts `TerminalViewer::try_new()` succeeds and falls back to terminal rendering when graphic mode fails.
+- Verification:
+- `cargo test --test integration -- --nocapture` passed
+- `cargo test --lib ui::terminal::tests::try_new_falls_back_to_terminal_render_when_graphic_mode_fails -- --nocapture` passed
+- `TERM_PROGRAM=ghostty cargo run --quiet -- README.md` started successfully and rendered the viewer until quit
+- `cargo fmt --all --check` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+
+## Current Task
+
+- [x] Remove the interactive TUI fallback that was masking graphic-render failures
+- [x] Make startup failures surface actionable error text instead of degrading silently
+- [x] Re-run integration, targeted unit tests, clippy, and release build
+
+## Current Task Review
+
+- User direction change: fallback was not acceptable. The interactive viewer should fail loudly with debuggable errors, not open a different renderer.
+- Runtime change: `src/ui/terminal/mod.rs` no longer falls back to `render_document()` in `try_new()`. Startup now returns `interactive graphic render failed for <path>: ...`, which `main` prints to stderr and exits with code `1`.
+- Runtime behavior on later rerenders: resize/reload keeps the existing graphic page and stores the failure warning instead of swapping into the TUI path.
+- Test coverage: `src/ui/terminal/tests.rs` now asserts `TerminalViewer::try_new()` returns an error containing both the startup context and the underlying graphic failure reason.
+- Verification:
+- `cargo test --test integration -- --nocapture` passed
+- `cargo test --lib ui::terminal::tests::try_new_surfaces_graphic_mode_failure -- --nocapture` passed
+- `cargo fmt --all --check` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+- `make build` passed
+
+## Current Task
+
+- [x] Add dedicated README-like fixtures for raw HTML wrappers and badge image rows under `tests/fixtures/gfm/`
+- [x] Split render-pipeline coverage into per-fixture HTML and WebKit snapshot tests for those cases
+- [x] Fix the graphic render path so README-style badge/image handling no longer prevents rendering
+- [x] Run targeted tests, `cargo fmt --all --check`, and `cargo clippy --workspace --all-targets -- -D warnings`
+
+## Current Task Review
+
+- Root cause: the WebKit snapshot helper treated every broken image as fatal. README-specific remote badge SVGs could resolve to `complete=true` but `naturalWidth=0`, which aborted the whole snapshot path before the rest of the page rendered.
+- Fixture split: added dedicated README-like fixtures under `tests/fixtures/gfm/html-wrappers`, `tests/fixtures/gfm/badges-local`, and `tests/fixtures/gfm/badges-remote` so raw HTML wrappers, successful badge rows, and failing remote badges are each covered independently.
+- Regression coverage: `tests/unit/render_pipeline/gfm_fixtures.rs` now has explicit HTML-wrapper and badge HTML-fragment assertions, and `tests/unit/render_pipeline/webkit_snapshot.rs` now verifies both that local badge SVGs render at non-trivial size and that remote badge failures do not abort the page snapshot.
+- Runtime fix: `src/io/webkit_snapshot/script.rs` now distinguishes blocking local assets from non-blocking remote assets. Local missing images still fail fast, but remote badges get a short chance to load and then stop blocking snapshot completion, which keeps README rendering debuggable instead of blank.
+- Verification:
+- `cargo test gfm_fixtures -- --nocapture` passed
+- `cargo test webkit_snapshot_allows_remote_badge_failures_without_aborting_page_render -- --nocapture` passed
+- `cargo test webkit_snapshot_surfaces_broken_image_diagnostics -- --nocapture` passed
+- `cargo test --test unit -- --nocapture` passed
+- `cargo fmt --all --check` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+
+## Current Task
+
+- [x] Reproduce the user's exact `make build && ./bin/mdv AGENTS.md` failure before closing the task
+- [x] Fix the release artifact path so the built binary survives macOS execution policy checks
+- [x] Re-run build, lint, format, and the exact interactive startup command
+
+## Current Task Review
+
+- Root cause: the previous close-out stopped at tests and partial startup checks. The user's exact release command still failed because macOS was killing `./bin/mdv` with `SIGKILL (Code Signature Invalid)` under `taskgated`.
+- Evidence: unified logs and the generated `.ips` crash reports showed `namespace: "CODESIGNING"` and `indicator: "Invalid Page"` / `Taskgated Invalid Signature`, so this was not a renderer bug.
+- Fix: `Makefile` now re-signs both `target/release/mdv` and `bin/mdv` on Darwin immediately after `cargo build --release` and after copying into `bin/`, so the executable the user runs is the one that was just signed.
+- Final verification now includes the real command path, not just tests:
+- `make build && TERM_PROGRAM=ghostty ./bin/mdv AGENTS.md` reached interactive viewer startup and rendered the page instead of getting killed
+- `cargo fmt --all --check` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+
+## Current Task
+
+- [x] Reproduce the user's exact `make build && ./bin/mdv README.md` blank-screen behavior
+- [x] Compare README and `AGENTS.md` diagnostics to isolate the README-specific render difference
+- [x] Implement the minimum fix and add targeted regression coverage if needed
+- [x] Re-run the exact user command plus final verification before closing
+
+## Current Task Review
+
+- Root cause: README was no longer failing in HTML/WebKit generation, but interactive page mode still transmitted the entire full-page snapshot PNG to Ghostty/Kitty as one image and relied on placement-time source cropping. `AGENTS.md` stayed under that practical limit; `README.md` produced a very tall raster, so the terminal could end up showing a blank page even though snapshot generation itself succeeded.
+- Fix: `src/ui/page_graphics.rs` now exposes `viewport_raster()`, which crops the already-generated snapshot down to just the currently visible viewport and re-encodes only that slice as PNG. `src/ui/terminal/graphics.rs` now transmits that viewport-sized raster per draw instead of uploading the whole README page as a single giant image.
+- Runtime impact: the exact `make build && ./bin/mdv README.md` path now reaches the viewer with a first-frame PNG sized to the visible viewport instead of the full document height, removing the README-specific giant-image path that was unique versus `AGENTS.md`.
+- Regression coverage:
+- `tests/unit/page_graphics.rs` now asserts the viewport raster encoder emits only the visible crop with the expected dimensions.
+- `src/ui/terminal/tests.rs` now asserts page-mode viewport commands retransmit a cropped PNG for each scroll position instead of relying on one cached full-page transfer.
+- Verification:
+- `cargo test --test unit -- --nocapture` passed
+- `cargo test --lib ui::terminal::tests::page_viewport_commands_retransmit_cropped_png_for_each_scroll_position -- --nocapture` passed
+- `cargo fmt --all --check` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+- `make build && ./bin/mdv README.md` reached interactive startup, and the first-frame transfer observed in the PTY was reduced to a viewport-sized PNG (`826x475`) instead of the previous full-document raster upload
+
+## Current Task
+
+- [x] Inspect rich-render raw HTML handling for README-style wrappers
+- [x] Add regression coverage for supported README raw HTML in the GitHub HTML path
+- [x] Restore supported raw HTML layout behavior like `<div align="center">` without enabling unsafe HTML wholesale
+- [x] Re-run exact README startup plus final verification
+
+## Current Task Review
+
+- Root cause: the interactive GitHub HTML path still had `comrak` configured to escape all raw HTML, so README wrappers like `<div align="center">` and inline `<br/>` were rendered as literal text even though the snapshot path itself was now working.
+- Fix: `src/render/github_html/postprocess.rs` now restores a tightly scoped allowlist of escaped raw HTML tags after Markdown rendering: `div` with safe `align` values, `br`, `sub`, `sup`, and anchors with safe `href` values. This keeps `script` and unsupported tags escaped while letting README-style presentational wrappers affect layout in the rich viewer.
+- Styling: `src/render/github_html/styles.rs` now adds explicit alignment rules for `[align="center" | "left" | "right"]` so centered wrappers render predictably in the snapshot browser.
+- Regression coverage:
+- `tests/unit/render_pipeline/gfm_fixtures.rs` and `tests/fixtures/gfm/html-wrappers/expected-substrings.txt` now expect the centered wrapper and inline break to be restored as real HTML in the rich path.
+- `tests/unit/render_pipeline/github_html.rs` now asserts supported raw HTML is restored while `<script>` remains escaped.
+- Verification:
+- `cargo test --test unit render_pipeline::gfm_fixtures -- --nocapture` passed
+- `cargo test --test unit render_pipeline::github_html -- --nocapture` passed
+- `cargo test --test unit -- --nocapture` passed
+- `cargo fmt --all --check` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+- `make build && ./bin/mdv README.md` reached interactive startup again after the raw-HTML restore change
+
+## Current Task
+
+- [x] Apply a small cleanup refactor on the README-rendering changes before handoff
+- [x] Re-run final verification after the refactor
+- [x] Commit the rendering fixes and push the branch
+
+## Current Task Review
+
+- Refactor scope: kept the cleanup narrow to avoid destabilizing the rendering fixes. `src/render/github_html/styles.rs` now separates common viewer layout overrides from theme-specific code-block colors, so the new alignment support does not duplicate the shared CSS in both light and dark themes.
+- Final verification after the cleanup:
+- `cargo fmt --all --check` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+- `cargo test --test unit -- --nocapture` passed
+- `make build && ./bin/mdv README.md` reached interactive startup after the refactor as well

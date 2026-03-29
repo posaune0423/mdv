@@ -140,3 +140,101 @@ pub(super) fn inject_alert_icons(html: &str) -> String {
         )
     })
 }
+
+pub(super) fn restore_supported_raw_html(html: &str) -> String {
+    let mut output = String::with_capacity(html.len());
+    let mut rest = html;
+
+    while let Some(start) = rest.find("&lt;") {
+        output.push_str(&rest[..start]);
+        let tag_segment = &rest[start..];
+        let Some(end) = tag_segment.find("&gt;") else {
+            output.push_str(tag_segment);
+            return output;
+        };
+        let escaped_tag = &tag_segment[..end + "&gt;".len()];
+        if let Some(restored) = restore_supported_tag(escaped_tag) {
+            output.push_str(&restored);
+        } else {
+            output.push_str(escaped_tag);
+        }
+        rest = &tag_segment[end + "&gt;".len()..];
+    }
+
+    output.push_str(rest);
+    output
+}
+
+fn restore_supported_tag(escaped_tag: &str) -> Option<String> {
+    let tag = escaped_tag.strip_prefix("&lt;")?.strip_suffix("&gt;")?.trim();
+    let decoded = tag.replace("&quot;", "\"").replace("&amp;", "&");
+    let decoded = decoded.trim();
+
+    match decoded {
+        "br" | "br/" | "br /" => return Some("<br/>".to_string()),
+        "div" => return Some("<div>".to_string()),
+        "/div" => return Some("</div>".to_string()),
+        "sub" => return Some("<sub>".to_string()),
+        "/sub" => return Some("</sub>".to_string()),
+        "sup" => return Some("<sup>".to_string()),
+        "/sup" => return Some("</sup>".to_string()),
+        "/a" => return Some("</a>".to_string()),
+        _ => {}
+    }
+
+    if let Some(div) = restore_div_with_align(decoded) {
+        return Some(div);
+    }
+    if let Some(anchor) = restore_anchor(decoded) {
+        return Some(anchor);
+    }
+
+    None
+}
+
+fn restore_div_with_align(tag: &str) -> Option<String> {
+    let attrs = tag.strip_prefix("div")?.trim();
+    if attrs.is_empty() {
+        return Some("<div>".to_string());
+    }
+
+    let align = parse_single_attribute(attrs, "align")?;
+    if !matches!(align.as_str(), "left" | "center" | "right") {
+        return None;
+    }
+
+    Some(format!(r#"<div align="{align}">"#))
+}
+
+fn restore_anchor(tag: &str) -> Option<String> {
+    let attrs = tag.strip_prefix('a')?.trim();
+    let href = parse_single_attribute(attrs, "href")?;
+    if !is_safe_href(&href) {
+        return None;
+    }
+
+    Some(format!(r#"<a href="{href}">"#))
+}
+
+fn parse_single_attribute(attrs: &str, expected_name: &str) -> Option<String> {
+    let (name, value) = attrs.split_once('=')?;
+    if name.trim() != expected_name {
+        return None;
+    }
+    let value = value.trim();
+    let quoted = value.strip_prefix('"')?.strip_suffix('"')?;
+    if quoted.contains('"') || quoted.contains('<') || quoted.contains('>') {
+        return None;
+    }
+    Some(quoted.to_string())
+}
+
+fn is_safe_href(href: &str) -> bool {
+    href.starts_with("https://")
+        || href.starts_with("http://")
+        || href.starts_with("mailto:")
+        || href.starts_with('/')
+        || href.starts_with("./")
+        || href.starts_with("../")
+        || href.starts_with('#')
+}

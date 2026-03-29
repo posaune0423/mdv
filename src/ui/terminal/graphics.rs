@@ -8,12 +8,13 @@ use crate::{
         RenderedDocument, RenderedGraphic, RenderedGraphicContent, RenderedLine, RenderedLineKind,
     },
     ui::{
-        page_graphics::{GraphicPage, viewport_slice},
+        page_graphics::{GraphicPage, viewport_raster},
         terminal::{CellMetrics, GraphicViewport},
     },
 };
 
 const PAGE_IMAGE_ID: u32 = 1;
+type GraphicCommands = (Vec<String>, Vec<(u32, u32)>);
 
 pub(super) fn collect_page_viewport_commands(
     page: &GraphicPage,
@@ -21,12 +22,12 @@ pub(super) fn collect_page_viewport_commands(
     content_height: usize,
     cell_metrics: CellMetrics,
     previous_visible_placements: &[(u32, u32)],
-    transmitted_graphics: &mut BTreeSet<u32>,
-) -> (Vec<String>, Vec<(u32, u32)>) {
+    _transmitted_graphics: &mut BTreeSet<u32>,
+) -> anyhow::Result<GraphicCommands> {
     let mut commands = Vec::new();
-    let slice = viewport_slice(page, scroll, content_height, cell_metrics.height_px);
+    let raster = viewport_raster(page, scroll, content_height, cell_metrics.height_px)?;
     let visible_placements =
-        if slice.rows == 0 { Vec::new() } else { vec![(PAGE_IMAGE_ID, PAGE_IMAGE_ID)] };
+        if raster.is_none() { Vec::new() } else { vec![(PAGE_IMAGE_ID, PAGE_IMAGE_ID)] };
 
     for (image_id, placement_id) in previous_visible_placements
         .iter()
@@ -36,20 +37,18 @@ pub(super) fn collect_page_viewport_commands(
         commands.push(encode_delete(DeleteCommand::Placement { image_id, placement_id }));
     }
 
-    if slice.rows > 0 {
-        if transmitted_graphics.insert(PAGE_IMAGE_ID) {
-            commands.push(encode_transmit_png(PAGE_IMAGE_ID, &page.png_bytes));
-        }
+    if let Some(raster) = raster {
+        commands.push(encode_transmit_png(PAGE_IMAGE_ID, &raster.png_bytes));
 
         let placement = KittyImagePlacement {
             image_id: PAGE_IMAGE_ID,
             placement_id: PAGE_IMAGE_ID,
             columns: page.width_cells,
-            rows: slice.rows,
+            rows: raster.rows,
             source_x_px: 0,
-            source_y_px: slice.source_y_px,
-            source_width_px: page.image_width_px,
-            source_height_px: slice.source_height_px,
+            source_y_px: 0,
+            source_width_px: raster.image_width_px,
+            source_height_px: raster.image_height_px,
             cursor_x: 0,
             cursor_y: 0,
             z_index: -1,
@@ -57,7 +56,7 @@ pub(super) fn collect_page_viewport_commands(
         commands.push(format!("{}{}", ansi_cursor_move(0, 0), encode_place(&placement)));
     }
 
-    (commands, visible_placements)
+    Ok((commands, visible_placements))
 }
 
 pub(super) fn collect_graphics_commands(
@@ -65,7 +64,7 @@ pub(super) fn collect_graphics_commands(
     viewport: GraphicViewport,
     previous_visible_placements: &[(u32, u32)],
     transmitted_graphics: &mut BTreeSet<u32>,
-) -> (Vec<String>, Vec<(u32, u32)>) {
+) -> GraphicCommands {
     let mut commands = Vec::new();
     let visible_placements =
         visible_graphic_placements(rendered, viewport.scroll, viewport.content_height);

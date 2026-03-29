@@ -58,8 +58,8 @@ fn normalize_block<'a>(node: &'a AstNode<'a>) -> Option<BlockKind> {
         NodeValue::BlockQuote => Some(normalize_quote(node)),
         NodeValue::List(list) => Some(normalize_list(node, list)),
         NodeValue::CodeBlock(code) => Some(normalize_code_block(code)),
-        NodeValue::HtmlBlock(_) => {
-            let text = collect_styled_text(node);
+        NodeValue::HtmlBlock(block) => {
+            let text = StyledText::from_plain(trim_html_block_literal(&block.literal));
             (!text.is_empty()).then_some(BlockKind::Paragraph { text })
         }
         NodeValue::ThematicBreak => Some(BlockKind::Rule),
@@ -190,6 +190,11 @@ fn collect_text_segments<'a>(
                 });
             }
         }
+        NodeValue::HtmlInline(literal) => {
+            if !literal.is_empty() {
+                parts.push(InlineSegment { text: literal.clone(), style });
+            }
+        }
         NodeValue::TaskItem(task) => {
             let marker = task.symbol.map_or("[ ] ".to_string(), |value| format!("[{value}] "));
             parts.push(InlineSegment { text: marker, style });
@@ -259,6 +264,10 @@ fn normalize_segments(parts: Vec<InlineSegment>) -> Vec<InlineSegment> {
     }
 
     normalized
+}
+
+fn trim_html_block_literal(literal: &str) -> String {
+    literal.trim_end_matches(['\r', '\n']).to_string()
 }
 
 fn collect_links<'a>(node: &'a AstNode<'a>, links: &mut Vec<String>) {

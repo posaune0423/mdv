@@ -1,0 +1,4 @@
+<div align="center">
+<h1>Fixture Header</h1>
+Paragraph with inline HTML<br/>kept as text.
+</div>

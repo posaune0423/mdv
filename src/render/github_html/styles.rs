@@ -11,8 +11,26 @@ static DARK_SYNTAX_ADAPTER: OnceLock<SyntectAdapter> = OnceLock::new();
 pub(super) fn theme_styles(theme: Theme) -> String {
     let font_faces = font_face_css();
     match theme {
-        Theme::Light => [font_faces.as_str(), "\n", LIGHT_CSS, "\n", LIGHT_OVERRIDES].concat(),
-        Theme::Dark => [font_faces.as_str(), "\n", DARK_CSS, "\n", DARK_OVERRIDES].concat(),
+        Theme::Light => [
+            font_faces.as_str(),
+            "\n",
+            LIGHT_CSS,
+            "\n",
+            COMMON_OVERRIDES,
+            "\n",
+            LIGHT_THEME_OVERRIDES,
+        ]
+        .concat(),
+        Theme::Dark => [
+            font_faces.as_str(),
+            "\n",
+            DARK_CSS,
+            "\n",
+            COMMON_OVERRIDES,
+            "\n",
+            DARK_THEME_OVERRIDES,
+        ]
+        .concat(),
     }
 }
 
@@ -79,10 +97,9 @@ pub(super) fn directory_url(path: &Path) -> String {
 
 const LIGHT_CSS: &str = include_str!("../assets/github-markdown-light.css");
 
-const LIGHT_OVERRIDES: &str = r#"
+const COMMON_OVERRIDES: &str = r#"
 body {
   margin: 0;
-  background: #ffffff;
 }
 .mdv-page {
   padding: 8px;
@@ -99,6 +116,15 @@ body {
 .markdown-body img {
   max-width: 100%;
   height: auto;
+}
+.markdown-body [align="center"] {
+  text-align: center;
+}
+.markdown-body [align="left"] {
+  text-align: left;
+}
+.markdown-body [align="right"] {
+  text-align: right;
 }
 .markdown-body p > img:only-child {
   display: block;
@@ -133,6 +159,12 @@ body {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
     monospace !important;
 }
+"#;
+
+const LIGHT_THEME_OVERRIDES: &str = r#"
+body {
+  background: #ffffff;
+}
 .markdown-body .highlight,
 .markdown-body pre {
   background-color: #f6f8fa !important;
@@ -151,59 +183,13 @@ body {
 
 const DARK_CSS: &str = include_str!("../assets/github-markdown-dark.css");
 
-const DARK_OVERRIDES: &str = r#"
+const DARK_THEME_OVERRIDES: &str = r#"
 body {
-  margin: 0;
   background: #0d1117;
-}
-.mdv-page {
-  padding: 8px;
-  display: flex;
-  justify-content: center;
-}
-.markdown-body {
-  width: calc(100vw - 16px);
-  max-width: none;
-  background: transparent;
-  font-family: 'Mona Sans VF', -apple-system, system-ui, "Segoe UI", "Noto Sans",
-    Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-}
-.markdown-body img {
-  max-width: 100%;
-  height: auto;
-}
-.markdown-body p > img:only-child {
-  display: block;
-}
-.mdv-mermaid {
-  margin: 16px 0;
-  display: flex;
-  justify-content: center;
-  overflow: hidden;
-  max-width: min(100%, 420px);
-  margin-left: auto;
-  margin-right: auto;
-}
-.mdv-mermaid img,
-.mdv-mermaid-diagram {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  height: auto;
-  margin: 0 auto;
-  flex: 0 1 auto;
 }
 .mdv-mermaid-fallback {
   color: #8b949e;
   font-weight: 600;
-}
-.markdown-body code,
-.markdown-body tt,
-.markdown-body pre,
-.markdown-body kbd,
-.markdown-body samp {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
-    monospace !important;
 }
 .markdown-body .highlight,
 .markdown-body pre {

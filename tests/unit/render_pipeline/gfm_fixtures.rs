@@ -21,6 +21,15 @@ fn fixture_dirs() -> Vec<std::path::PathBuf> {
     dirs
 }
 
+fn fixture_dir(name: &str) -> std::path::PathBuf {
+    Path::new("tests/fixtures/gfm").join(name)
+}
+
+fn fixture_input(name: &str) -> String {
+    fs::read_to_string(fixture_dir(name).join("input.md"))
+        .unwrap_or_else(|error| panic!("failed to read fixture {name}: {error}"))
+}
+
 fn extract_article_body(html: &str) -> &str {
     let article_start = html
         .find("<article class=\"markdown-body entry-content container-lg\">")
@@ -34,6 +43,42 @@ fn extract_article_body(html: &str) -> &str {
         .map(|offset| body_start + offset)
         .unwrap_or_else(|| panic!("article closing tag missing"));
     html[body_start..body_end].trim()
+}
+
+#[test]
+fn html_wrapper_fixture_preserves_raw_html_markers_in_github_html() {
+    let fixture_dir = fixture_dir("html-wrappers");
+    let html = build_github_html(
+        &fixture_input("html-wrappers"),
+        &fixture_dir,
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("html wrapper fixture should render: {error}"));
+    let body = extract_article_body(&html);
+
+    assert!(body.contains(r#"<div align="center">"#));
+    assert!(body.contains("<h1>Fixture Header</h1>"));
+    assert!(body.contains("Paragraph with inline HTML<br/>kept as text."));
+    assert!(body.contains("</div>"));
+}
+
+#[test]
+fn badge_fixture_preserves_badge_images_in_github_html() {
+    let fixture_dir = fixture_dir("badges-local");
+    let html = build_github_html(
+        &fixture_input("badges-local"),
+        &fixture_dir,
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("badge fixture should render: {error}"));
+    let body = extract_article_body(&html);
+
+    assert!(body.contains(r#"<img src="badge-ci.svg" alt="CI""#));
+    assert!(body.contains(r#"<img src="badge-license.svg" alt="License""#));
+    assert!(body.contains(r#"href="https://example.com/ci""#));
+    assert!(body.contains(r#"href="https://example.com/license""#));
 }
 
 #[test]

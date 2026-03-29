@@ -79,6 +79,7 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
           const proseFontReady = !document.fonts || document.fonts.check('16px "Mona Sans VF"');
           const firstHeading = document.querySelector("h1, h2, h3, h4, h5, h6");
           const firstStrong = document.querySelector("strong, b");
+          const isRemoteAsset = (value) => /^https?:\\/\\//i.test(value || "");
           const typographySelectors = [
             ["h1", "h1"],
             ["h2", "h2"],
@@ -105,14 +106,19 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
           });
           const images = Array.from(document.images || []).map((image) => {
             const rect = image.getBoundingClientRect();
+            const source = image.getAttribute("src") || "";
+            const currentSrc = image.currentSrc || "";
+            const resolvedSource = currentSrc || source;
+            const remote = isRemoteAsset(resolvedSource);
             return {
-              source: image.getAttribute("src") || "",
-              currentSrc: image.currentSrc || "",
+              source,
+              currentSrc,
               complete: !!image.complete,
               naturalWidth: image.naturalWidth || 0,
               naturalHeight: image.naturalHeight || 0,
               renderedWidth: rect.width || 0,
               renderedHeight: rect.height || 0,
+              blocking: !remote,
               viewBox: "",
               contentLength: 0
             };
@@ -136,10 +142,14 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
             };
           });
           const imagesReady = images.every((image) => {
+            if (!image.blocking) return true;
             if (!image.complete) return false;
             if (!image.currentSrc) return true;
             return image.naturalWidth > 0;
           });
+          const remoteImagesReady = images.every((image) => (
+            !image.blocking || image.complete
+          ));
           const mermaidsReady = mermaids.every((diagram) => (
             diagram.renderedWidth > 0 && diagram.renderedHeight > 0
           ));
@@ -148,6 +158,7 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
             fontsReady,
             proseFontReady,
             imagesReady,
+            remoteImagesReady,
             mermaidsReady,
             headingFontWeight: firstHeading ? getComputedStyle(firstHeading).fontWeight || "" : "",
             strongFontWeight: firstStrong ? getComputedStyle(firstStrong).fontWeight || "" : "",
@@ -174,9 +185,11 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
 
             let fontsReady = (payload["fontsReady"] as? Bool) ?? true
             let imagesReady = (payload["imagesReady"] as? Bool) ?? true
+            let remoteImagesReady = (payload["remoteImagesReady"] as? Bool) ?? true
             let mermaidsReady = (payload["mermaidsReady"] as? Bool) ?? true
+            let visualsReady = fontsReady && imagesReady && mermaidsReady && (remoteImagesReady || attempt >= 8)
             let currentHeight = Double(snapshotHeight)
-            if fontsReady && imagesReady && mermaidsReady {
+            if visualsReady {
                 if abs(self.lastMeasuredHeight - currentHeight) < 0.5 {
                     self.stableProbeCount += 1
                 } else {
@@ -187,7 +200,7 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
             }
             self.lastMeasuredHeight = currentHeight
 
-            if (fontsReady && imagesReady && mermaidsReady && self.stableProbeCount >= 1) || attempt >= 40 {
+            if (visualsReady && self.stableProbeCount >= 1) || attempt >= 40 {
                 if let failure = self.assetFailureMessage(from: payload) {
                     self.fail(failure)
                     return
@@ -243,6 +256,10 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
 
         if let images = payload["images"] as? [[String: Any]] {
             for image in images {
+                let blocking = (image["blocking"] as? Bool) ?? true
+                if !blocking {
+                    continue
+                }
                 let sourceAttr = (image["source"] as? String) ?? ""
                 let currentSrc = (image["currentSrc"] as? String) ?? ""
                 let source = !sourceAttr.isEmpty ? sourceAttr : (!currentSrc.isEmpty ? currentSrc : "image")

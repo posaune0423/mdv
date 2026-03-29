@@ -1,6 +1,8 @@
 use std::fs;
+use std::io::Cursor;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
 use tempfile::NamedTempFile;
 
 use crate::{
@@ -10,11 +12,15 @@ use crate::{
     render::text::{
         RenderedDocument, RenderedGraphic, RenderedGraphicContent, RenderedLine, RenderedLineKind,
     },
+    ui::page_graphics::build_graphic_page,
 };
 
 use super::{
     CellMetrics, GraphicViewport, TerminalViewer,
-    graphics::{collect_graphics_commands, fit_graphic_placement, visible_graphic_placements},
+    graphics::{
+        collect_graphics_commands, collect_page_viewport_commands, fit_graphic_placement,
+        visible_graphic_placements,
+    },
     layout::article_wrap_width,
 };
 
@@ -89,6 +95,43 @@ fn graphics_commands_only_transmit_png_payload_once() {
 }
 
 #[test]
+fn page_viewport_commands_retransmit_cropped_png_for_each_scroll_position() {
+    let image = ImageBuffer::from_pixel(8, 40, Rgba([255, 0, 0, 255]));
+    let mut png_bytes = Vec::new();
+    DynamicImage::ImageRgba8(image)
+        .write_to(&mut Cursor::new(&mut png_bytes), ImageFormat::Png)
+        .unwrap_or_else(|error| panic!("fixture image should encode: {error}"));
+    let page = build_graphic_page(&png_bytes, 16, 8)
+        .unwrap_or_else(|error| panic!("graphic page should decode: {error}"));
+    let mut transmitted = std::collections::BTreeSet::new();
+
+    let (first_commands, _) = collect_page_viewport_commands(
+        &page,
+        0,
+        4,
+        CellMetrics { width_px: 8.0, height_px: 2.0 },
+        &[],
+        &mut transmitted,
+    )
+    .unwrap_or_else(|error| panic!("viewport commands should build: {error}"));
+    let (second_commands, _) = collect_page_viewport_commands(
+        &page,
+        4,
+        4,
+        CellMetrics { width_px: 8.0, height_px: 2.0 },
+        &[],
+        &mut transmitted,
+    )
+    .unwrap_or_else(|error| panic!("viewport commands should rebuild after scroll: {error}"));
+
+    assert_eq!(first_commands.iter().filter(|command| command.contains("a=t")).count(), 1);
+    assert_eq!(second_commands.iter().filter(|command| command.contains("a=t")).count(), 1);
+    assert!(first_commands.iter().any(|command| command.contains("h=8")));
+    assert!(second_commands.iter().any(|command| command.contains("h=8")));
+    assert!(second_commands.iter().any(|command| command.contains("x=0,y=0")));
+}
+
+#[test]
 fn fit_graphic_placement_stays_within_reserved_box() {
     let graphic = RenderedGraphic {
         line_index: 0,
@@ -144,6 +187,40 @@ fn resize_events_defer_layout_refresh_until_draw() {
     assert!(!should_quit);
     assert!(viewer.pending_layout_refresh);
     assert!(viewer.needs_redraw);
+}
+
+#[test]
+fn try_new_surfaces_graphic_mode_failure() {
+    let file = NamedTempFile::new()
+        .unwrap_or_else(|error| panic!("temp markdown should be created: {error}"));
+    let source = "# Title\n\nParagraph.\n";
+    if let Err(error) = fs::write(file.path(), source) {
+        panic!("temp markdown should be written: {error}");
+    }
+
+    let path = file.into_temp_path().keep().unwrap_or_else(|error| {
+        panic!("temp markdown should persist for the test viewer: {error}")
+    });
+    let document = crate::render::markdown::parse_document(path.clone(), source)
+        .unwrap_or_else(|error| panic!("document should parse: {error}"));
+
+    let error = TerminalViewer::try_new(
+        AppConfig {
+            path: path.clone(),
+            watch: false,
+            theme: Theme::Light,
+            mermaid_mode: MermaidMode::Disabled,
+        },
+        FileSystemDocumentSource::new(path),
+        document,
+        source.to_string(),
+    )
+    .err()
+    .unwrap_or_else(|| panic!("viewer should fail when graphic mode is unavailable"));
+
+    let message = format!("{error:#}");
+    assert!(message.contains("interactive graphic render failed"));
+    assert!(message.contains("graphic mode disabled during tests"));
 }
 
 fn sample_viewer(source: &str) -> TerminalViewer {

@@ -177,11 +177,11 @@ Verify checksums when you need supply-chain guarantees: every release publishes 
 
 You **do not** need a `Formula/` directory in this repository.
 
-- **`brew install mdv` (公式コア)**  
-  式ファイルは [Homebrew/homebrew-core](https://github.com/Homebrew/homebrew-core) 側にあります。受理されれば、このリポジトリに何も置かずに `brew install mdv` だけで入ります。
+- **`brew install mdv` (official core)**  
+  The formula lives in [Homebrew/homebrew-core](https://github.com/Homebrew/homebrew-core). Once accepted, you can install with `brew install mdv` alone—nothing needs to live in this repository.
 
-- **サードパーティ tap**  
-  コアに入れる前や独自配布用は、別リポジトリ（例: `posaune0423/homebrew-tap`）に `Formula/mdv.rb` だけ置き、`brew tap posaune0423/tap` のように **tap 用リポジトリ**を指させます。アプリ本体のリポジトリと分けておくのが一般的です。
+- **Third-party tap**  
+  Before core inclusion or for custom distribution, put only `Formula/mdv.rb` in a separate repository (e.g. `posaune0423/homebrew-tap`) and have users point at the **tap repository** with `brew tap posaune0423/tap`. Keeping taps separate from the main app repository is common.
 
 ### mise
 

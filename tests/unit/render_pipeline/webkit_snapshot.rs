@@ -10,6 +10,17 @@ use mdv::{cli::Theme, core::config::MermaidMode, render::github_html::build_gith
 use tempfile::tempdir;
 
 #[cfg(target_os = "macos")]
+fn gfm_fixture_dir(name: &str) -> std::path::PathBuf {
+    std::path::Path::new("tests/fixtures/gfm").join(name)
+}
+
+#[cfg(target_os = "macos")]
+fn gfm_fixture_input(name: &str) -> String {
+    std::fs::read_to_string(gfm_fixture_dir(name).join("input.md"))
+        .unwrap_or_else(|error| panic!("fixture {name} should read: {error}"))
+}
+
+#[cfg(target_os = "macos")]
 fn typography_entry<'a>(
     diagnostics: &'a SnapshotDiagnostics,
     role: &str,
@@ -197,6 +208,57 @@ fn webkit_snapshot_renders_local_markdown_images() {
     assert_eq!(snapshot.diagnostics.images[0].natural_height_px, 4.0);
     assert!(snapshot.diagnostics.images[0].rendered_width_px > 0.0);
     assert!(snapshot.diagnostics.images[0].rendered_height_px > 0.0);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn webkit_snapshot_renders_badge_fixture_images_with_nonzero_size() {
+    let fixture_dir = gfm_fixture_dir("badges-local");
+    let html = build_github_html(
+        &gfm_fixture_input("badges-local"),
+        &fixture_dir,
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("badge fixture html should render: {error}"));
+
+    let snapshot = render_html_to_png(&html, &fixture_dir, 960)
+        .unwrap_or_else(|error| panic!("badge fixture snapshot should render: {error}"));
+
+    assert!(snapshot.diagnostics.images_ready);
+    assert_eq!(snapshot.diagnostics.images.len(), 2);
+
+    for asset in &snapshot.diagnostics.images {
+        assert!(asset.complete, "{} should complete", asset.source);
+        assert!(asset.natural_width_px >= 80.0, "{} should keep badge width", asset.source);
+        assert!(asset.natural_height_px >= 20.0, "{} should keep badge height", asset.source);
+        assert!(asset.rendered_width_px >= 80.0, "{} should render visibly wide", asset.source);
+        assert!(asset.rendered_height_px >= 18.0, "{} should render visibly tall", asset.source);
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn webkit_snapshot_allows_remote_badge_failures_without_aborting_page_render() {
+    let fixture_dir = gfm_fixture_dir("badges-remote");
+    let html = build_github_html(
+        &gfm_fixture_input("badges-remote"),
+        &fixture_dir,
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("remote badge fixture html should render: {error}"));
+
+    let snapshot = render_html_to_png(&html, &fixture_dir, 960)
+        .unwrap_or_else(|error| panic!("remote badge failure should not abort snapshot: {error}"));
+    let image = snapshot
+        .diagnostics
+        .images
+        .first()
+        .unwrap_or_else(|| panic!("remote badge diagnostics should be present"));
+
+    assert!(snapshot.png_bytes.starts_with(&[0x89, b'P', b'N', b'G']));
+    assert_eq!(image.source, "http://127.0.0.1:1/ci-badge.svg");
 }
 
 #[cfg(target_os = "macos")]

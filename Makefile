@@ -1,11 +1,18 @@
 SHELL := /bin/sh
+UNAME_S := $(shell uname -s)
 
 .PHONY: build fmt fmt-check lint test test-unit test-integration test-e2e check ci install-local run-local
 
 build:
 	mkdir -p bin
 	cargo build --release
+ifneq ($(UNAME_S),Darwin)
 	cp target/release/mdv bin/mdv
+else
+	codesign --force --sign - target/release/mdv
+	cp target/release/mdv bin/mdv
+	codesign --force --sign - bin/mdv
+endif
 
 fmt:
 	cargo fmt --all

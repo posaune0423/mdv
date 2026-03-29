@@ -55,3 +55,19 @@ fn headless_render_supports_repo_rich_fixture() {
             "[^details] The fixture keeps every high-value Markdown block in one document.",
         ));
 }
+
+#[test]
+fn headless_render_supports_stdin_with_dash_path() {
+    let mut command = match Command::cargo_bin("mdv") {
+        Ok(command) => command,
+        Err(error) => panic!("binary should build: {error}"),
+    };
+
+    command
+        .arg("-")
+        .write_stdin("# Title\n\nParagraph with <br/> inline HTML.\n")
+        .assert()
+        .success()
+        .stdout(contains("# Title"))
+        .stdout(contains("Paragraph with <br/> inline HTML."));
+}

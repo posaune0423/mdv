@@ -52,3 +52,39 @@ fn normalizes_task_list_and_footnote_reference_text() {
     ));
     assert!(matches!(document.blocks[2].kind, BlockKind::Footnote { .. }));
 }
+
+#[test]
+fn normalizes_raw_html_blocks_as_plain_text() {
+    let source = "<div align=\"center\">\n</div>\n";
+
+    let document = match parse_document("docs/example.md".into(), source) {
+        Ok(document) => document,
+        Err(error) => panic!("document should parse: {error}"),
+    };
+
+    assert!(matches!(
+        document.blocks.as_slice(),
+        [mdv::core::document::Block {
+            kind: BlockKind::Paragraph { text },
+            ..
+        }] if text.plain() == "<div align=\"center\">\n</div>"
+    ));
+}
+
+#[test]
+fn keeps_inline_html_as_plain_text() {
+    let source = "Before <br/> after.\n";
+
+    let document = match parse_document("docs/example.md".into(), source) {
+        Ok(document) => document,
+        Err(error) => panic!("document should parse: {error}"),
+    };
+
+    assert!(matches!(
+        document.blocks.as_slice(),
+        [mdv::core::document::Block {
+            kind: BlockKind::Paragraph { text },
+            ..
+        }] if text.plain() == "Before <br/> after."
+    ));
+}

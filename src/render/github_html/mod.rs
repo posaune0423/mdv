@@ -17,7 +17,9 @@ mod tests;
 
 use self::{
     mermaid::replace_mermaid_code_blocks,
-    postprocess::{decorate_code_blocks, inject_alert_icons, retint_code_tokens},
+    postprocess::{
+        decorate_code_blocks, inject_alert_icons, restore_supported_raw_html, retint_code_tokens,
+    },
     styles::{directory_url, syntax_adapter, theme_styles},
 };
 
@@ -45,8 +47,10 @@ pub fn build_github_html(
     format_html_with_plugins(root, &options, &mut rendered, &plugins)
         .context("formatting markdown to html failed")?;
 
-    let body_html =
-        decorate_code_blocks(&retint_code_tokens(&inject_alert_icons(&rendered), theme));
+    let body_html = restore_supported_raw_html(&decorate_code_blocks(&retint_code_tokens(
+        &inject_alert_icons(&rendered),
+        theme,
+    )));
     let styles = theme_styles(theme);
 
     Ok(format!(

@@ -1,4 +1,7 @@
-use std::io::{self, IsTerminal, Write};
+use std::{
+    io::{self, IsTerminal, Read, Write},
+    path::Path,
+};
 
 use anyhow::{Result, bail};
 use tracing::info_span;
@@ -17,6 +20,10 @@ pub fn run(args: MdvArgs) -> Result<()> {
 
     let _startup_span = info_span!("app.run").entered();
     let config = AppConfig::from(args);
+    if config.path == Path::new("-") {
+        return run_from_stdin(config);
+    }
+
     let source = FileSystemDocumentSource::new(config.path.clone());
     let content = {
         let _span = info_span!("startup.read_source").entered();
@@ -41,6 +48,33 @@ pub fn run(args: MdvArgs) -> Result<()> {
         viewer.run()?;
         return Ok(());
     }
+
+    let rendered = {
+        let _span = info_span!("startup.render_plain_text").entered();
+        render_plain_text(&document, config.theme, config.mermaid_mode)
+    };
+    let mut stdout = io::stdout().lock();
+    stdout.write_all(rendered.as_bytes())?;
+    stdout.flush()?;
+    Ok(())
+}
+
+fn run_from_stdin(config: AppConfig) -> Result<()> {
+    if io::stdin().is_terminal() {
+        bail!("'-' requires piped stdin");
+    }
+
+    let mut content = String::new();
+    {
+        let _span = info_span!("startup.read_stdin").entered();
+        io::stdin().read_to_string(&mut content)?;
+    }
+
+    let document = {
+        let _span = info_span!("startup.parse_document").entered();
+        let virtual_path = std::env::current_dir()?.join("stdin.md");
+        parse_document(virtual_path, &content)?
+    };
 
     let rendered = {
         let _span = info_span!("startup.render_plain_text").entered();

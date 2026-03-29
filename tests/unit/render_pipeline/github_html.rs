@@ -154,15 +154,18 @@ fn github_html_uses_embedded_github_font_stacks() {
 }
 
 #[test]
-fn github_html_escapes_untrusted_raw_html() {
+fn github_html_restores_supported_raw_html_but_keeps_scripts_escaped() {
     let html = build_github_html(
-        "<script>window.evil = true</script>\n",
+        "<div align=\"center\">hi<br/><sub>fine</sub><a href=\"https://example.com\">link</a></div>\n<script>window.evil = true</script>\n",
         std::path::Path::new("."),
         Theme::Dark,
         MermaidMode::Disabled,
     )
     .unwrap_or_else(|error| panic!("html should render: {error}"));
 
+    assert!(html.contains(
+        r#"<div align="center">hi<br/><sub>fine</sub><a href="https://example.com">link</a></div>"#
+    ));
     assert!(!html.contains("<script>window.evil = true</script>"));
     assert!(html.contains("&lt;script&gt;window.evil = true&lt;/script&gt;"));
 }

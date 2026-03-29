@@ -5,7 +5,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEventKind},
@@ -30,6 +30,8 @@ use self::{
         render_graphic_page, truncate_visible,
     },
 };
+#[cfg(test)]
+use crate::render::text::render_document;
 use crate::{
     core::{config::AppConfig, document::Document, theme::ThemeTokens},
     io::fs::FileSystemDocumentSource,
@@ -95,7 +97,10 @@ impl TerminalViewer {
     ) -> Result<Self> {
         let cell_metrics = current_cell_metrics();
         let last_modified = source.modified_at().ok();
-        let graphic_page = render_graphic_page(&config, &document, &source_text, cell_metrics)?;
+        let graphic_page = render_graphic_page(&config, &document, &source_text, cell_metrics)
+            .with_context(|| {
+                format!("interactive graphic render failed for {}", source.path().display())
+            })?;
 
         Ok(Self {
             config,
@@ -132,7 +137,7 @@ impl TerminalViewer {
                 Ok(page) => (Some(page), None, None),
                 Err(error) => (
                     None,
-                    Some(crate::render::text::render_document(
+                    Some(render_document(
                         &document,
                         config.theme,
                         config.mermaid_mode,
@@ -328,7 +333,7 @@ impl TerminalViewer {
                 self.cell_metrics,
                 &self.visible_placements,
                 &mut self.transmitted_graphics,
-            )
+            )?
         } else if let Some(rendered) = &self.rendered {
             collect_graphics_commands(
                 rendered,
@@ -443,7 +448,6 @@ impl TerminalViewer {
         ) {
             Ok(graphic_page) => {
                 self.graphic_page = Some(graphic_page);
-                self.rendered = None;
                 self.warning = None;
             }
             Err(error) => {
