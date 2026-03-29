@@ -1,7 +1,7 @@
 SHELL := /bin/sh
 UNAME_S := $(shell uname -s)
 
-.PHONY: build fmt fmt-check lint test test-unit test-integration test-e2e check ci install-local run-local release-metadata release-package release-smoke
+.PHONY: build fmt fmt-check lint test test-unit test-integration test-e2e check ci install-local run-local release-metadata release-package package-check
 
 HOST_TARGET := $(shell rustc -vV | sed -n 's/^host: //p')
 PACKAGE_VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
@@ -57,5 +57,5 @@ release-metadata:
 release-package:
 	./scripts/package-release.sh $(TARGET) $(OUT_DIR)
 
-release-smoke: release-metadata release-package
+package-check: release-metadata release-package
 	./scripts/verify-release-archive.sh $(OUT_DIR)/mdv-$(TARGET).tar.gz $(OUT_DIR)/SHA256SUMS.part

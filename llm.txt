@@ -19,7 +19,7 @@ Default install directory: $HOME/.local/bin (override with MDV_INSTALL_DIR).
 
 After install: ensure the install directory is on PATH (e.g. export PATH="$HOME/.local/bin:$PATH").
 
-Pin installer to a release tag by replacing `main` with `vX.Y.Z` in the URL path to scripts/install.sh.
+The install script defaults to the rolling `main` channel. Set `MDV_CHANNEL=vX.Y.Z` to pin a release tag instead.
 
 Other options:
 - GitHub Releases: download archive, extract `mdv`, put on PATH.
@@ -42,12 +42,13 @@ Examples:
 
 - path: required positional argument — Markdown file to open (PathBuf).
 - --watch: reload when the file changes on disk.
-- --theme <light|dark>: default is light.
+- --theme <system|light|dark>: default is system.
 - --no-mermaid: disable Mermaid rendering; show placeholders.
 
 ## Environment variables (common)
 
 - MDV_INSTALL_DIR: install script target directory (default ~/.local/bin).
+- MDV_CHANNEL: install/update channel or release tag (default main).
 - MDV_MERMAID_CMD: optional explicit command for Mermaid CLI; otherwise mmdc or npx @mermaid-js/mermaid-cli may be used (see docs/TECH.md).
 
 ## Troubleshooting (short)

@@ -33,7 +33,7 @@
 | --- | --- |
 | `docs/` | 製品・技術・構造ドキュメント、および初期設計メモ |
 | `.agents/memory/` | エージェント用の task memory と lessons |
-| `.github/workflows/` | CI と release workflow |
+| `.github/workflows/` | CI、rolling main channel、release workflow |
 | `scripts/` | 配布用 install script |
 | `examples/` | rich Markdown fixture とサンプル画像 |
 | `src/` | 本体実装 |
@@ -238,9 +238,13 @@ tests/
 | `rust-toolchain.toml` | Rust version 固定 |
 | `.cargo/config.toml` | cargo alias |
 | `Makefile` | build / test / lint の短縮コマンド |
-| `scripts/install.sh` | GitHub Releases からのインストール |
-| `.github/workflows/ci.yml` | CI |
-| `.github/workflows/release.yml` | Release packaging |
+| `release-please-config.json` | stable release の version / changelog 設定 |
+| `.release-please-manifest.json` | release-please が追跡する現在 version |
+| `scripts/install.sh` | rolling `main` channel を既定にしたインストール |
+| `.github/workflows/ci.yml` | CI と packaging 検証 |
+| `.github/workflows/main-channel.yml` | rolling `main` channel の配布物 publish |
+| `.github/workflows/package-artifacts.yml` | reusable な multi-target packaging |
+| `.github/workflows/release.yml` | `release-please` と stable asset publish |
 
 ## 7. 設計上の見どころ
 

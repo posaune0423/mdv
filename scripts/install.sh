@@ -1,14 +1,16 @@
 #!/bin/sh
-# Install a prebuilt mdv binary from GitHub Releases.
+# Install a prebuilt mdv binary from a published mdv channel.
 # Usage:
 #   curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/posaune0423/mdv/main/scripts/install.sh | sh
 # Optional env:
 #   MDV_INSTALL_DIR  directory for the binary (default: $HOME/.local/bin)
+#   MDV_CHANNEL      release tag or rolling channel to install (default: main)
 
 set -eu
 
 REPO="posaune0423/mdv"
 DEFAULT_INSTALL_DIR="${MDV_INSTALL_DIR:-$HOME/.local/bin}"
+DEFAULT_CHANNEL="${MDV_CHANNEL:-main}"
 
 die() {
   printf 'mdv install: %s\n' "$1" >&2
@@ -42,14 +44,16 @@ else
 fi
 
 asset="mdv-${target}.tar.gz"
-url="https://github.com/${REPO}/releases/latest/download/${asset}"
+channel=$(printf '%s' "$DEFAULT_CHANNEL" | tr -d '[:space:]')
+[ -n "$channel" ] || die "MDV_CHANNEL must not be empty"
+url="https://github.com/${REPO}/releases/download/${channel}/${asset}"
 
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT INT TERM
 
-printf 'Downloading %s\n' "$url"
+printf 'Downloading %s from channel %s\n' "$asset" "$channel"
 if ! curl -fL --proto '=https' --tlsv1.2 --retry 3 --retry-delay 1 -o "$tmp_dir/$asset" "$url"; then
-  die "download failed (is there a GitHub Release with ${asset}?)"
+  die "download failed (is there a published ${channel} build with ${asset}?)"
 fi
 
 (

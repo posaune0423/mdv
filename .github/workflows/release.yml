@@ -2,91 +2,47 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing git tag to publish
-        required: true
-        type: string
 
-env:
-  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
 
 jobs:
-  validate:
-    name: Validate release metadata
+  release-please:
+    name: Prepare release
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     outputs:
-      release_tag: ${{ steps.release_tag.outputs.value }}
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
     steps:
-      - name: Resolve release tag
-        id: release_tag
-        run: echo "value=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout tagged revision
-        uses: actions/checkout@v4
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
         with:
-          ref: ${{ env.RELEASE_TAG }}
-
-      - name: Validate tag against repository metadata
-        run: ./scripts/verify-release-metadata.sh "${RELEASE_TAG}"
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
   build:
-    name: Build (${{ matrix.target }})
-    needs: validate
-    runs-on: ${{ matrix.os }}
+    name: Build release assets
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    needs: release-please
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-          - os: macos-latest
-            target: aarch64-apple-darwin
-          - os: macos-13
-            target: x86_64-apple-darwin
-
-    steps:
-      - name: Checkout tagged revision
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.validate.outputs.release_tag }}
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.92.0
-          targets: ${{ matrix.target }}
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: release-${{ matrix.target }}
-
-      - name: Package archive
-        run: ./scripts/package-release.sh "${{ matrix.target }}" dist
-
-      - name: Verify packaged archive
-        run: ./scripts/verify-release-archive.sh "dist/mdv-${{ matrix.target }}.tar.gz" dist/SHA256SUMS.part
-
-      - name: Upload packaged binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: package-${{ matrix.target }}
-          path: dist/*
+    uses: ./.github/workflows/package-artifacts.yml
+    with:
+      artifact-prefix: release
+      checkout-ref: ${{ needs.release-please.outputs.tag_name }}
 
   publish:
-    name: Publish GitHub Release
+    name: Publish release assets
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
     needs:
-      - validate
+      - release-please
       - build
     runs-on: ubuntu-latest
     permissions:
@@ -96,7 +52,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: package-*
+          pattern: release-*
           merge-multiple: true
 
       - name: Merge checksums
@@ -106,10 +62,7 @@ jobs:
           find artifacts -name '*.tar.gz' -exec cp {} dist/ \;
           find artifacts -name 'SHA256SUMS.part' -exec cat {} \; | sort > dist/SHA256SUMS
 
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.validate.outputs.release_tag }}
-          fail_on_unmatched_files: true
-          files: dist/*
-          generate_release_notes: true
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" dist/* --clobber

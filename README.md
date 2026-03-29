@@ -51,7 +51,7 @@ mdv README.md                            # system theme (default)
 mdv --theme dark notes.md                # dark theme
 mdv --watch docs/guide.md               # auto-reload on save
 mdv --no-mermaid spec.md                # skip Mermaid rendering
-mdv update                              # install the latest GitHub Release over this mdv binary
+mdv update                              # install the latest main build over this mdv binary
 mdv ./CHANGELOG.md | head -n 50         # plain-text output (pipe/CI)
 ```
 
@@ -78,7 +78,7 @@ mdv ./CHANGELOG.md | head -n 50         # plain-text output (pipe/CI)
 
 | Method | Command / notes |
 |--------|-----------------|
-| **Install script** | See [Quick start](#quick-start). Pin to a release tag: `…/vMAJOR.MINOR.PATCH/scripts/install.sh` |
+| **Install script** | See [Quick start](#quick-start). Defaults to the rolling `main` channel; set `MDV_CHANNEL=vMAJOR.MINOR.PATCH` to pin a release tag. |
 | **GitHub Releases** | Download a prebuilt archive from [Releases](https://github.com/posaune0423/mdv/releases). Linux x86_64/arm64, macOS Intel/Apple Silicon. SHA256SUMS included. |
 | **Homebrew** | `brew install mdv` (when available in [homebrew-core](https://github.com/Homebrew/homebrew-core)) |
 | **mise** | `mise use -g github:posaune0423/mdv` |
@@ -89,7 +89,7 @@ mdv ./CHANGELOG.md | head -n 50         # plain-text output (pipe/CI)
 | Symptom | What to try |
 |---------|-------------|
 | `mdv: command not found` | Ensure `$HOME/.local/bin` is on `PATH`, then restart the terminal. |
-| `mdv update` fails | Confirm the current `mdv` location is writable and the host platform has a matching GitHub Release asset. |
+| `mdv update` fails | Confirm the current `mdv` location is writable and the host platform has a matching published build for the selected channel (`main` by default, or `MDV_CHANNEL`). |
 | Plain text instead of rich viewer | Requires a TTY in Ghostty or Kitty. Pipes and redirects trigger headless mode by design. |
 | Mermaid diagrams show placeholders | Install `mmdc` or use `npx @mermaid-js/mermaid-cli`. Use `--no-mermaid` to skip entirely. |
 | Graphic / snapshot issues | Rich rendering uses WebKit (macOS only). See [docs/TECH.md](docs/TECH.md). |

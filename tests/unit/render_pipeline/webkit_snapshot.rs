@@ -215,7 +215,8 @@ fn webkit_snapshot_renders_local_markdown_images() {
 fn webkit_snapshot_renders_html_img_tag_with_local_image() {
     let dir = tempdir().unwrap_or_else(|error| panic!("temp dir should exist: {error}"));
     let sub = dir.path().join("docs");
-    std::fs::create_dir_all(&sub).unwrap();
+    std::fs::create_dir_all(&sub)
+        .unwrap_or_else(|error| panic!("fixture directory should be created: {error}"));
     let image_path = sub.join("pixel.png");
     let pixel = ImageBuffer::from_pixel(4, 4, Rgba([0_u8, 0_u8, 255_u8, 255_u8]));
     pixel
@@ -230,8 +231,15 @@ fn webkit_snapshot_renders_html_img_tag_with_local_image() {
     )
     .unwrap_or_else(|error| panic!("html should render: {error}"));
 
+    let article_start = html
+        .find("<article")
+        .unwrap_or_else(|| panic!("article start should exist in rendered html"));
+    let article_end = html
+        .find("</article>")
+        .unwrap_or_else(|| panic!("article end should exist in rendered html"));
+
     eprintln!("=== HTML img tag test ===");
-    eprintln!("{}", &html[html.find("<article").unwrap()..html.find("</article>").unwrap()]);
+    eprintln!("{}", &html[article_start..article_end]);
     eprintln!("=== END ===");
 
     let snapshot = render_html_to_png(&html, dir.path(), 960)
@@ -275,8 +283,12 @@ fn webkit_snapshot_renders_html_img_from_project_readme() {
         .unwrap_or_else(|error| panic!("README html should render: {error}"));
 
     // Verify the <img> is restored in HTML
-    let body_start = html.find("<article").unwrap();
-    let body_end = html.find("</article>").unwrap();
+    let body_start = html
+        .find("<article")
+        .unwrap_or_else(|| panic!("article start should exist in README html"));
+    let body_end = html
+        .find("</article>")
+        .unwrap_or_else(|| panic!("article end should exist in README html"));
     let body = &html[body_start..body_end];
     eprintln!(
         "=== README article (first 500 chars) ===\n{}\n=== END ===",

@@ -21,7 +21,7 @@ make ci    # fmt-check, clippy -D warnings, full test suite
 | `make lint` | `clippy` with warnings denied |
 | `make test` | All tests |
 | `make test-unit` / `test-integration` / `test-e2e` | Split suites |
-| `make release-smoke` | Validate release metadata, package a host-native archive, and verify the packaged binary |
+| `make package-check` | Validate release metadata, package a host-native archive, and verify the packaged binary |
 
 ## Contributing
 
@@ -29,15 +29,23 @@ Issues and pull requests are welcome. Please run `make ci` before opening a PR s
 
 ## Releases
 
-Versioning is **Cargo-first**: update `Cargo.toml` and [CHANGELOG.md](../CHANGELOG.md), then create and push an annotated tag `vMAJOR.MINOR.PATCH`. [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds archives and attaches them to a GitHub Release for that tag.
+Stable releases are **release-please-driven**. Push conventional commits such as `feat: ...`, `fix: ...`, and `deps: ...` to `main`; [`.github/workflows/release.yml`](../.github/workflows/release.yml) runs `release-please`, updates or opens the release PR, and when that PR lands, creates the `vMAJOR.MINOR.PATCH` tag plus GitHub Release.
 
-Before pushing the tag, run:
+Typical commit prefixes:
 
-```bash
-make release-smoke
+```text
+feat: add watch-mode reload debounce
+fix: preserve inline HTML in README rendering
+chore: tighten packaging checks
 ```
 
-The release workflow now rejects tags that do not match `Cargo.toml` and refuses to publish if the packaged archive cannot be extracted into a working `mdv` binary.
+Before merging a release PR, run:
+
+```bash
+make package-check
+```
+
+The release workflow only builds and uploads stable assets after `release-please` reports `release_created=true`. Archive packaging is shared with the rolling `main` channel, and `make package-check` mirrors that packaging path locally.
 
 Once a release exists, installed users can update in place with:
 
@@ -45,7 +53,7 @@ Once a release exists, installed users can update in place with:
 mdv update
 ```
 
-`mdv update` downloads the latest GitHub Release archive for the current host platform and replaces the currently running `mdv` executable, so an existing PATH entry keeps working when `mdv` was already being launched from PATH.
+`mdv update` downloads the latest published archive for the selected channel on the current host platform and replaces the currently running `mdv` executable, so an existing PATH entry keeps working when `mdv` was already being launched from PATH. The default channel is `main`, and `MDV_CHANNEL=vMAJOR.MINOR.PATCH mdv update` lets you pin a specific release tag instead.
 
 ### Contributors
 

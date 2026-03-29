@@ -172,22 +172,24 @@ GitHub Actions の `ci.yml` は次を実行する。
 - format check
 - clippy
 - test
+- host-native packaging check
 
 Rust toolchain は `1.92.0` に固定されている。
 
 ### 8.3 Release
 
-`release.yml` は tag push を契機に次を行う。
+`main-channel.yml` は `main` push を契機に各 target の archive を作り、`main` tag の rolling release を更新する。
 
-- tag と `Cargo.toml` / `CHANGELOG.md` の整合を検証
+`release.yml` は `main` push ごとに `release-please` を実行し、release PR の更新または stable release の作成を行う。`release_created` のときだけ reusable packaging workflow を呼び出して次を行う。
+
 - Linux x86_64 / arm64 ビルド
 - macOS x86_64 / arm64 ビルド
 - `tar.gz` アーカイブ作成
-- packaged archive の extract / `mdv --help` smoke check
+- packaged archive の extract / `mdv --help` check
 - `SHA256SUMS` 生成
-- GitHub Release 公開
+- 作成済み GitHub Release への asset upload
 
-インストーラは `scripts/install.sh` が GitHub Releases から適切なアーカイブを取得する。
+インストーラは `scripts/install.sh` が既定で rolling `main` channel のアーカイブを取得し、`MDV_CHANNEL` を指定すると特定 tag の配布物へ切り替えられる。
 
 ## 9. テスト戦略
 

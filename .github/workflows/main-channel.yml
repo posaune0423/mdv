@@ -1,0 +1,65 @@
+name: Main Channel
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  CHANNEL_TAG: main
+
+jobs:
+  build:
+    uses: ./.github/workflows/package-artifacts.yml
+    with:
+      artifact-prefix: main-channel
+      checkout-ref: ${{ github.sha }}
+
+  publish:
+    name: Publish rolling main channel
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Move channel tag to current commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "${CHANNEL_TAG}" "${GITHUB_SHA}"
+          git push origin "refs/tags/${CHANNEL_TAG}" --force
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: main-channel-*
+          merge-multiple: true
+
+      - name: Merge checksums
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find artifacts -name '*.tar.gz' -exec cp {} dist/ \;
+          find artifacts -name 'SHA256SUMS.part' -exec cat {} \; | sort > dist/SHA256SUMS
+
+      - name: Publish channel release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.CHANNEL_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Main channel
+          body: |
+            Rolling binaries built from the latest `main` commit.
+
+            Commit: `${{ github.sha }}`
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: dist/*

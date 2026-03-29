@@ -43,10 +43,10 @@ impl MdvArgs {
 
 #[derive(Clone, Debug, Eq, PartialEq, Subcommand)]
 pub enum MdvCommand {
-    /// Install the latest GitHub Release over the current mdv executable.
+    /// Install the latest main build over the current mdv executable.
     #[command(
         visible_alias = "upgrade",
-        about = "Install the latest GitHub Release over the current mdv executable"
+        about = "Install the latest main build over the current mdv executable"
     )]
     Update,
 }

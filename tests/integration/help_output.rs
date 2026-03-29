@@ -20,7 +20,7 @@ fn help_mentions_core_flags() {
 }
 
 #[test]
-fn update_help_mentions_latest_release_install() {
+fn update_help_mentions_latest_main_install() {
     let mut command = match Command::cargo_bin("mdv") {
         Ok(command) => command,
         Err(error) => panic!("binary should build: {error}"),
@@ -30,6 +30,6 @@ fn update_help_mentions_latest_release_install() {
         .args(["update", "--help"])
         .assert()
         .success()
-        .stdout(contains("latest GitHub Release"))
+        .stdout(contains("latest main build"))
         .stdout(contains("current mdv executable"));
 }

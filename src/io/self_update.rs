@@ -9,6 +9,7 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 
 const REPOSITORY: &str = "posaune0423/mdv";
+const DEFAULT_CHANNEL: &str = "main";
 
 #[must_use]
 pub fn release_asset_name(os: &str, arch: &str) -> Option<String> {
@@ -23,6 +24,11 @@ pub fn release_asset_name(os: &str, arch: &str) -> Option<String> {
     Some(format!("mdv-{target}.tar.gz"))
 }
 
+#[must_use]
+pub fn main_channel_asset_url(os: &str, arch: &str) -> Option<String> {
+    release_asset_name(os, arch).map(|asset| asset_download_url(DEFAULT_CHANNEL, &asset))
+}
+
 pub fn update_current_executable() -> Result<()> {
     let asset =
         release_asset_name(std::env::consts::OS, std::env::consts::ARCH).ok_or_else(|| {
@@ -30,7 +36,8 @@ pub fn update_current_executable() -> Result<()> {
                 "self-update is only supported on Linux x86_64/aarch64 and macOS x86_64/aarch64"
             )
         })?;
-    let url = format!("https://github.com/{REPOSITORY}/releases/latest/download/{asset}");
+    let channel = configured_channel()?;
+    let url = asset_download_url(&channel, &asset);
     let current_exe =
         std::env::current_exe().context("failed to resolve the current mdv executable path")?;
     let temp_dir = tempfile::tempdir().context("failed to create a temporary update directory")?;
@@ -40,7 +47,7 @@ pub fn update_current_executable() -> Result<()> {
     let extracted = extract_archive_binary(&archive_path, temp_dir.path())?;
     install_replacement(&current_exe, &extracted)?;
 
-    println!("Updated mdv at {}", current_exe.display());
+    println!("Updated mdv from channel '{channel}' at {}", current_exe.display());
     if directory_is_on_path(current_exe.parent().unwrap_or_else(|| Path::new("."))) {
         println!("PATH continues to resolve mdv from {}", current_exe.display());
     } else {
@@ -53,11 +60,24 @@ pub fn update_current_executable() -> Result<()> {
     Ok(())
 }
 
+fn configured_channel() -> Result<String> {
+    let channel = std::env::var("MDV_CHANNEL").unwrap_or_else(|_| DEFAULT_CHANNEL.to_string());
+    let channel = channel.trim();
+    if channel.is_empty() {
+        bail!("MDV_CHANNEL must not be empty");
+    }
+    Ok(channel.to_string())
+}
+
+fn asset_download_url(channel: &str, asset: &str) -> String {
+    format!("https://github.com/{REPOSITORY}/releases/download/{channel}/{asset}")
+}
+
 fn download_release_archive(url: &str, destination: &Path) -> Result<()> {
     let response = ureq::get(url)
         .set("User-Agent", &format!("mdv/{}", env!("CARGO_PKG_VERSION")))
         .call()
-        .with_context(|| format!("failed to download the latest GitHub Release from {url}"))?;
+        .with_context(|| format!("failed to download mdv from {url}"))?;
     let mut reader = response.into_reader();
     let mut file = File::create(destination)
         .with_context(|| format!("failed to create {}", destination.display()))?;
