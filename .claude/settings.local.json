@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(printf '<img src=\"\"\"\"docs/screenshot.jpg\"\"\"\" width=\"\"\"\"700\"\"\"\" alt=\"\"\"\"test image\"\"\"\" />\\\\n')",
+      "Bash(/Users/asumayamada/Private/posaune0423/mdv/target/debug/mdv -)",
+      "Bash(printf '![alt]\\(docs/screenshot.jpg\\)\\\\n')",
+      "Bash(./target/debug/mdv README.md)",
+      "Bash(./target/debug/mdv -)",
+      "Bash(make build:*)",
+      "Bash(identify /Users/asumayamada/Private/posaune0423/mdv/docs/screenshot.jpg)",
+      "Bash(sips -g all /Users/asumayamada/Private/posaune0423/mdv/docs/screenshot.jpg)",
+      "Bash(cat:*)",
+      "Bash(cargo run:*)",
+      "Bash(python3 -c \":*)",
+      "Bash(sed -n '99,104p' /Users/asumayamada/Private/posaune0423/mdv/src/render/github_html/postprocess.rs)",
+      "Bash(sed -n '304,309p' /Users/asumayamada/Private/posaune0423/mdv/src/render/markdown.rs)",
+      "Bash(cargo clippy:*)",
+      "Bash(gh pr:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}
