@@ -3,6 +3,7 @@ use std::{
     fs::{self, File},
     io::{self, IsTerminal, Read},
     path::Path,
+    time::Duration,
 };
 
 use anyhow::{Context, Result, bail};
@@ -44,20 +45,23 @@ pub fn update_current_executable() -> Result<()> {
     reporter.ok("Downloaded latest main/bin/mdv");
 
     let binaries_are_identical = binaries_match(&current_exe, &latest_binary_path)?;
-    let needs_install =
-        should_install_latest(&local_version, &github_version, binaries_are_identical);
+    let install_decision = decide_install(&local_version, &github_version, binaries_are_identical);
     reporter.decision(
-        needs_install,
-        &build_install_decision_message(&local_version, &github_version, needs_install),
+        matches!(install_decision, InstallDecision::Install),
+        &build_install_decision_message(install_decision),
     );
 
-    if !needs_install {
-        if !binaries_are_identical
-            && compare_versions(&local_version, &github_version) == Some(Ordering::Greater)
-        {
-            reporter.info("Local mdv is newer than GitHub main, so no downgrade was applied.");
-        } else if !binaries_are_identical {
-            reporter.info("GitHub main differs at the binary level, but the current version is already the latest.");
+    if !matches!(install_decision, InstallDecision::Install) {
+        match install_decision {
+            InstallDecision::LocalNewer => {
+                reporter.info("Local mdv is newer than GitHub main, so no downgrade was applied.");
+            }
+            InstallDecision::AlreadyLatest => {
+                reporter.info(
+                    "GitHub main differs at the binary level, but the current version is already the latest.",
+                );
+            }
+            InstallDecision::BinaryIdentical | InstallDecision::Install => {}
         }
         reporter.ok(&build_already_current_message(&local_version));
         return Ok(());
@@ -87,7 +91,8 @@ fn fetch_github_main_version() -> Result<String> {
 }
 
 fn download_text(url: &str) -> Result<String> {
-    let response = ureq::get(url)
+    let response = http_agent()
+        .get(url)
         .set("User-Agent", &format!("{REPOSITORY}/{}", current_version()))
         .call()
         .with_context(|| format!("failed to download mdv metadata from {url}"))?;
@@ -100,7 +105,8 @@ fn download_text(url: &str) -> Result<String> {
 }
 
 fn download_main_binary(url: &str, destination: &Path) -> Result<()> {
-    let response = ureq::get(url)
+    let response = http_agent()
+        .get(url)
         .set("User-Agent", &format!("{REPOSITORY}/{}", current_version()))
         .call()
         .with_context(|| format!("failed to download mdv from {url}"))?;
@@ -153,6 +159,13 @@ fn current_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
+fn http_agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(10))
+        .timeout_read(Duration::from_secs(30))
+        .build()
+}
+
 fn format_version(version: &str) -> String {
     format!("v{version}")
 }
@@ -183,18 +196,48 @@ fn parse_package_version_from_manifest(manifest: &str) -> Result<String> {
             continue;
         }
 
-        return Ok(value.trim().trim_matches('"').to_string());
+        return parse_manifest_version_value(value);
     }
 
     bail!("package.version was not found")
 }
 
-fn build_install_decision_message(
-    _local_version: &str,
-    _github_version: &str,
-    needs_install: bool,
-) -> String {
-    if needs_install {
+fn parse_manifest_version_value(raw_value: &str) -> Result<String> {
+    let mut quote = None;
+    let mut sanitized = String::new();
+
+    for character in raw_value.trim().chars() {
+        match quote {
+            Some(active_quote) if character == active_quote => {
+                quote = None;
+                sanitized.push(character);
+            }
+            Some(_) => sanitized.push(character),
+            None if matches!(character, '"' | '\'') => {
+                quote = Some(character);
+                sanitized.push(character);
+            }
+            None if character == '#' => break,
+            None => sanitized.push(character),
+        }
+    }
+
+    let sanitized = sanitized.trim();
+    if sanitized.len() >= 2 {
+        let first = sanitized.chars().next();
+        let last = sanitized.chars().last();
+        if matches!(first.zip(last), Some(('\'', '\'')) | Some(('"', '"'))) {
+            return Ok(sanitized[1..sanitized.len() - 1].to_string());
+        }
+    }
+    if sanitized.is_empty() {
+        bail!("package.version was empty")
+    }
+    Ok(sanitized.to_string())
+}
+
+fn build_install_decision_message(decision: InstallDecision) -> String {
+    if matches!(decision, InstallDecision::Install) {
         "Latest install required: yes".to_string()
     } else {
         "Latest install required: no".to_string()
@@ -209,47 +252,134 @@ fn build_already_current_message(version: &str) -> String {
     format!("Already on {}", format_version(version))
 }
 
-fn should_install_latest(
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum InstallDecision {
+    Install,
+    BinaryIdentical,
+    AlreadyLatest,
+    LocalNewer,
+}
+
+fn decide_install(
     local_version: &str,
     github_version: &str,
     binaries_are_identical: bool,
-) -> bool {
+) -> InstallDecision {
     if binaries_are_identical {
-        return false;
+        return InstallDecision::BinaryIdentical;
     }
 
     match compare_versions(local_version, github_version) {
-        Some(Ordering::Less) => true,
-        Some(Ordering::Equal | Ordering::Greater) => false,
-        None => true,
+        Some(Ordering::Less) => InstallDecision::Install,
+        Some(Ordering::Equal) => InstallDecision::AlreadyLatest,
+        Some(Ordering::Greater) => InstallDecision::LocalNewer,
+        None => InstallDecision::Install,
     }
 }
 
 fn compare_versions(left: &str, right: &str) -> Option<Ordering> {
-    let left_parts = parse_version_parts(left)?;
-    let right_parts = parse_version_parts(right)?;
-    let len = left_parts.len().max(right_parts.len());
+    let left_version = parse_version_parts(left)?;
+    let right_version = parse_version_parts(right)?;
+    let len = left_version.core.len().max(right_version.core.len());
 
     for index in 0..len {
-        let left_part = *left_parts.get(index).unwrap_or(&0);
-        let right_part = *right_parts.get(index).unwrap_or(&0);
+        let left_part = *left_version.core.get(index).unwrap_or(&0);
+        let right_part = *right_version.core.get(index).unwrap_or(&0);
         match left_part.cmp(&right_part) {
             Ordering::Equal => continue,
             ordering => return Some(ordering),
         }
     }
 
-    Some(Ordering::Equal)
+    compare_prerelease_identifiers(&left_version.prerelease, &right_version.prerelease)
 }
 
-fn parse_version_parts(version: &str) -> Option<Vec<u64>> {
+fn compare_prerelease_identifiers(
+    left: &[PrereleaseIdentifier],
+    right: &[PrereleaseIdentifier],
+) -> Option<Ordering> {
+    match (left.is_empty(), right.is_empty()) {
+        (true, true) => Some(Ordering::Equal),
+        (true, false) => Some(Ordering::Greater),
+        (false, true) => Some(Ordering::Less),
+        (false, false) => {
+            let len = left.len().max(right.len());
+            for index in 0..len {
+                match (left.get(index), right.get(index)) {
+                    (Some(left_identifier), Some(right_identifier)) => {
+                        match compare_prerelease_identifier(left_identifier, right_identifier) {
+                            Ordering::Equal => continue,
+                            ordering => return Some(ordering),
+                        }
+                    }
+                    (Some(_), None) => return Some(Ordering::Greater),
+                    (None, Some(_)) => return Some(Ordering::Less),
+                    (None, None) => break,
+                }
+            }
+            Some(Ordering::Equal)
+        }
+    }
+}
+
+fn compare_prerelease_identifier(
+    left: &PrereleaseIdentifier,
+    right: &PrereleaseIdentifier,
+) -> Ordering {
+    match (left, right) {
+        (PrereleaseIdentifier::Numeric(left), PrereleaseIdentifier::Numeric(right)) => {
+            left.cmp(right)
+        }
+        (PrereleaseIdentifier::Numeric(_), PrereleaseIdentifier::Text(_)) => Ordering::Less,
+        (PrereleaseIdentifier::Text(_), PrereleaseIdentifier::Numeric(_)) => Ordering::Greater,
+        (PrereleaseIdentifier::Text(left), PrereleaseIdentifier::Text(right)) => left.cmp(right),
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ParsedVersion {
+    core: Vec<u64>,
+    prerelease: Vec<PrereleaseIdentifier>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum PrereleaseIdentifier {
+    Numeric(u64),
+    Text(String),
+}
+
+fn parse_version_parts(version: &str) -> Option<ParsedVersion> {
     let trimmed = version.trim_start_matches('v');
-    let core = trimmed.split_once('-').map_or(trimmed, |(core, _)| core);
+    let without_build = trimmed.split_once('+').map_or(trimmed, |(core, _)| core);
+    let (core, prerelease) = without_build
+        .split_once('-')
+        .map_or((without_build, None), |(core, prerelease)| (core, Some(prerelease)));
     if core.is_empty() {
         return None;
     }
 
-    core.split('.').map(|part| part.parse::<u64>().ok()).collect()
+    let core = core.split('.').map(|part| part.parse::<u64>().ok()).collect::<Option<Vec<_>>>()?;
+    let prerelease = match prerelease {
+        Some(prerelease) => parse_prerelease_identifiers(prerelease)?,
+        None => Vec::new(),
+    };
+
+    Some(ParsedVersion { core, prerelease })
+}
+
+fn parse_prerelease_identifiers(prerelease: &str) -> Option<Vec<PrereleaseIdentifier>> {
+    prerelease
+        .split('.')
+        .map(|identifier| {
+            if identifier.is_empty() {
+                return None;
+            }
+            Some(identifier.parse::<u64>().map_or_else(
+                |_| PrereleaseIdentifier::Text(identifier.to_string()),
+                PrereleaseIdentifier::Numeric,
+            ))
+        })
+        .collect()
 }
 
 struct UpdateReporter {
@@ -305,9 +435,12 @@ impl UpdateReporter {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
+
     use super::{
-        build_already_current_message, build_install_decision_message, build_success_message,
-        parse_package_version_from_manifest, should_install_latest,
+        InstallDecision, build_already_current_message, build_install_decision_message,
+        build_success_message, compare_versions, decide_install,
+        parse_package_version_from_manifest,
     };
 
     #[test]
@@ -328,9 +461,22 @@ anyhow = "1"
     }
 
     #[test]
+    fn parses_single_quoted_manifest_versions_with_inline_comments() {
+        let manifest = r#"
+[package]
+name = "mdv"
+version = '0.4.2-beta.1' # main build
+"#;
+
+        let version = parse_package_version_from_manifest(manifest)
+            .unwrap_or_else(|error| panic!("single-quoted package version should parse: {error}"));
+        assert_eq!(version, "0.4.2-beta.1");
+    }
+
+    #[test]
     fn install_decision_message_reports_yes_when_install_is_needed() {
         assert_eq!(
-            build_install_decision_message("0.1.0", "0.2.0", true),
+            build_install_decision_message(InstallDecision::Install),
             "Latest install required: yes"
         );
     }
@@ -338,7 +484,7 @@ anyhow = "1"
     #[test]
     fn install_decision_message_reports_no_when_already_current() {
         assert_eq!(
-            build_install_decision_message("0.2.0", "0.2.0", false),
+            build_install_decision_message(InstallDecision::AlreadyLatest),
             "Latest install required: no"
         );
     }
@@ -355,11 +501,23 @@ anyhow = "1"
 
     #[test]
     fn skips_install_when_local_version_is_newer_than_github_main() {
-        assert!(!should_install_latest("0.3.0", "0.2.9", false));
+        assert_eq!(decide_install("0.3.0", "0.2.9", false), InstallDecision::LocalNewer);
     }
 
     #[test]
     fn requests_install_when_github_main_is_newer_than_local() {
-        assert!(should_install_latest("0.2.9", "0.3.0", false));
+        assert_eq!(decide_install("0.2.9", "0.3.0", false), InstallDecision::Install);
+    }
+
+    #[test]
+    fn compares_prereleases_as_older_than_stable_releases() {
+        assert_eq!(compare_versions("1.0.0-beta.1", "1.0.0"), Some(Ordering::Less));
+        assert_eq!(compare_versions("1.0.0", "1.0.0-beta.1"), Some(Ordering::Greater));
+    }
+
+    #[test]
+    fn compares_prerelease_identifiers_using_semver_ordering() {
+        assert_eq!(compare_versions("1.0.0-beta.2", "1.0.0-beta.11"), Some(Ordering::Less));
+        assert_eq!(compare_versions("1.0.0-beta.1", "1.0.0-beta.alpha"), Some(Ordering::Less));
     }
 }

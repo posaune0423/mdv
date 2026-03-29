@@ -4,7 +4,7 @@
 
 **GitHub-fidelity Markdown rendering, inside your terminal.**
 
-<img src="docs/screenshot.jpg" width="700" alt="mdv rendering markdown in Ghostty" />
+<img src="docs/demo.gif" width="700" alt="mdv rendering markdown in Ghostty" />
 
 [![CI](https://github.com/posaune0423/mdv/actions/workflows/ci.yml/badge.svg)](https://github.com/posaune0423/mdv/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
