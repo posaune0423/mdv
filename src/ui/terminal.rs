@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     cmp,
     io::{self, Write},
     sync::OnceLock,
@@ -25,12 +26,17 @@ use syntect::{
 
 use crate::{
     core::{config::AppConfig, document::Document, theme::ThemeTokens},
-    io::browser,
+    io::{browser, mermaid_cli::MermaidCliRenderer},
     io::fs::FileSystemDocumentSource,
-    io::kitty_graphics::{DeleteCommand, KittyImagePlacement, encode_delete, encode_png},
+    io::kitty_graphics::{
+        DeleteCommand, KittyImagePlacement, encode_delete, encode_place, encode_transmit_png,
+    },
     render::{
         markdown::parse_document,
-        text::{RenderedDocument, RenderedLine, RenderedLineKind, render_document},
+        text::{
+            RenderedDocument, RenderedGraphic, RenderedGraphicContent, RenderedLine,
+            RenderedLineKind, render_document,
+        },
     },
 };
 
@@ -48,6 +54,8 @@ pub struct TerminalViewer {
     warning: Option<String>,
     needs_redraw: bool,
     visible_placements: Vec<(u32, u32)>,
+    transmitted_graphics: BTreeSet<u32>,
+    mermaid_renderer: MermaidCliRenderer,
 }
 
 #[must_use]
@@ -73,6 +81,8 @@ impl TerminalViewer {
             warning: None,
             needs_redraw: true,
             visible_placements: Vec::new(),
+            transmitted_graphics: BTreeSet::new(),
+            mermaid_renderer: MermaidCliRenderer::from_env(),
         }
     }
 
@@ -102,7 +112,10 @@ impl TerminalViewer {
                 continue;
             }
 
-            if !event::poll(Duration::from_millis(100))? {
+            if !event::poll(Duration::from_millis(16))? {
+                if self.render_next_visible_graphic() {
+                    self.needs_redraw = true;
+                }
                 continue;
             }
 
@@ -213,27 +226,16 @@ impl TerminalViewer {
         let visible_end = self.rendered.lines.len().min(self.scroll.saturating_add(content_height));
 
         let visible_lines = &self.rendered.lines[self.scroll..visible_end];
-        let visible_placement_ids =
-            visible_graphic_placements(&self.rendered, self.scroll, content_height);
-
-        for (image_id, placement_id) in self
-            .visible_placements
-            .iter()
-            .copied()
-            .filter(|placement| !visible_placement_ids.contains(placement))
-        {
-            write!(
-                stdout,
-                "{}",
-                encode_delete(DeleteCommand::Placement { image_id, placement_id })
-            )?;
-        }
-
-        write!(
-            stdout,
-            "{}",
-            encode_delete(DeleteCommand::Placement { image_id: 1, placement_id: 1 })
-        )?;
+        let (graphic_commands, visible_placement_ids) = collect_graphics_commands(
+            &self.rendered,
+            self.scroll,
+            content_height,
+            article_x,
+            article_width,
+            width,
+            &self.visible_placements,
+            &mut self.transmitted_graphics,
+        );
 
         for row in 0..content_height {
             queue!(stdout, cursor::MoveTo(0, row as u16), Clear(ClearType::CurrentLine))?;
@@ -244,27 +246,8 @@ impl TerminalViewer {
             self.draw_line(&mut stdout, line, usize::from(article_width), tokens)?;
         }
 
-        for (index, graphic) in self.rendered.graphics.iter().enumerate() {
-            if graphic.line_index < self.scroll {
-                continue;
-            }
-            let relative_row = graphic.line_index - self.scroll;
-            if relative_row >= content_height {
-                continue;
-            }
-
-            let graphic_x = article_x + article_width.saturating_sub(graphic.width_cells) / 2;
-            queue!(stdout, cursor::MoveTo(graphic_x, relative_row as u16))?;
-            let placement = KittyImagePlacement {
-                image_id: (index + 2) as u32,
-                placement_id: (index + 2) as u32,
-                columns: graphic.width_cells.min(width),
-                rows: graphic.height_cells,
-                cursor_x: 0,
-                cursor_y: 0,
-                z_index: -1,
-            };
-            write!(stdout, "{}", encode_png(&placement, &graphic.png_bytes))?;
+        for command in graphic_commands {
+            write!(stdout, "{command}")?;
         }
         self.visible_placements = visible_placement_ids;
 
@@ -343,6 +326,7 @@ impl TerminalViewer {
         let width = content_width();
         self.rendered =
             render_document(&self.document, self.config.theme, self.config.mermaid_mode, width);
+        self.transmitted_graphics.clear();
     }
 
     fn set_scroll(&mut self, next_scroll: usize) -> bool {
@@ -351,6 +335,40 @@ impl TerminalViewer {
         }
         self.scroll = next_scroll;
         true
+    }
+
+    fn render_next_visible_graphic(&mut self) -> bool {
+        let content_height = self.page_height();
+        let visible_end = self.scroll.saturating_add(content_height);
+
+        for graphic in &mut self.rendered.graphics {
+            if graphic.line_index < self.scroll || graphic.line_index >= visible_end {
+                continue;
+            }
+
+            let RenderedGraphicContent::Mermaid { source, png_bytes, failed } = &mut graphic.content
+            else {
+                continue;
+            };
+
+            if png_bytes.is_some() || *failed {
+                continue;
+            }
+
+            match self.mermaid_renderer.render_png(source) {
+                Ok(rendered) => {
+                    *png_bytes = Some(rendered);
+                    self.warning = None;
+                }
+                Err(error) => {
+                    *failed = true;
+                    self.warning = Some(format!("mermaid render failed: {error}"));
+                }
+            }
+            return true;
+        }
+
+        false
     }
 
     fn draw_line(
@@ -574,9 +592,80 @@ fn visible_graphic_placements(
         .collect()
 }
 
+fn collect_graphics_commands(
+    rendered: &RenderedDocument,
+    scroll: usize,
+    content_height: usize,
+    article_x: u16,
+    article_width: u16,
+    viewport_width: u16,
+    previous_visible_placements: &[(u32, u32)],
+    transmitted_graphics: &mut BTreeSet<u32>,
+) -> (Vec<String>, Vec<(u32, u32)>) {
+    let mut commands = Vec::new();
+    let visible_placements = visible_graphic_placements(rendered, scroll, content_height);
+
+    for (image_id, placement_id) in previous_visible_placements
+        .iter()
+        .copied()
+        .filter(|placement| !visible_placements.contains(placement))
+    {
+        commands.push(encode_delete(DeleteCommand::Placement { image_id, placement_id }));
+    }
+
+    for (index, graphic) in rendered.graphics.iter().enumerate() {
+        if graphic.line_index < scroll {
+            continue;
+        }
+        let relative_row = graphic.line_index - scroll;
+        if relative_row >= content_height {
+            continue;
+        }
+
+        let Some(png_bytes) = graphic_png_bytes(graphic) else {
+            continue;
+        };
+
+        let image_id = (index + 2) as u32;
+        if transmitted_graphics.insert(image_id) {
+            commands.push(encode_transmit_png(image_id, png_bytes));
+        }
+
+        let placement = KittyImagePlacement {
+            image_id,
+            placement_id: image_id,
+            columns: graphic.width_cells.min(viewport_width),
+            rows: graphic.height_cells,
+            cursor_x: 0,
+            cursor_y: 0,
+            z_index: -1,
+        };
+        let graphic_x = article_x + article_width.saturating_sub(graphic.width_cells) / 2;
+        commands.push(format!(
+            "{}{}",
+            ansi_cursor_move(graphic_x, relative_row as u16),
+            encode_place(&placement)
+        ));
+    }
+
+    (commands, visible_placements)
+}
+
+fn graphic_png_bytes(graphic: &RenderedGraphic) -> Option<&[u8]> {
+    match &graphic.content {
+        RenderedGraphicContent::Png(png_bytes) => Some(png_bytes),
+        RenderedGraphicContent::Mermaid { png_bytes: Some(png_bytes), .. } => Some(png_bytes),
+        RenderedGraphicContent::Mermaid { png_bytes: None, .. } => None,
+    }
+}
+
+fn ansi_cursor_move(x: u16, y: u16) -> String {
+    format!("\u{1b}[{};{}H", y + 1, x + 1)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{article_wrap_width, visible_graphic_placements};
+    use super::{article_wrap_width, collect_graphics_commands, visible_graphic_placements};
     use std::fs;
 
     use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -606,19 +695,82 @@ mod tests {
                     line_index: 1,
                     width_cells: 10,
                     height_cells: 4,
-                    png_bytes: vec![1],
+                    content: crate::render::text::RenderedGraphicContent::Png(vec![1]),
                 },
                 RenderedGraphic {
                     line_index: 8,
                     width_cells: 10,
                     height_cells: 4,
-                    png_bytes: vec![2],
+                    content: crate::render::text::RenderedGraphicContent::Png(vec![2]),
                 },
             ],
         };
 
         assert_eq!(visible_graphic_placements(&rendered, 0, 5), vec![(2, 2)]);
         assert_eq!(visible_graphic_placements(&rendered, 5, 5), vec![(3, 3)]);
+    }
+
+    #[test]
+    fn graphics_commands_only_transmit_png_payload_once() {
+        let rendered = RenderedDocument {
+            lines: Vec::new(),
+            graphics: vec![RenderedGraphic {
+                line_index: 1,
+                width_cells: 10,
+                height_cells: 4,
+                content: crate::render::text::RenderedGraphicContent::Png(vec![1, 2, 3]),
+            }],
+        };
+        let mut transmitted = std::collections::BTreeSet::new();
+
+        let (first_commands, _) =
+            collect_graphics_commands(&rendered, 0, 5, 0, 20, 80, &[], &mut transmitted);
+        let (second_commands, _) =
+            collect_graphics_commands(&rendered, 0, 5, 0, 20, 80, &[], &mut transmitted);
+
+        assert_eq!(
+            first_commands.iter().filter(|command| command.contains("a=t")).count(),
+            1
+        );
+        assert_eq!(
+            second_commands.iter().filter(|command| command.contains("a=t")).count(),
+            0
+        );
+        assert!(second_commands.iter().any(|command| command.contains("a=p")));
+    }
+
+    #[test]
+    fn resizing_graphic_space_updates_following_offsets() {
+        let mut rendered = RenderedDocument {
+            lines: vec![
+                RenderedLine {
+                    plain_text: String::new(),
+                    display_text: String::new(),
+                    kind: RenderedLineKind::Blank,
+                };
+                7
+            ],
+            graphics: vec![
+                RenderedGraphic {
+                    line_index: 1,
+                    width_cells: 10,
+                    height_cells: 2,
+                    content: crate::render::text::RenderedGraphicContent::Png(vec![1]),
+                },
+                RenderedGraphic {
+                    line_index: 5,
+                    width_cells: 10,
+                    height_cells: 2,
+                    content: crate::render::text::RenderedGraphicContent::Png(vec![2]),
+                },
+            ],
+        };
+
+        resize_graphic_space(&mut rendered, 0, 4);
+
+        assert_eq!(rendered.graphics[0].height_cells, 4);
+        assert_eq!(rendered.graphics[1].line_index, 7);
+        assert_eq!(rendered.lines.len(), 9);
     }
 
     #[test]

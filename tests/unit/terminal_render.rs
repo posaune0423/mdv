@@ -3,7 +3,7 @@ use mdv::{
     core::config::MermaidMode,
     render::{
         markdown::parse_document,
-        text::{RenderedLineKind, render_document},
+        text::{RenderedGraphicContent, RenderedLineKind, render_document},
     },
 };
 
@@ -76,4 +76,21 @@ fn terminal_render_formats_lists_links_and_tables_for_interactive_view() {
     assert!(display_lines.iter().any(|line| line.contains("┌")));
     assert!(display_lines.iter().any(|line| line.contains("Name")));
     assert!(display_lines.iter().any(|line| line.contains("alpha")));
+}
+
+#[test]
+fn terminal_render_defers_mermaid_rasterization_for_interactive_view() {
+    let document = parse_document(
+        "docs/example.md".into(),
+        "```mermaid\ngraph TD\n    A --> B\n```\n",
+    )
+    .unwrap_or_else(|error| panic!("document should parse: {error}"));
+
+    let rendered = render_document(&document, Theme::Light, MermaidMode::Enabled, 48);
+    let graphic = rendered.graphics.first().expect("mermaid graphic should exist");
+
+    assert!(matches!(
+        &graphic.content,
+        RenderedGraphicContent::Mermaid { png_bytes: None, .. }
+    ));
 }

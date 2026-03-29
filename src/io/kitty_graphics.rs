@@ -18,10 +18,19 @@ pub enum DeleteCommand {
 }
 
 #[must_use]
-pub fn encode_png(placement: &KittyImagePlacement, png_bytes: &[u8]) -> String {
+pub fn encode_transmit_png(image_id: u32, png_bytes: &[u8]) -> String {
     let payload = STANDARD.encode(png_bytes);
     format!(
-        "\u{1b}_Ga=T,t=d,f=100,i={},p={},c={},r={},X={},Y={},z={},q=2,C=1;{}\u{1b}\\",
+        "\u{1b}_Ga=t,t=d,f=100,i={},q=2;{}\u{1b}\\",
+        image_id,
+        payload
+    )
+}
+
+#[must_use]
+pub fn encode_place(placement: &KittyImagePlacement) -> String {
+    format!(
+        "\u{1b}_Ga=p,i={},p={},c={},r={},X={},Y={},z={},q=2,C=1\u{1b}\\",
         placement.image_id,
         placement.placement_id,
         placement.columns,
@@ -29,7 +38,6 @@ pub fn encode_png(placement: &KittyImagePlacement, png_bytes: &[u8]) -> String {
         placement.cursor_x,
         placement.cursor_y,
         placement.z_index,
-        payload
     )
 }
 

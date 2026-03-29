@@ -42,7 +42,13 @@ pub struct RenderedGraphic {
     pub line_index: usize,
     pub width_cells: u16,
     pub height_cells: u16,
-    pub png_bytes: Vec<u8>,
+    pub content: RenderedGraphicContent,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RenderedGraphicContent {
+    Png(Vec<u8>),
+    Mermaid { source: String, png_bytes: Option<Vec<u8>>, failed: bool },
 }
 
 #[must_use]
@@ -137,7 +143,6 @@ pub fn render_document(
     let mut lines = Vec::new();
     let mut graphics = Vec::new();
     let image_decoder = ImageDecoder::new();
-    let mermaid_renderer = MermaidCliRenderer::from_env();
     let wrap_width = usize::from(width_cells.max(20));
 
     for block in &document.blocks {
@@ -270,42 +275,25 @@ pub fn render_document(
                         wrap_width,
                     );
                 }
-                MermaidMode::Enabled => match mermaid_renderer.render_png(source) {
-                    Ok(png_bytes) => match image_decoder.dimensions_from_png_bytes(&png_bytes) {
-                        Ok((width, height)) => {
-                            push_wrapped_display_line(
-                                &mut lines,
-                                format!("Mermaid diagram ({}x{})", width, height),
-                                RenderedLineKind::Meta,
-                                wrap_width,
-                            );
-                            push_png_graphic(
-                                &mut lines,
-                                &mut graphics,
-                                width_cells,
-                                width,
-                                height,
-                                png_bytes,
-                            );
-                        }
-                        Err(_) => {
-                            push_wrapped_display_line(
-                                &mut lines,
-                                "Mermaid unavailable: invalid renderer output".to_string(),
-                                RenderedLineKind::Meta,
-                                wrap_width,
-                            );
-                        }
-                    },
-                    Err(_) => {
-                        push_wrapped_display_line(
-                            &mut lines,
-                            "Mermaid unavailable: renderer not configured".to_string(),
-                            RenderedLineKind::Meta,
-                            wrap_width,
-                        );
-                    }
-                },
+                MermaidMode::Enabled => {
+                    push_wrapped_display_line(
+                        &mut lines,
+                        "Mermaid diagram".to_string(),
+                        RenderedLineKind::Meta,
+                        wrap_width,
+                    );
+                    push_graphic_placeholder(
+                        &mut lines,
+                        &mut graphics,
+                        width_cells,
+                        12,
+                        RenderedGraphicContent::Mermaid {
+                            source: source.clone(),
+                            png_bytes: None,
+                            failed: false,
+                        },
+                    );
+                }
             },
             BlockKind::Rule => lines.push(RenderedLine {
                 plain_text: "─".repeat(wrap_width),
@@ -559,28 +547,24 @@ fn push_graphic(
     width_cells: u16,
     image: &LoadedImage,
 ) {
-    push_png_graphic(
+    let content_width = width_cells.saturating_sub(2).max(1);
+    let height_cells = scaled_graphic_height(content_width, image.width, image.height);
+    push_graphic_placeholder(
         lines,
         graphics,
-        width_cells,
-        image.width,
-        image.height,
-        image.png_bytes.clone(),
+        content_width,
+        height_cells,
+        RenderedGraphicContent::Png(image.png_bytes.clone()),
     );
 }
 
-fn push_png_graphic(
+fn push_graphic_placeholder(
     lines: &mut Vec<RenderedLine>,
     graphics: &mut Vec<RenderedGraphic>,
     width_cells: u16,
-    width: u32,
-    height: u32,
-    png_bytes: Vec<u8>,
+    height_cells: u16,
+    content: RenderedGraphicContent,
 ) {
-    let content_width = width_cells.saturating_sub(2).max(1);
-    let aspect = height as f32 / width.max(1) as f32;
-    let height_cells = ((content_width as f32 * aspect) / 2.0).ceil() as u16;
-    let height_cells = height_cells.clamp(1, 18);
     let line_index = lines.len();
     for _ in 0..height_cells {
         lines.push(RenderedLine {
@@ -591,10 +575,17 @@ fn push_png_graphic(
     }
     graphics.push(RenderedGraphic {
         line_index,
-        width_cells: content_width,
+        width_cells,
         height_cells,
-        png_bytes,
+        content,
     });
+}
+
+#[must_use]
+pub(crate) fn scaled_graphic_height(width_cells: u16, width: u32, height: u32) -> u16 {
+    let aspect = height as f32 / width.max(1) as f32;
+    let height_cells = ((width_cells as f32 * aspect) / 2.0).ceil() as u16;
+    height_cells.clamp(1, 18)
 }
 
 fn normalize_language_token(language: &str) -> String {
