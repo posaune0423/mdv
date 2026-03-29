@@ -10,7 +10,7 @@
 [![Edition](https://img.shields.io/badge/edition-2024-purple.svg)](https://doc.rust-lang.org/edition-guide/rust-2024/index.html)
 [![unsafe: forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://doc.rust-lang.org/nomicon/safe-unsafe-meaning.html)
 
-Render GitHub Flavored Markdown in the terminal with rich typography, images, SVG, diagrams, and syntax-highlighted code blocks.
+Render **[GitHub Flavored Markdown](https://github.github.com/gfm/)** in the terminal with rich typography, images, SVG, diagrams, and syntax-highlighted code blocks.
 
 <br/>
 
@@ -18,11 +18,28 @@ Render GitHub Flavored Markdown in the terminal with rich typography, images, SV
 
 ---
 
+## Markdown (GFM)
+
+Authoring is meant to follow the **[GitHub Flavored Markdown Specification](https://github.github.com/gfm/)** (GFM). Parsing uses **[Comrak](https://github.com/kivikakk/comrak)**; enabled extensions mirror common GFM surface area:
+
+| Extension | Notes |
+|-----------|--------|
+| **Strikethrough** | `~~text~~` |
+| **Tables** | Pipe tables |
+| **Autolink** | URLs and emails auto-linked where supported |
+| **Task lists** | `- [ ]` / `- [x]` |
+| **Footnotes** | Reference-style footnotes |
+| **Alerts** | `> [!NOTE]`, `> [!TIP]`, etc. ([syntax](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#alerts)); blockquotes starting with `[!NOTE]`–style tags are also treated as callouts |
+
+mdv also renders **fenced `mermaid` code blocks** (not part of GFM) when Mermaid is available. Raw HTML blocks are not rendered as HTML in the TUI; content is shown as plain text.
+
+Exact edge-case behavior follows Comrak’s parser, not a formal proof of spec compliance—when in doubt, compare with the [GFM spec](https://github.github.com/gfm/) and Comrak’s release notes.
+
 ## Features
 
 | Area | Details |
 |------|---------|
-| **Markdown** | GFM via [Comrak](https://github.com/kivikakk/comrak)—headings, lists, tables, task lists, and more |
+| **Markdown** | GFM-oriented parsing via Comrak (see [Markdown (GFM)](#markdown-gfm))—headings, lists, tables, task lists, footnotes, alerts / callouts, links, images, thematic breaks |
 | **Code** | Syntax highlighting powered by [Syntect](https://github.com/trishume/syntect) |
 | **Assets** | PNG, JPEG, GIF, WebP, and SVG rendering where the terminal supports it |
 | **Diagrams** | [Mermaid](https://mermaid.js.org/) diagrams (optional `--no-mermaid` to disable) |

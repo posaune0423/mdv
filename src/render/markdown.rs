@@ -177,8 +177,8 @@ fn collect_text_parts<'a>(node: &'a AstNode<'a>, parts: &mut Vec<String>) {
                 parts.push(value);
             }
         }
-        NodeValue::TaskItem(symbol) => {
-            let marker = symbol.map_or("[ ]".to_string(), |value| format!("[{value}]"));
+        NodeValue::TaskItem(task) => {
+            let marker = task.symbol.map_or("[ ]".to_string(), |value| format!("[{value}]"));
             parts.push(marker);
             for child in node.children() {
                 collect_text_parts(child, parts);
