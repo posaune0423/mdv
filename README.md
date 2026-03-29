@@ -33,7 +33,7 @@ Render GitHub Flavored Markdown in the terminal with rich typography, images, SV
 ## Requirements
 
 - **Interactive TUI**: Ghostty or Kitty (`TERM_PROGRAM` / terminal detection). Other terminals get a clear error in interactive mode.
-- **Rust toolchain**: **1.92+** (matches CI; edition 2024) — only if you build from source (see Homebrew / `cargo install` below).
+- **Rust toolchain**: **1.92+** (matches CI; edition 2024) — only if you build from source (see `cargo install` below).
 
 ## Installation
 
@@ -56,14 +56,15 @@ https://raw.githubusercontent.com/posaune0423/mdv/v0.1.0/scripts/install.sh
 
 Verify checksums when you need supply-chain guarantees: every release publishes `SHA256SUMS` next to the archives.
 
-### Homebrew (third-party tap)
+### Homebrew
 
-If this repository contains `Formula/mdv.rb`, you can install from a tap (not from homebrew-core):
+You **do not** need a `Formula/` directory in this repository.
 
-```bash
-brew tap posaune0423/mdv https://github.com/posaune0423/mdv
-brew install mdv
-```
+- **`brew install mdv` (公式コア)**  
+  式ファイルは [Homebrew/homebrew-core](https://github.com/Homebrew/homebrew-core) 側にあります。受理されれば、このリポジトリに何も置かずに `brew install mdv` だけで入ります。
+
+- **サードパーティ tap**  
+  コアに入れる前や独自配布用は、別リポジトリ（例: `posaune0423/homebrew-tap`）に `Formula/mdv.rb` だけ置き、`brew tap posaune0423/tap` のように **tap 用リポジトリ**を指させます。アプリ本体のリポジトリと分けておくのが一般的です。
 
 ### mise
 
