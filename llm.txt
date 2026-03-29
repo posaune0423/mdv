@@ -1,0 +1,62 @@
+# mdv — context for LLMs and coding agents
+
+This file summarizes how end users install and run `mdv` (Markdown viewer for Ghostty and Kitty).
+Authoritative details: README.md, docs/MARKDOWN.md, docs/ARCHITECTURE.md, docs/TECH.md.
+
+## What it is
+
+- Binary name: mdv
+- Renders GitHub Flavored Markdown (GFM) in the terminal with rich layout, images, code highlighting, optional Mermaid.
+- Interactive mode: requires Ghostty or Kitty (terminal detection).
+- If stdout is not a TTY (pipe, redirect, CI), mdv prints plain text to stdout instead of opening the interactive viewer.
+
+## Install (fast path)
+
+Default install directory: $HOME/.local/bin (override with MDV_INSTALL_DIR).
+
+  curl --proto '=https' --tlsv1.2 -LsSf \
+    https://raw.githubusercontent.com/posaune0423/mdv/main/scripts/install.sh | sh
+
+After install: ensure the install directory is on PATH (e.g. export PATH="$HOME/.local/bin:$PATH").
+
+Pin installer to a release tag by replacing `main` with `vX.Y.Z` in the URL path to scripts/install.sh.
+
+Other options:
+- GitHub Releases: download archive, extract `mdv`, put on PATH.
+- Homebrew: `brew install mdv` when available in homebrew-core; or use a third-party tap (Formula lives in the tap repo, not the mdv app repo).
+- mise: `mise use -g github:posaune0423/mdv` (optional tool_alias in ~/.config/mise/config.toml: mdv = "github:posaune0423/mdv").
+- From source (Rust 1.92+, edition 2024): `cargo install --path . --locked --force` or `make install-local` from a clone.
+
+## Basic usage
+
+  mdv <PATH_TO_MARKDOWN_FILE>
+
+Examples:
+
+  mdv README.md
+  mdv --theme dark --watch ./docs/guide.md
+  mdv --no-mermaid notes.md
+  mdv --help
+
+## CLI flags (clap / MdvArgs)
+
+- path: required positional argument — Markdown file to open (PathBuf).
+- --watch: reload when the file changes on disk.
+- --theme <light|dark>: default is light.
+- --no-mermaid: disable Mermaid rendering; show placeholders.
+
+## Environment variables (common)
+
+- MDV_INSTALL_DIR: install script target directory (default ~/.local/bin).
+- MDV_MERMAID_CMD: optional explicit command for Mermaid CLI; otherwise mmdc or npx @mermaid-js/mermaid-cli may be used (see docs/TECH.md).
+
+## Troubleshooting (short)
+
+- command not found: fix PATH to include the install bin directory.
+- unsupported terminal in interactive mode: use Ghostty or Kitty.
+- plain text instead of viewer: stdin/stdout not both a TTY (expected for scripts).
+- Mermaid missing: install Mermaid CLI or set MDV_MERMAID_CMD; or use --no-mermaid.
+
+## License
+
+MIT — see LICENSE in the repository root.

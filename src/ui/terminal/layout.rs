@@ -31,22 +31,18 @@ pub(super) fn render_graphic_page(
     let display_width_px =
         (f32::from(viewport_width) * cell_metrics.width_px).round().max(1.0) as u32;
     let snapshot_width_px = ((display_width_px as f32) / GRAPHIC_PAGE_ZOOM).round().max(1.0) as u32;
+    let base_dir = document
+        .path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     let html = {
         let _span = info_span!("startup.build_github_html").entered();
-        build_github_html(
-            source_text,
-            document.path.parent().unwrap_or_else(|| Path::new(".")),
-            config.theme,
-            config.mermaid_mode,
-        )?
+        build_github_html(source_text, base_dir, config.theme, config.mermaid_mode)?
     };
     let snapshot = {
         let _span = info_span!("startup.render_html_to_png").entered();
-        render_html_to_png(
-            &html,
-            document.path.parent().unwrap_or_else(|| Path::new(".")),
-            snapshot_width_px,
-        )?
+        render_html_to_png(&html, base_dir, snapshot_width_px)?
     };
 
     {

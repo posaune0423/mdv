@@ -26,16 +26,20 @@ base64 = "0.22.1"
 clap = { version = "4.6.0", features = ["derive"] }
 comrak = "0.51.0"
 crossterm = "0.29.0"
+dark-light = "1.1.1"
+flate2 = "1.1.9"
 image = { version = "0.25.10", default-features = true, features = ["png", "jpeg", "gif", "webp"] }
 resvg = "0.47.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 syntect = { version = "5.3.0", default-features = true, features = ["default-fancy"] }
+tar = "0.4.44"
+tempfile = "3.27.0"
 thiserror = "2.0.18"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["fmt", "env-filter"] }
+ureq = "2.12.1"
 
 [dev-dependencies]
 assert_cmd = "2.2.0"
 predicates = "3.1.4"
-tempfile = "3.27.0"

@@ -3,11 +3,12 @@ use std::{collections::HashMap, thread};
 use anyhow::Result;
 use comrak::nodes::{AstNode, NodeValue};
 
-use crate::{core::config::MermaidMode, io::mermaid_cli::MermaidCliRenderer};
+use crate::{cli::Theme, core::config::MermaidMode, io::mermaid_cli::MermaidCliRenderer};
 
 pub(super) fn replace_mermaid_code_blocks<'a>(
     root: &'a AstNode<'a>,
     mermaid_mode: MermaidMode,
+    theme: Theme,
     mermaid_renderer: &MermaidCliRenderer,
 ) -> Result<()> {
     let mermaid_sources = root
@@ -28,7 +29,7 @@ pub(super) fn replace_mermaid_code_blocks<'a>(
             acc
         });
     let rendered_mermaid = render_mermaid_blocks_with(&mermaid_sources, mermaid_mode, |source| {
-        mermaid_renderer.render_svg_sized(source, Some(690), Some(2.0))
+        mermaid_renderer.render_svg_sized(source, Some(690), Some(2.0), theme)
     })?;
 
     for node in root.descendants() {

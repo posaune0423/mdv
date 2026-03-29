@@ -38,7 +38,7 @@ pub fn build_github_html(
 
     let arena = Arena::new();
     let root = parse_document(&arena, source, &options);
-    replace_mermaid_code_blocks(root, mermaid_mode, &MermaidCliRenderer::from_env())?;
+    replace_mermaid_code_blocks(root, mermaid_mode, theme, &MermaidCliRenderer::from_env())?;
 
     let mut plugins = Plugins::default();
     plugins.render.codefence_syntax_highlighter = Some(syntax_adapter(theme));

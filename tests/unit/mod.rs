@@ -9,6 +9,7 @@ mod mermaid_cli;
 mod page_graphics;
 mod plain_text_render;
 mod render_pipeline;
+mod self_update;
 mod svg_render;
 mod terminal_render;
 mod terminal_support;

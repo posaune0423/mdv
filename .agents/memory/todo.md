@@ -218,6 +218,32 @@
 - Fixture split: added dedicated README-like fixtures under `tests/fixtures/gfm/html-wrappers`, `tests/fixtures/gfm/badges-local`, and `tests/fixtures/gfm/badges-remote` so raw HTML wrappers, successful badge rows, and failing remote badges are each covered independently.
 - Regression coverage: `tests/unit/render_pipeline/gfm_fixtures.rs` now has explicit HTML-wrapper and badge HTML-fragment assertions, and `tests/unit/render_pipeline/webkit_snapshot.rs` now verifies both that local badge SVGs render at non-trivial size and that remote badge failures do not abort the page snapshot.
 - Runtime fix: `src/io/webkit_snapshot/script.rs` now distinguishes blocking local assets from non-blocking remote assets. Local missing images still fail fast, but remote badges get a short chance to load and then stop blocking snapshot completion, which keeps README rendering debuggable instead of blank.
+
+## Current Task
+
+- [x] Define the expected CD path for publishing release assets to GitHub Releases
+- [x] Add a repeatable local packaging/verification script that matches the workflow artifact format
+- [x] Update the GitHub Actions release workflow to reuse that packaging path and tighten release publication behavior
+- [x] Add an `mdv update` command contract that fetches the latest GitHub Release asset for the host platform
+- [x] Change the default theme contract to `system` and resolve it from the host OS at runtime
+- [x] Implement in-place binary replacement so the updated executable stays at the same path the user already invokes
+- [x] Refresh release/update documentation and re-run verification for packaging, installability, CLI help, and workflow syntax; record the outcome below
+
+## Current Task Review
+
+- CD hardening: added `scripts/verify-release-metadata.sh`, `scripts/package-release.sh`, and `scripts/verify-release-archive.sh`, then rewired `.github/workflows/release.yml` and `.github/workflows/ci.yml` to reuse the same release packaging path that local `make release-smoke` now exercises.
+- Release guardrails: the release workflow now validates that the pushed tag matches `Cargo.toml`, checks that `CHANGELOG.md` has the matching release section, verifies each packaged archive can be extracted, and only then publishes the GitHub Release.
+- Self-update: `mdv update` now resolves the host release asset, downloads the latest GitHub Release archive, extracts the top-level `mdv` binary, and replaces the current executable in place so an existing PATH entry keeps resolving to the updated binary.
+- Theme default: `--theme` now defaults to `system`, and the runtime resolves that to the host OS light/dark preference before rendering.
+- Docs sync: README and project docs now mention `mdv update`, the `system` default theme, and the release-smoke / tag-validation workflow.
+- Verification:
+- `cargo run --quiet -- --help` passed
+- `cargo run --quiet -- update --help` passed
+- `cargo test --workspace --all-targets --all-features` passed
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed
+- `make release-smoke` passed
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/ci.yml"); YAML.load_file(".github/workflows/release.yml")'` passed
+- `git diff --check` passed
 - Verification:
 - `cargo test gfm_fixtures -- --nocapture` passed
 - `cargo test webkit_snapshot_allows_remote_badge_failures_without_aborting_page_render -- --nocapture` passed
@@ -301,3 +327,26 @@
 - `cargo clippy --workspace --all-targets -- -D warnings` passed
 - `cargo test --test unit -- --nocapture` passed
 - `make build && ./bin/mdv README.md` reached interactive startup after the refactor as well
+
+## Current Task
+
+- [x] Inspect Mermaid renderer theme handling in rich and interactive paths
+- [x] Add failing regression coverage for dark-theme Mermaid rendering
+- [x] Propagate the selected viewer theme into Mermaid rendering
+- [x] Re-run final verification including dark-theme README launch
+
+## Current Task Review
+
+- Root cause: Mermaid CLI rendering was theme-agnostic. The viewer theme affected surrounding HTML and syntax colors, but Mermaid diagrams were always rendered with Mermaid CLI defaults because no `-t/--theme` argument was passed.
+- Fix: `src/io/mermaid_cli.rs` now accepts `Theme` for Mermaid renders, maps viewer `light` to Mermaid `default` and viewer `dark` to Mermaid `dark`, includes that theme in the render cache key, and passes `-t <theme>` to Mermaid CLI. The theme is now propagated from all rendering entry points:
+- `src/render/github_html/mermaid.rs` for the WebKit/GitHub HTML snapshot path
+- `src/render/text.rs` for headless plain-text Mermaid rendering
+- `src/ui/terminal/mod.rs` for interactive lazy Mermaid rasterization
+- Regression coverage:
+- `tests/unit/mermaid_cli.rs` now asserts Mermaid CLI receives `-t dark` and that cached output is separated by theme.
+- Verification:
+- `cargo test --test unit mermaid_cli -- --nocapture` passed after the new theme tests were added
+- `cargo test --test unit -- --nocapture` passed
+- `cargo fmt --all --check` passed
+- `cargo clippy --workspace --all-targets -- -D warnings` passed
+- `make build && ./bin/mdv --theme dark README.md` reached interactive startup with the dark-theme code path

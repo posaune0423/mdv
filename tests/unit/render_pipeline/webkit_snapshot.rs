@@ -212,6 +212,101 @@ fn webkit_snapshot_renders_local_markdown_images() {
 
 #[cfg(target_os = "macos")]
 #[test]
+fn webkit_snapshot_renders_html_img_tag_with_local_image() {
+    let dir = tempdir().unwrap_or_else(|error| panic!("temp dir should exist: {error}"));
+    let sub = dir.path().join("docs");
+    std::fs::create_dir_all(&sub).unwrap();
+    let image_path = sub.join("pixel.png");
+    let pixel = ImageBuffer::from_pixel(4, 4, Rgba([0_u8, 0_u8, 255_u8, 255_u8]));
+    pixel
+        .save(&image_path)
+        .unwrap_or_else(|error| panic!("fixture image should be written: {error}"));
+
+    let html = build_github_html(
+        "<img src=\"docs/pixel.png\" width=\"100\" alt=\"blue pixel\" />\n",
+        dir.path(),
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("html should render: {error}"));
+
+    eprintln!("=== HTML img tag test ===");
+    eprintln!("{}", &html[html.find("<article").unwrap()..html.find("</article>").unwrap()]);
+    eprintln!("=== END ===");
+
+    let snapshot = render_html_to_png(&html, dir.path(), 960)
+        .unwrap_or_else(|error| panic!("webkit should render html img tag: {error}"));
+
+    assert!(snapshot.diagnostics.images_ready, "images should be ready");
+    assert_eq!(snapshot.diagnostics.images.len(), 1, "should have 1 image");
+    assert!(
+        snapshot.diagnostics.images[0].natural_width_px > 0.0,
+        "natural width should be > 0, got {}",
+        snapshot.diagnostics.images[0].natural_width_px
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn webkit_snapshot_renders_html_img_from_project_readme() {
+    // Reproduce the actual README.md scenario: <img src="docs/screenshot.jpg" ...>
+    // with base_dir = project root
+    // Simulate what happens when document.path = "README.md" -> parent = ""
+    // The fix normalizes "" to "."
+    let raw_parent = std::path::Path::new("README.md")
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(std::path::Path::new("."));
+    let project_root = raw_parent;
+    let readme_path = project_root.join("README.md");
+    if !readme_path.exists() {
+        eprintln!("skipping: README.md not found");
+        return;
+    }
+    let screenshot_path = project_root.join("docs/screenshot.jpg");
+    if !screenshot_path.exists() {
+        eprintln!("skipping: docs/screenshot.jpg not found");
+        return;
+    }
+
+    let source = std::fs::read_to_string(&readme_path)
+        .unwrap_or_else(|error| panic!("README should read: {error}"));
+    let html = build_github_html(&source, project_root, Theme::Dark, MermaidMode::Disabled)
+        .unwrap_or_else(|error| panic!("README html should render: {error}"));
+
+    // Verify the <img> is restored in HTML
+    let body_start = html.find("<article").unwrap();
+    let body_end = html.find("</article>").unwrap();
+    let body = &html[body_start..body_end];
+    eprintln!("=== README article (first 500 chars) ===\n{}\n=== END ===", &body[..body.len().min(500)]);
+    assert!(
+        body.contains(r#"<img src="docs/screenshot.jpg""#),
+        "README <img> tag should be restored in github html"
+    );
+
+    let snapshot = render_html_to_png(&html, project_root, 960)
+        .unwrap_or_else(|error| panic!("README webkit snapshot should render: {error}"));
+
+    // The screenshot image should load successfully
+    let screenshot_assets: Vec<_> = snapshot.diagnostics.images.iter()
+        .filter(|img| img.source.contains("screenshot"))
+        .collect();
+    assert!(
+        !screenshot_assets.is_empty(),
+        "should detect screenshot image in diagnostics, got: {:?}",
+        snapshot.diagnostics.images.iter().map(|i| &i.source).collect::<Vec<_>>()
+    );
+    assert!(
+        screenshot_assets[0].natural_width_px > 0.0,
+        "screenshot natural width should be > 0, got {}. complete={}, source={}",
+        screenshot_assets[0].natural_width_px,
+        screenshot_assets[0].complete,
+        screenshot_assets[0].source,
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
 fn webkit_snapshot_renders_badge_fixture_images_with_nonzero_size() {
     let fixture_dir = gfm_fixture_dir("badges-local");
     let html = build_github_html(

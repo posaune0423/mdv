@@ -499,7 +499,12 @@ impl TerminalViewer {
             .round()
             .max(1.0) as u32;
 
-        match self.mermaid_renderer.render_png_sized(&source, Some(target_width_px), Some(2.0)) {
+        match self.mermaid_renderer.render_png_sized(
+            &source,
+            Some(target_width_px),
+            Some(2.0),
+            self.config.theme,
+        ) {
             Ok(rendered_png) => {
                 let image_decoder = ImageDecoder::new();
                 let natural_size = image_decoder.dimensions_from_png_bytes(&rendered_png).ok();

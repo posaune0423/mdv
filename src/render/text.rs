@@ -75,7 +75,7 @@ pub enum RenderedGraphicContent {
 }
 
 #[must_use]
-pub fn render_plain_text(document: &Document, _theme: Theme, mermaid_mode: MermaidMode) -> String {
+pub fn render_plain_text(document: &Document, theme: Theme, mermaid_mode: MermaidMode) -> String {
     let mut lines = Vec::new();
     let image_decoder = ImageDecoder::new();
     let mermaid_renderer = MermaidCliRenderer::from_env();
@@ -137,7 +137,7 @@ pub fn render_plain_text(document: &Document, _theme: Theme, mermaid_mode: Merma
             }
             BlockKind::Mermaid { source } => match mermaid_mode {
                 MermaidMode::Disabled => lines.push("[Mermaid disabled]".to_string()),
-                MermaidMode::Enabled => match mermaid_renderer.render_png(source) {
+                MermaidMode::Enabled => match mermaid_renderer.render_png(source, theme) {
                     Ok(png_bytes) => match image_decoder.dimensions_from_png_bytes(&png_bytes) {
                         Ok((width, height)) => {
                             lines.push(format!("[Mermaid rendered: {width}x{height}]"));
@@ -166,7 +166,7 @@ pub fn render_plain_text(document: &Document, _theme: Theme, mermaid_mode: Merma
 #[must_use]
 pub fn render_document(
     document: &Document,
-    theme: Theme,
+    _theme: Theme,
     mermaid_mode: MermaidMode,
     width_cells: u16,
     cell_aspect_ratio: f32,
@@ -367,7 +367,6 @@ pub fn render_document(
         });
     }
 
-    let _ = theme;
     RenderedDocument { lines, graphics }
 }
 

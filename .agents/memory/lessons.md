@@ -29,3 +29,5 @@
 - Before reporting a viewer/build fix as complete, run the user's exact command path, not a nearby equivalent; for this repo that includes `make build && ./bin/mdv ...`, not just `cargo test` or partial startup checks.
 - "Process starts" is not a sufficient final check for the interactive viewer. For rendering bugs, verify the target document is actually visible, not just that the binary stayed alive or entered alternate screen.
 - When README-style raw HTML is part of the intended rich output, "visible as escaped text" is not enough. Distinguish plain-text normalization from interactive HTML rendering and verify supported wrappers like `<div align="center">` actually affect layout in the rich path.
+- When a user changes a CLI/product default, do not preserve the old default out of convenience. Update the CLI contract, runtime behavior, and docs together so the default the user experiences matches the request exactly.
+- When release or CLI behavior changes, do not stop at code and tests. Re-scan README for stale commands, defaults, and install/update instructions before calling the task done.

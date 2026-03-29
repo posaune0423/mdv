@@ -46,6 +46,20 @@ fn extract_article_body(html: &str) -> &str {
 }
 
 #[test]
+fn readme_style_img_tag_is_restored_in_github_html() {
+    let source = "<div align=\"center\">\n\n# mdv\n\n<img src=\"docs/screenshot.jpg\" width=\"700\" alt=\"hero\" />\n\n</div>\n";
+    let fixture_dir = fixture_dir("html-wrappers");
+    let html = build_github_html(source, &fixture_dir, Theme::Dark, MermaidMode::Disabled)
+        .unwrap_or_else(|error| panic!("should render: {error}"));
+    let body = extract_article_body(&html);
+    eprintln!("=== BODY ===\n{body}\n=== END ===");
+    assert!(
+        body.contains(r#"<img src="docs/screenshot.jpg""#),
+        "img tag not found in body:\n{body}"
+    );
+}
+
+#[test]
 fn html_wrapper_fixture_preserves_raw_html_markers_in_github_html() {
     let fixture_dir = fixture_dir("html-wrappers");
     let html = build_github_html(
@@ -61,6 +75,36 @@ fn html_wrapper_fixture_preserves_raw_html_markers_in_github_html() {
     assert!(body.contains("<h1>Fixture Header</h1>"));
     assert!(body.contains("Paragraph with inline HTML<br/>kept as text."));
     assert!(body.contains("</div>"));
+}
+
+#[test]
+fn html_img_fixture_restores_img_tags_in_github_html() {
+    let fixture_dir = fixture_dir("html-img");
+    let html = build_github_html(
+        &fixture_input("html-img"),
+        &fixture_dir,
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("html-img fixture should render: {error}"));
+    let body = extract_article_body(&html);
+
+    assert!(
+        body.contains(r#"<img src="../../../../examples/pixel.png""#),
+        "standalone <img> should be restored, got:\n{body}"
+    );
+    assert!(
+        body.contains(r#"width="700""#),
+        "width attribute should be preserved, got:\n{body}"
+    );
+    assert!(
+        body.contains(r#"<p align="center">"#),
+        "<p align> should be restored, got:\n{body}"
+    );
+    assert!(
+        body.contains("</p>"),
+        "</p> should be restored, got:\n{body}"
+    );
 }
 
 #[test]

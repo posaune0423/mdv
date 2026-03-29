@@ -1,6 +1,6 @@
 mod args;
 
-pub use args::{MdvArgs, Theme};
+pub use args::{MdvArgs, MdvCommand, Theme};
 
 use clap::Parser;
 
@@ -11,7 +11,12 @@ pub fn parse() -> MdvArgs {
 
 #[must_use]
 pub fn startup_message(args: &MdvArgs) -> String {
-    let mut message = format!("mdv: path={}", args.path.display());
+    if matches!(args.command.as_ref(), Some(MdvCommand::Update)) {
+        return "mdv: command=update".to_string();
+    }
+
+    let path = args.path.as_deref().unwrap_or_else(|| std::path::Path::new("<missing>"));
+    let mut message = format!("mdv: path={}", path.display());
 
     if args.watch {
         message.push_str(" watch=on");

@@ -179,9 +179,11 @@ Rust toolchain は `1.92.0` に固定されている。
 
 `release.yml` は tag push を契機に次を行う。
 
+- tag と `Cargo.toml` / `CHANGELOG.md` の整合を検証
 - Linux x86_64 / arm64 ビルド
 - macOS x86_64 / arm64 ビルド
 - `tar.gz` アーカイブ作成
+- packaged archive の extract / `mdv --help` smoke check
 - `SHA256SUMS` 生成
 - GitHub Release 公開
 

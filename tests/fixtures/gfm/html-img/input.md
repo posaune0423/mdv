@@ -1,0 +1,5 @@
+<img src="../../../../examples/pixel.png" width="700" alt="Hero image" />
+
+<p align="center">
+  <img src="../../../../examples/pixel.png" alt="Centered image" />
+</p>
