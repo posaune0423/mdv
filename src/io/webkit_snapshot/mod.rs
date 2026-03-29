@@ -1,14 +1,20 @@
+use std::path::Path;
+
+#[cfg(target_os = "macos")]
 use std::{
     fs,
-    path::Path,
     process::Command,
     sync::{Mutex, OnceLock},
 };
 
-use anyhow::{Context, Result, bail};
+#[cfg(target_os = "macos")]
+use anyhow::Context;
+use anyhow::{Result, bail};
+#[cfg(target_os = "macos")]
 use tracing::info_span;
 
 mod diagnostics;
+#[cfg(any(target_os = "macos", test))]
 mod paths;
 mod script;
 #[cfg(test)]
@@ -82,6 +88,7 @@ pub fn render_html_to_png(
     bail!("webkit snapshot rendering is only supported on macOS");
 }
 
+#[cfg(target_os = "macos")]
 fn snapshot_render_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
