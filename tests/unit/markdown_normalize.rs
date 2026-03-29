@@ -39,11 +39,16 @@ fn normalizes_task_list_and_footnote_reference_text() {
 
     assert!(matches!(
         document.blocks[0].kind,
-        BlockKind::List { ref items, .. } if items == &vec!["[x] done".to_string(), "[ ] pending".to_string()]
+        BlockKind::List { ref items, .. }
+            if items
+                == &vec![
+                    mdv::core::document::StyledText::from_plain("[x] done"),
+                    mdv::core::document::StyledText::from_plain("[ ] pending"),
+                ]
     ));
     assert!(matches!(
         document.blocks[1].kind,
-        BlockKind::Paragraph { ref text } if text.contains("[^1]")
+        BlockKind::Paragraph { ref text } if text.plain().contains("[^1]")
     ));
     assert!(matches!(document.blocks[2].kind, BlockKind::Footnote { .. }));
 }

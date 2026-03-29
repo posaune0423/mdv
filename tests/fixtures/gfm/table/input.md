@@ -1,0 +1,3 @@
+| Syntax | Supported |
+| --- | --- |
+| Table | Yes |

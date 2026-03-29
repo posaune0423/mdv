@@ -12,11 +12,13 @@ fn viewport_svg_renderer_produces_png_bytes() {
         RenderedLine {
             plain_text: "Title".to_string(),
             display_text: "Title".to_string(),
+            spans: Vec::new(),
             kind: RenderedLineKind::Heading { level: 1 },
         },
         RenderedLine {
             plain_text: "Paragraph".to_string(),
             display_text: "Paragraph".to_string(),
+            spans: Vec::new(),
             kind: RenderedLineKind::Paragraph,
         },
     ];
@@ -33,11 +35,13 @@ fn viewport_svg_renderer_changes_output_between_themes() {
         RenderedLine {
             plain_text: "Title".to_string(),
             display_text: "Title".to_string(),
+            spans: Vec::new(),
             kind: RenderedLineKind::Heading { level: 1 },
         },
         RenderedLine {
             plain_text: "Quoted".to_string(),
             display_text: "│ Quoted".to_string(),
+            spans: Vec::new(),
             kind: RenderedLineKind::Quote,
         },
     ];

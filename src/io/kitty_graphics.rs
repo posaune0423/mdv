@@ -6,6 +6,10 @@ pub struct KittyImagePlacement {
     pub placement_id: u32,
     pub columns: u16,
     pub rows: u16,
+    pub source_x_px: u32,
+    pub source_y_px: u32,
+    pub source_width_px: u32,
+    pub source_height_px: u32,
     pub cursor_x: u16,
     pub cursor_y: u16,
     pub z_index: i32,
@@ -26,11 +30,15 @@ pub fn encode_transmit_png(image_id: u32, png_bytes: &[u8]) -> String {
 #[must_use]
 pub fn encode_place(placement: &KittyImagePlacement) -> String {
     format!(
-        "\u{1b}_Ga=p,i={},p={},c={},r={},X={},Y={},z={},q=2,C=1\u{1b}\\",
+        "\u{1b}_Ga=p,i={},p={},c={},r={},x={},y={},w={},h={},X={},Y={},z={},q=2,C=1\u{1b}\\",
         placement.image_id,
         placement.placement_id,
         placement.columns,
         placement.rows,
+        placement.source_x_px,
+        placement.source_y_px,
+        placement.source_width_px,
+        placement.source_height_px,
         placement.cursor_x,
         placement.cursor_y,
         placement.z_index,

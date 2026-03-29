@@ -1,0 +1,6 @@
+<pre lang="rust"
+class="highlight highlight-source-rust notranslate position-relative overflow-auto"
+class="language-rust notranslate"
+data-lang="rust"
+color:#ff7b72
+color:#79c0ff

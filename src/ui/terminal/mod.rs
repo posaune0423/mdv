@@ -2,7 +2,6 @@ use std::{
     cmp,
     collections::BTreeSet,
     io::{self, Write},
-    sync::OnceLock,
     time::{Duration, SystemTime},
 };
 
@@ -17,32 +16,34 @@ use crossterm::{
         enable_raw_mode,
     },
 };
-use syntect::{
-    easy::HighlightLines,
-    highlighting::{Theme as SyntectTheme, ThemeSet},
-    parsing::{SyntaxReference, SyntaxSet},
-    util::as_24_bit_terminal_escaped,
-};
+mod graphics;
+mod highlight;
+mod layout;
+#[cfg(test)]
+mod tests;
 
+use self::{
+    graphics::{collect_graphics_commands, collect_page_viewport_commands, resize_graphic_space},
+    highlight::highlight_code_terminal,
+    layout::{
+        article_origin, article_wrap_width, current_cell_metrics, fit_to_width,
+        render_graphic_page, truncate_visible,
+    },
+};
 use crate::{
     core::{config::AppConfig, document::Document, theme::ThemeTokens},
     io::fs::FileSystemDocumentSource,
-    io::kitty_graphics::{
-        DeleteCommand, KittyImagePlacement, encode_delete, encode_place, encode_transmit_png,
-    },
+    io::kitty_graphics::{DeleteCommand, encode_delete},
     io::{browser, image_decoder::ImageDecoder, mermaid_cli::MermaidCliRenderer},
     render::{
         markdown::parse_document,
         text::{
-            RenderedDocument, RenderedGraphic, RenderedGraphicContent, RenderedLine,
-            RenderedLineKind, render_document, scaled_graphic_height,
+            RenderedDocument, RenderedGraphicContent, RenderedLine, RenderedLineKind,
+            scaled_graphic_height,
         },
     },
+    ui::page_graphics::{GraphicPage, total_rows},
 };
-
-static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
-static THEME_SET: OnceLock<ThemeSet> = OnceLock::new();
-static FALLBACK_THEME: OnceLock<SyntectTheme> = OnceLock::new();
 
 #[derive(Clone, Copy)]
 struct GraphicViewport {
@@ -51,20 +52,32 @@ struct GraphicViewport {
     article_x: u16,
     article_width: u16,
     viewport_width: u16,
+    cell_metrics: CellMetrics,
+}
+
+#[derive(Clone, Copy)]
+struct CellMetrics {
+    width_px: f32,
+    height_px: f32,
 }
 
 pub struct TerminalViewer {
     config: AppConfig,
     source: FileSystemDocumentSource,
     document: Document,
-    rendered: RenderedDocument,
+    source_text: String,
+    rendered: Option<RenderedDocument>,
+    graphic_page: Option<GraphicPage>,
     scroll: usize,
     last_modified: Option<SystemTime>,
     warning: Option<String>,
     needs_redraw: bool,
+    pending_layout_refresh: bool,
+    clear_all_graphics: bool,
     visible_placements: Vec<(u32, u32)>,
     transmitted_graphics: BTreeSet<u32>,
     mermaid_renderer: MermaidCliRenderer,
+    cell_metrics: CellMetrics,
 }
 
 #[must_use]
@@ -74,24 +87,79 @@ pub fn is_supported_terminal(term_program: Option<&str>, term: Option<&str>) -> 
 }
 
 impl TerminalViewer {
-    #[must_use]
-    pub fn new(config: AppConfig, source: FileSystemDocumentSource, document: Document) -> Self {
-        let rendered =
-            render_document(&document, config.theme, config.mermaid_mode, content_width());
+    pub fn try_new(
+        config: AppConfig,
+        source: FileSystemDocumentSource,
+        document: Document,
+        source_text: String,
+    ) -> Result<Self> {
+        let cell_metrics = current_cell_metrics();
         let last_modified = source.modified_at().ok();
+        let graphic_page = render_graphic_page(&config, &document, &source_text, cell_metrics)?;
+
+        Ok(Self {
+            config,
+            source,
+            document,
+            source_text,
+            rendered: None,
+            graphic_page: Some(graphic_page),
+            scroll: 0,
+            last_modified,
+            warning: None,
+            needs_redraw: true,
+            pending_layout_refresh: false,
+            clear_all_graphics: false,
+            visible_placements: Vec::new(),
+            transmitted_graphics: BTreeSet::new(),
+            mermaid_renderer: MermaidCliRenderer::from_env(),
+            cell_metrics,
+        })
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub fn new_for_tests(
+        config: AppConfig,
+        source: FileSystemDocumentSource,
+        document: Document,
+        source_text: String,
+    ) -> Self {
+        let cell_metrics = current_cell_metrics();
+        let last_modified = source.modified_at().ok();
+        let (graphic_page, rendered, warning) =
+            match render_graphic_page(&config, &document, &source_text, cell_metrics) {
+                Ok(page) => (Some(page), None, None),
+                Err(error) => (
+                    None,
+                    Some(crate::render::text::render_document(
+                        &document,
+                        config.theme,
+                        config.mermaid_mode,
+                        article_wrap_width(terminal::size().map_or(80, |(cols, _)| cols)),
+                        cell_metrics.width_px / cell_metrics.height_px,
+                    )),
+                    Some(format!("graphic mode unavailable: {error}")),
+                ),
+            };
 
         Self {
             config,
             source,
             document,
+            source_text,
             rendered,
+            graphic_page,
             scroll: 0,
             last_modified,
-            warning: None,
+            warning,
             needs_redraw: true,
+            pending_layout_refresh: false,
+            clear_all_graphics: false,
             visible_placements: Vec::new(),
             transmitted_graphics: BTreeSet::new(),
             mermaid_renderer: MermaidCliRenderer::from_env(),
+            cell_metrics,
         }
     }
 
@@ -163,9 +231,8 @@ impl TerminalViewer {
             match event {
                 Event::Resize(_, _) => {
                     flush_scroll(self, &mut next_scroll, &mut scroll_dirty);
-                    self.rerender();
-                    let _ = self.set_scroll(cmp::min(self.scroll, self.max_scroll()));
-                    next_scroll = self.scroll;
+                    self.cell_metrics = current_cell_metrics();
+                    self.pending_layout_refresh = true;
                     self.needs_redraw = true;
                 }
                 Event::Key(key) => {
@@ -226,35 +293,63 @@ impl TerminalViewer {
     }
 
     fn draw(&mut self) -> Result<()> {
+        if self.pending_layout_refresh {
+            self.rerender();
+            let _ = self.set_scroll(cmp::min(self.scroll, self.max_scroll()));
+            self.pending_layout_refresh = false;
+        }
+
         let mut stdout = io::stdout().lock();
         let (width, height) = terminal::size()?;
         let content_height = usize::from(height.saturating_sub(1));
         let tokens = ThemeTokens::for_theme(self.config.theme);
         let article_width = article_wrap_width(width);
         let article_x = article_origin(width);
-        let visible_end = self.rendered.lines.len().min(self.scroll.saturating_add(content_height));
-
-        let visible_lines = &self.rendered.lines[self.scroll..visible_end];
-        let (graphic_commands, visible_placement_ids) = collect_graphics_commands(
-            &self.rendered,
-            GraphicViewport {
-                scroll: self.scroll,
-                content_height,
-                article_x,
-                article_width,
-                viewport_width: width,
-            },
-            &self.visible_placements,
-            &mut self.transmitted_graphics,
-        );
 
         for row in 0..content_height {
             queue!(stdout, cursor::MoveTo(0, row as u16), Clear(ClearType::CurrentLine))?;
-            let Some(line) = visible_lines.get(row) else {
-                continue;
-            };
-            queue!(stdout, cursor::MoveTo(article_x, row as u16))?;
-            self.draw_line(&mut stdout, line, usize::from(article_width), tokens)?;
+            if let Some(rendered) = &self.rendered {
+                let visible_end =
+                    rendered.lines.len().min(self.scroll.saturating_add(content_height));
+                let visible_lines = &rendered.lines[self.scroll..visible_end];
+                let Some(line) = visible_lines.get(row) else {
+                    continue;
+                };
+                queue!(stdout, cursor::MoveTo(article_x, row as u16))?;
+                self.draw_line(&mut stdout, line, usize::from(article_width), tokens)?;
+            }
+        }
+
+        let (graphic_commands, visible_placement_ids) = if let Some(page) = &self.graphic_page {
+            collect_page_viewport_commands(
+                page,
+                self.scroll,
+                content_height,
+                self.cell_metrics,
+                &self.visible_placements,
+                &mut self.transmitted_graphics,
+            )
+        } else if let Some(rendered) = &self.rendered {
+            collect_graphics_commands(
+                rendered,
+                GraphicViewport {
+                    scroll: self.scroll,
+                    content_height,
+                    article_x,
+                    article_width,
+                    viewport_width: width,
+                    cell_metrics: self.cell_metrics,
+                },
+                &self.visible_placements,
+                &mut self.transmitted_graphics,
+            )
+        } else {
+            (Vec::new(), Vec::new())
+        };
+
+        if self.clear_all_graphics {
+            write!(stdout, "{}", encode_delete(DeleteCommand::AllVisiblePlacements))?;
+            self.clear_all_graphics = false;
         }
 
         for command in graphic_commands {
@@ -280,7 +375,13 @@ impl TerminalViewer {
     }
 
     fn max_scroll(&self) -> usize {
-        self.rendered.lines.len().saturating_sub(self.page_height())
+        if let Some(page) = &self.graphic_page {
+            total_rows(page, self.cell_metrics.height_px).saturating_sub(self.page_height())
+        } else if let Some(rendered) = &self.rendered {
+            rendered.lines.len().saturating_sub(self.page_height())
+        } else {
+            0
+        }
     }
 
     fn maybe_reload(&mut self) -> bool {
@@ -303,8 +404,8 @@ impl TerminalViewer {
             Ok(content) => match parse_document(self.source.path().clone(), &content) {
                 Ok(document) => {
                     self.document = document;
+                    self.source_text = content;
                     self.rerender();
-                    self.warning = None;
                     let _ = self.set_scroll(cmp::min(self.scroll, self.max_scroll()));
                 }
                 Err(error) => {
@@ -334,10 +435,24 @@ impl TerminalViewer {
     }
 
     fn rerender(&mut self) {
-        let width = content_width();
-        self.rendered =
-            render_document(&self.document, self.config.theme, self.config.mermaid_mode, width);
+        match render_graphic_page(
+            &self.config,
+            &self.document,
+            &self.source_text,
+            self.cell_metrics,
+        ) {
+            Ok(graphic_page) => {
+                self.graphic_page = Some(graphic_page);
+                self.rendered = None;
+                self.warning = None;
+            }
+            Err(error) => {
+                self.warning = Some(format!("graphic render failed: {error}"));
+            }
+        }
         self.transmitted_graphics.clear();
+        self.visible_placements.clear();
+        self.clear_all_graphics = true;
     }
 
     fn set_scroll(&mut self, next_scroll: usize) -> bool {
@@ -349,10 +464,17 @@ impl TerminalViewer {
     }
 
     fn render_next_visible_graphic(&mut self) -> bool {
+        if self.graphic_page.is_some() {
+            return false;
+        }
+
         let content_height = self.page_height();
+        let Some(rendered) = self.rendered.as_mut() else {
+            return false;
+        };
         let visible_end = self.scroll.saturating_add(content_height);
         let Some((graphic_index, source)) =
-            self.rendered.graphics.iter().enumerate().find_map(|(index, graphic)| {
+            rendered.graphics.iter().enumerate().find_map(|(index, graphic)| {
                 if graphic.line_index < self.scroll || graphic.line_index >= visible_end {
                     return None;
                 }
@@ -368,32 +490,42 @@ impl TerminalViewer {
             return false;
         };
 
-        match self.mermaid_renderer.render_png(&source) {
+        let target_width_px = (f32::from(rendered.graphics[graphic_index].width_cells)
+            * self.cell_metrics.width_px)
+            .round()
+            .max(1.0) as u32;
+
+        match self.mermaid_renderer.render_png_sized(&source, Some(target_width_px), Some(2.0)) {
             Ok(rendered_png) => {
                 let image_decoder = ImageDecoder::new();
-                let new_height = image_decoder
-                    .dimensions_from_png_bytes(&rendered_png)
+                let natural_size = image_decoder.dimensions_from_png_bytes(&rendered_png).ok();
+                let new_height = natural_size
                     .map(|(width, height)| {
                         scaled_graphic_height(
-                            self.rendered.graphics[graphic_index].width_cells,
+                            rendered.graphics[graphic_index].width_cells,
+                            self.cell_metrics.width_px / self.cell_metrics.height_px,
                             width,
                             height,
                         )
                     })
-                    .unwrap_or(self.rendered.graphics[graphic_index].height_cells);
+                    .unwrap_or(rendered.graphics[graphic_index].height_cells);
 
-                resize_graphic_space(&mut self.rendered, graphic_index, new_height);
+                resize_graphic_space(rendered, graphic_index, new_height);
                 if let RenderedGraphicContent::Mermaid { png_bytes, failed, .. } =
-                    &mut self.rendered.graphics[graphic_index].content
+                    &mut rendered.graphics[graphic_index].content
                 {
                     *png_bytes = Some(rendered_png);
                     *failed = false;
+                }
+                if let Some((width, height)) = natural_size {
+                    rendered.graphics[graphic_index].natural_width_px = width;
+                    rendered.graphics[graphic_index].natural_height_px = height;
                 }
                 self.warning = None;
             }
             Err(error) => {
                 if let RenderedGraphicContent::Mermaid { failed, .. } =
-                    &mut self.rendered.graphics[graphic_index].content
+                    &mut rendered.graphics[graphic_index].content
                 {
                     *failed = true;
                 }
@@ -539,336 +671,5 @@ impl TerminalViewer {
             warning
         );
         fit_to_width(&status, width)
-    }
-}
-
-fn fit_to_width(line: &str, width: usize) -> String {
-    let mut fitted: String = line.chars().take(width).collect();
-    let current = fitted.chars().count();
-    if current < width {
-        fitted.push_str(&" ".repeat(width - current));
-    }
-    fitted
-}
-
-fn content_width() -> u16 {
-    article_wrap_width(terminal::size().map_or(80, |(cols, _)| cols))
-}
-
-fn article_origin(viewport_width: u16) -> u16 {
-    viewport_width.saturating_sub(article_wrap_width(viewport_width)) / 2
-}
-
-fn article_wrap_width(viewport_width: u16) -> u16 {
-    let usable = viewport_width.saturating_sub(8);
-    if usable >= 24 { usable.min(96) } else { viewport_width.saturating_sub(2).max(1) }
-}
-
-fn truncate_visible(text: &str, width: usize) -> String {
-    text.chars().take(width.max(1)).collect()
-}
-
-fn highlight_code_terminal(text: &str, language: Option<&str>, theme: crate::cli::Theme) -> String {
-    if text.is_empty() {
-        return String::new();
-    }
-
-    let syntax_set = syntax_set();
-    let syntax = syntax_for_token(syntax_set, language);
-    let mut highlighter = HighlightLines::new(syntax, syntect_theme(theme));
-    highlighter
-        .highlight_line(text, syntax_set)
-        .map(|segments| as_24_bit_terminal_escaped(&segments[..], false))
-        .unwrap_or_else(|_| text.to_string())
-}
-
-fn syntax_set() -> &'static SyntaxSet {
-    SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines)
-}
-
-fn syntax_for_token<'a>(syntax_set: &'a SyntaxSet, language: Option<&str>) -> &'a SyntaxReference {
-    language
-        .and_then(|token| syntax_set.find_syntax_by_token(token))
-        .unwrap_or_else(|| syntax_set.find_syntax_plain_text())
-}
-
-fn syntect_theme(theme: crate::cli::Theme) -> &'static SyntectTheme {
-    let themes = THEME_SET.get_or_init(ThemeSet::load_defaults);
-    let preferred = match theme {
-        crate::cli::Theme::Light => "InspiredGitHub",
-        crate::cli::Theme::Dark => "base16-ocean.dark",
-    };
-
-    themes
-        .themes
-        .get(preferred)
-        .or_else(|| themes.themes.values().next())
-        .unwrap_or_else(|| FALLBACK_THEME.get_or_init(SyntectTheme::default))
-}
-
-fn visible_graphic_placements(
-    rendered: &RenderedDocument,
-    scroll: usize,
-    content_height: usize,
-) -> Vec<(u32, u32)> {
-    rendered
-        .graphics
-        .iter()
-        .enumerate()
-        .filter(|(_, graphic)| {
-            graphic.line_index >= scroll && graphic.line_index - scroll < content_height
-        })
-        .map(|(index, _)| {
-            let id = (index + 2) as u32;
-            (id, id)
-        })
-        .collect()
-}
-
-fn collect_graphics_commands(
-    rendered: &RenderedDocument,
-    viewport: GraphicViewport,
-    previous_visible_placements: &[(u32, u32)],
-    transmitted_graphics: &mut BTreeSet<u32>,
-) -> (Vec<String>, Vec<(u32, u32)>) {
-    let mut commands = Vec::new();
-    let visible_placements =
-        visible_graphic_placements(rendered, viewport.scroll, viewport.content_height);
-
-    for (image_id, placement_id) in previous_visible_placements
-        .iter()
-        .copied()
-        .filter(|placement| !visible_placements.contains(placement))
-    {
-        commands.push(encode_delete(DeleteCommand::Placement { image_id, placement_id }));
-    }
-
-    for (index, graphic) in rendered.graphics.iter().enumerate() {
-        if graphic.line_index < viewport.scroll {
-            continue;
-        }
-        let relative_row = graphic.line_index - viewport.scroll;
-        if relative_row >= viewport.content_height {
-            continue;
-        }
-
-        let Some(png_bytes) = graphic_png_bytes(graphic) else {
-            continue;
-        };
-
-        let image_id = (index + 2) as u32;
-        if transmitted_graphics.insert(image_id) {
-            commands.push(encode_transmit_png(image_id, png_bytes));
-        }
-
-        let placement = KittyImagePlacement {
-            image_id,
-            placement_id: image_id,
-            columns: graphic.width_cells.min(viewport.viewport_width),
-            rows: graphic.height_cells,
-            cursor_x: 0,
-            cursor_y: 0,
-            z_index: -1,
-        };
-        let graphic_x =
-            viewport.article_x + viewport.article_width.saturating_sub(graphic.width_cells) / 2;
-        commands.push(format!(
-            "{}{}",
-            ansi_cursor_move(graphic_x, relative_row as u16),
-            encode_place(&placement)
-        ));
-    }
-
-    (commands, visible_placements)
-}
-
-fn graphic_png_bytes(graphic: &RenderedGraphic) -> Option<&[u8]> {
-    match &graphic.content {
-        RenderedGraphicContent::Png(png_bytes) => Some(png_bytes),
-        RenderedGraphicContent::Mermaid { png_bytes: Some(png_bytes), .. } => Some(png_bytes),
-        RenderedGraphicContent::Mermaid { png_bytes: None, .. } => None,
-    }
-}
-
-fn ansi_cursor_move(x: u16, y: u16) -> String {
-    format!("\u{1b}[{};{}H", y + 1, x + 1)
-}
-
-fn resize_graphic_space(rendered: &mut RenderedDocument, graphic_index: usize, new_height: u16) {
-    let line_index = rendered.graphics[graphic_index].line_index;
-    let current_height = rendered.graphics[graphic_index].height_cells;
-    if new_height == current_height {
-        return;
-    }
-
-    if new_height > current_height {
-        let extra = usize::from(new_height - current_height);
-        rendered.lines.splice(
-            line_index + usize::from(current_height)..line_index + usize::from(current_height),
-            std::iter::repeat_n(
-                RenderedLine {
-                    plain_text: String::new(),
-                    display_text: String::new(),
-                    kind: RenderedLineKind::Blank,
-                },
-                extra,
-            ),
-        );
-    } else {
-        let remove_start = line_index + usize::from(new_height);
-        let remove_end = line_index + usize::from(current_height);
-        rendered.lines.drain(remove_start..remove_end);
-    }
-
-    let delta = new_height as isize - current_height as isize;
-    rendered.graphics[graphic_index].height_cells = new_height;
-    for graphic in rendered.graphics.iter_mut().skip(graphic_index + 1) {
-        graphic.line_index = graphic.line_index.saturating_add_signed(delta);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        GraphicViewport, article_wrap_width, collect_graphics_commands, visible_graphic_placements,
-    };
-    use std::fs;
-
-    use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-    use tempfile::NamedTempFile;
-
-    use crate::{
-        cli::Theme,
-        core::config::{AppConfig, MermaidMode},
-        io::fs::FileSystemDocumentSource,
-        render::text::{RenderedDocument, RenderedGraphic},
-        ui::terminal::TerminalViewer,
-    };
-
-    #[test]
-    fn article_width_is_capped_for_readability() {
-        assert_eq!(article_wrap_width(20), 18);
-        assert_eq!(article_wrap_width(80), 72);
-        assert_eq!(article_wrap_width(140), 96);
-    }
-
-    #[test]
-    fn visible_graphic_placements_follow_scroll_window() {
-        let rendered = RenderedDocument {
-            lines: Vec::new(),
-            graphics: vec![
-                RenderedGraphic {
-                    line_index: 1,
-                    width_cells: 10,
-                    height_cells: 4,
-                    content: crate::render::text::RenderedGraphicContent::Png(vec![1]),
-                },
-                RenderedGraphic {
-                    line_index: 8,
-                    width_cells: 10,
-                    height_cells: 4,
-                    content: crate::render::text::RenderedGraphicContent::Png(vec![2]),
-                },
-            ],
-        };
-
-        assert_eq!(visible_graphic_placements(&rendered, 0, 5), vec![(2, 2)]);
-        assert_eq!(visible_graphic_placements(&rendered, 5, 5), vec![(3, 3)]);
-    }
-
-    #[test]
-    fn graphics_commands_only_transmit_png_payload_once() {
-        let rendered = RenderedDocument {
-            lines: Vec::new(),
-            graphics: vec![RenderedGraphic {
-                line_index: 1,
-                width_cells: 10,
-                height_cells: 4,
-                content: crate::render::text::RenderedGraphicContent::Png(vec![1, 2, 3]),
-            }],
-        };
-        let mut transmitted = std::collections::BTreeSet::new();
-
-        let viewport = GraphicViewport {
-            scroll: 0,
-            content_height: 5,
-            article_x: 0,
-            article_width: 20,
-            viewport_width: 80,
-        };
-        let (first_commands, _) =
-            collect_graphics_commands(&rendered, viewport, &[], &mut transmitted);
-        let (second_commands, _) =
-            collect_graphics_commands(&rendered, viewport, &[], &mut transmitted);
-
-        assert_eq!(first_commands.iter().filter(|command| command.contains("a=t")).count(), 1);
-        assert_eq!(second_commands.iter().filter(|command| command.contains("a=t")).count(), 0);
-        assert!(second_commands.iter().any(|command| command.contains("a=p")));
-    }
-
-    #[test]
-    fn batched_scroll_events_apply_accumulated_offset() {
-        let mut viewer = sample_viewer(&long_document(64));
-        viewer.needs_redraw = false;
-
-        let should_quit =
-            viewer.apply_event_batch(vec![key_event('j'), key_event('j'), key_event('j')]);
-
-        assert!(!should_quit);
-        assert_eq!(viewer.scroll, 3);
-        assert!(viewer.needs_redraw);
-    }
-
-    #[test]
-    fn quit_in_batched_input_short_circuits_pending_scroll() {
-        let mut viewer = sample_viewer(&long_document(64));
-        viewer.needs_redraw = false;
-
-        let should_quit =
-            viewer.apply_event_batch(vec![key_event('j'), key_event('j'), key_event('q')]);
-
-        assert!(should_quit);
-        assert_eq!(viewer.scroll, 0);
-        assert!(!viewer.needs_redraw);
-    }
-
-    fn sample_viewer(source: &str) -> TerminalViewer {
-        let file = match NamedTempFile::new() {
-            Ok(file) => file,
-            Err(error) => panic!("temp markdown should be created: {error}"),
-        };
-        if let Err(error) = fs::write(file.path(), source) {
-            panic!("temp markdown should be written: {error}");
-        }
-
-        let path = file.into_temp_path().keep().unwrap_or_else(|error| {
-            panic!("temp markdown should persist for the test viewer: {error}")
-        });
-        let document = crate::render::markdown::parse_document(path.clone(), source)
-            .unwrap_or_else(|error| panic!("document should parse: {error}"));
-
-        TerminalViewer::new(
-            AppConfig {
-                path: path.clone(),
-                watch: false,
-                theme: Theme::Light,
-                mermaid_mode: MermaidMode::Disabled,
-            },
-            FileSystemDocumentSource::new(path),
-            document,
-        )
-    }
-
-    fn long_document(paragraphs: usize) -> String {
-        (0..paragraphs)
-            .map(|index| format!("Paragraph {index}\n\nThis is line {index}."))
-            .collect::<Vec<_>>()
-            .join("\n\n")
-    }
-
-    fn key_event(ch: char) -> Event {
-        let mut key = KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE);
-        key.kind = KeyEventKind::Press;
-        Event::Key(key)
     }
 }

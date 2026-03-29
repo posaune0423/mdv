@@ -14,7 +14,7 @@ use syntect::{
 use crate::{
     cli::Theme,
     core::document::CalloutKind,
-    render::text::{RenderedLine, RenderedLineKind},
+    render::text::{RenderedInlineSegment, RenderedLine, RenderedLineKind},
 };
 
 const CELL_WIDTH_PX: u32 = 10;
@@ -131,14 +131,12 @@ fn build_svg(lines: &[RenderedLine], theme: Theme, width_px: u32, height_px: u32
                 }
             }
             RenderedLineKind::Paragraph | RenderedLineKind::List => {
-                body.push_str(&svg_text(
-                    &line.display_text,
+                body.push_str(&svg_rich_text(
+                    &line.spans,
                     content_x,
                     baseline,
                     palette.foreground,
                     17,
-                    400,
-                    BODY_FONT,
                 ));
             }
             RenderedLineKind::Quote => {
@@ -147,15 +145,7 @@ fn build_svg(lines: &[RenderedLine], theme: Theme, width_px: u32, height_px: u32
                     content_x.saturating_sub(18),
                     palette.quote_border
                 ));
-                body.push_str(&svg_text(
-                    &line.display_text,
-                    content_x,
-                    baseline,
-                    palette.muted,
-                    16,
-                    400,
-                    BODY_FONT,
-                ));
+                body.push_str(&svg_rich_text(&line.spans, content_x, baseline, palette.muted, 16));
             }
             RenderedLineKind::Callout { kind } => {
                 let (fill, border, text_color) =
@@ -172,15 +162,7 @@ fn build_svg(lines: &[RenderedLine], theme: Theme, width_px: u32, height_px: u32
                     r#"<rect x="{}" y="{y}" width="4" height="{LINE_HEIGHT_PX}" rx="2" fill="{border}"/>"#,
                     content_x.saturating_sub(14),
                 ));
-                body.push_str(&svg_text(
-                    &line.display_text,
-                    content_x + 4,
-                    baseline,
-                    text_color,
-                    16,
-                    600,
-                    BODY_FONT,
-                ));
+                body.push_str(&svg_rich_text(&line.spans, content_x + 4, baseline, text_color, 16));
             }
             RenderedLineKind::Code { language, is_fence_delimiter } => {
                 body.push_str(&format!(
@@ -239,15 +221,7 @@ fn build_svg(lines: &[RenderedLine], theme: Theme, width_px: u32, height_px: u32
                 ));
             }
             RenderedLineKind::Meta => {
-                body.push_str(&svg_text(
-                    &line.display_text,
-                    content_x,
-                    baseline,
-                    palette.muted,
-                    14,
-                    400,
-                    BODY_FONT,
-                ));
+                body.push_str(&svg_rich_text(&line.spans, content_x, baseline, palette.muted, 14));
             }
         }
     }
@@ -284,6 +258,36 @@ fn svg_text(
     format!(
         r#"<text x="{x}" y="{y}" fill="{fill}" font-size="{font_size}" font-weight="{font_weight}" font-family="{font_family}">{}</text>"#,
         escape_xml(text)
+    )
+}
+
+fn svg_rich_text(
+    spans: &[RenderedInlineSegment],
+    x: u32,
+    y: u32,
+    fill: &str,
+    font_size: u32,
+) -> String {
+    if spans.is_empty() {
+        return String::new();
+    }
+
+    let segments = spans
+        .iter()
+        .filter(|segment| !segment.text.is_empty())
+        .map(|segment| {
+            let font_family = if segment.style.code { MONO_FONT } else { BODY_FONT };
+            let font_weight = if segment.style.bold { 600 } else { 400 };
+            let font_style = if segment.style.italic { "italic" } else { "normal" };
+            format!(
+                r#"<tspan font-family="{font_family}" font-weight="{font_weight}" font-style="{font_style}">{}</tspan>"#,
+                escape_xml(&segment.text)
+            )
+        })
+        .collect::<String>();
+
+    format!(
+        r#"<text x="{x}" y="{y}" fill="{fill}" font-size="{font_size}" xml:space="preserve">{segments}</text>"#
     )
 }
 
@@ -396,4 +400,55 @@ fn escape_xml(text: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MONO_FONT;
+    use crate::{
+        cli::Theme,
+        render::text::{
+            RenderedInlineSegment, RenderedInlineStyle, RenderedLine, RenderedLineKind,
+        },
+    };
+
+    #[test]
+    fn build_svg_preserves_inline_emphasis_weight_and_style() {
+        let svg = super::build_svg(
+            &[RenderedLine {
+                plain_text: "bold italic code".to_string(),
+                display_text: "bold italic code".to_string(),
+                spans: vec![
+                    RenderedInlineSegment {
+                        text: "bold".to_string(),
+                        style: RenderedInlineStyle::BOLD,
+                    },
+                    RenderedInlineSegment {
+                        text: " ".to_string(),
+                        style: RenderedInlineStyle::PLAIN,
+                    },
+                    RenderedInlineSegment {
+                        text: "italic".to_string(),
+                        style: RenderedInlineStyle::ITALIC,
+                    },
+                    RenderedInlineSegment {
+                        text: " ".to_string(),
+                        style: RenderedInlineStyle::PLAIN,
+                    },
+                    RenderedInlineSegment {
+                        text: "code".to_string(),
+                        style: RenderedInlineStyle::CODE,
+                    },
+                ],
+                kind: RenderedLineKind::Paragraph,
+            }],
+            Theme::Light,
+            800,
+            120,
+        );
+
+        assert!(svg.contains(r#"font-weight="600""#), "{svg}");
+        assert!(svg.contains(r#"font-style="italic""#), "{svg}");
+        assert!(svg.contains(&format!("font-family=\"{MONO_FONT}\"")), "{svg}");
+    }
 }

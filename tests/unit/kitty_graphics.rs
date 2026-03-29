@@ -18,6 +18,10 @@ fn encodes_image_placement_command() {
         placement_id: 3,
         columns: 12,
         rows: 4,
+        source_x_px: 11,
+        source_y_px: 13,
+        source_width_px: 101,
+        source_height_px: 79,
         cursor_x: 2,
         cursor_y: 5,
         z_index: -1,
@@ -30,6 +34,10 @@ fn encodes_image_placement_command() {
     assert!(escape.contains("p=3"));
     assert!(escape.contains("c=12"));
     assert!(escape.contains("r=4"));
+    assert!(escape.contains("x=11"));
+    assert!(escape.contains("y=13"));
+    assert!(escape.contains("w=101"));
+    assert!(escape.contains("h=79"));
     assert!(escape.contains("X=2"));
     assert!(escape.contains("Y=5"));
 }

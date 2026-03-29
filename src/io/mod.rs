@@ -3,3 +3,4 @@ pub mod fs;
 pub mod image_decoder;
 pub mod kitty_graphics;
 pub mod mermaid_cli;
+pub mod webkit_snapshot;
