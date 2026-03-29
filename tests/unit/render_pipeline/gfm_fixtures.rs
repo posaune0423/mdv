@@ -4,11 +4,13 @@ use mdv::{
     cli::Theme,
     core::config::MermaidMode,
     render::github_html::build_github_html,
-    ui::page_graphics::{build_graphic_page, total_rows, viewport_slice},
 };
 
 #[cfg(target_os = "macos")]
-use mdv::io::webkit_snapshot::render_html_to_png;
+use mdv::{
+    io::webkit_snapshot::render_html_to_png,
+    ui::page_graphics::{build_graphic_page, total_rows, viewport_slice},
+};
 
 fn fixture_dirs() -> Vec<std::path::PathBuf> {
     let root = Path::new("tests/fixtures/gfm");

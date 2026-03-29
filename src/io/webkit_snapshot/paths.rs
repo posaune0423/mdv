@@ -28,6 +28,7 @@ pub(super) fn create_workspace(base_dir: &Path, read_access_root: &Path) -> Resu
     Ok(dir)
 }
 
+#[cfg(target_os = "macos")]
 pub(super) fn common_read_access_root(html: &str, base_dir: &Path) -> PathBuf {
     snapshot_asset_root(html, base_dir)
 }
