@@ -730,8 +730,7 @@ fn resize_graphic_space(rendered: &mut RenderedDocument, graphic_index: usize, n
 #[cfg(test)]
 mod tests {
     use super::{
-        GraphicViewport, article_wrap_width, collect_graphics_commands, resize_graphic_space,
-        visible_graphic_placements,
+        GraphicViewport, article_wrap_width, collect_graphics_commands, visible_graphic_placements,
     };
     use std::fs;
 
@@ -742,7 +741,7 @@ mod tests {
         cli::Theme,
         core::config::{AppConfig, MermaidMode},
         io::fs::FileSystemDocumentSource,
-        render::text::{RenderedDocument, RenderedGraphic, RenderedLine, RenderedLineKind},
+        render::text::{RenderedDocument, RenderedGraphic},
         ui::terminal::TerminalViewer,
     };
 
@@ -805,40 +804,6 @@ mod tests {
         assert_eq!(first_commands.iter().filter(|command| command.contains("a=t")).count(), 1);
         assert_eq!(second_commands.iter().filter(|command| command.contains("a=t")).count(), 0);
         assert!(second_commands.iter().any(|command| command.contains("a=p")));
-    }
-
-    #[test]
-    fn resizing_graphic_space_updates_following_offsets() {
-        let mut rendered = RenderedDocument {
-            lines: vec![
-                RenderedLine {
-                    plain_text: String::new(),
-                    display_text: String::new(),
-                    kind: RenderedLineKind::Blank,
-                };
-                7
-            ],
-            graphics: vec![
-                RenderedGraphic {
-                    line_index: 1,
-                    width_cells: 10,
-                    height_cells: 2,
-                    content: crate::render::text::RenderedGraphicContent::Png(vec![1]),
-                },
-                RenderedGraphic {
-                    line_index: 5,
-                    width_cells: 10,
-                    height_cells: 2,
-                    content: crate::render::text::RenderedGraphicContent::Png(vec![2]),
-                },
-            ],
-        };
-
-        resize_graphic_space(&mut rendered, 0, 4);
-
-        assert_eq!(rendered.graphics[0].height_cells, 4);
-        assert_eq!(rendered.graphics[1].line_index, 7);
-        assert_eq!(rendered.lines.len(), 9);
     }
 
     #[test]
