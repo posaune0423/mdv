@@ -37,5 +37,7 @@ pub fn startup_message(args: &MdvArgs) -> String {
 }
 
 fn requested_version_flag(args: &[std::ffi::OsString]) -> bool {
-    args.len() == 2 && args[1].to_str().is_some_and(|flag| matches!(flag, "--version" | "-V"))
+    args.iter()
+        .skip(1)
+        .any(|arg| arg.to_str().is_some_and(|flag| matches!(flag, "--version" | "-V")))
 }

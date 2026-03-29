@@ -44,6 +44,14 @@ fn ci_workflow_refreshes_the_tracked_binary_on_main_pushes() {
         "ci workflow should commit refreshed bin/mdv back to main"
     );
     assert!(
+        workflow.contains("git fetch origin main"),
+        "ci workflow should fetch the latest main branch before pushing refreshed bin/mdv"
+    );
+    assert!(
+        workflow.contains("git rebase origin/main"),
+        "ci workflow should rebase onto the latest main branch before pushing refreshed bin/mdv"
+    );
+    assert!(
         branches.iter().any(|branch| branch.as_str() == Some("main")),
         "ci workflow should run on pushes to main"
     );
