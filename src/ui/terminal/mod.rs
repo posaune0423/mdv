@@ -5,7 +5,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEventKind},
@@ -30,7 +30,6 @@ use self::{
         render_graphic_page, truncate_visible,
     },
 };
-#[cfg(test)]
 use crate::render::text::render_document;
 use crate::{
     core::{config::AppConfig, document::Document, theme::ThemeTokens},
@@ -97,21 +96,32 @@ impl TerminalViewer {
     ) -> Result<Self> {
         let cell_metrics = current_cell_metrics();
         let last_modified = source.modified_at().ok();
-        let graphic_page = render_graphic_page(&config, &document, &source_text, cell_metrics)
-            .with_context(|| {
-                format!("interactive graphic render failed for {}", source.path().display())
-            })?;
+        let (graphic_page, rendered, warning) =
+            match render_graphic_page(&config, &document, &source_text, cell_metrics) {
+                Ok(page) => (Some(page), None, None),
+                Err(error) => (
+                    None,
+                    Some(render_document(
+                        &document,
+                        config.theme,
+                        config.mermaid_mode,
+                        article_wrap_width(terminal::size().map_or(80, |(cols, _)| cols)),
+                        cell_metrics.width_px / cell_metrics.height_px,
+                    )),
+                    Some(format!("graphic mode unavailable: {error}")),
+                ),
+            };
 
         Ok(Self {
             config,
             source,
             document,
             source_text,
-            rendered: None,
-            graphic_page: Some(graphic_page),
+            rendered,
+            graphic_page,
             scroll: 0,
             last_modified,
-            warning: None,
+            warning,
             needs_redraw: true,
             pending_layout_refresh: false,
             clear_all_graphics: false,
@@ -448,9 +458,18 @@ impl TerminalViewer {
         ) {
             Ok(graphic_page) => {
                 self.graphic_page = Some(graphic_page);
+                self.rendered = None;
                 self.warning = None;
             }
             Err(error) => {
+                self.graphic_page = None;
+                self.rendered = Some(render_document(
+                    &self.document,
+                    self.config.theme,
+                    self.config.mermaid_mode,
+                    article_wrap_width(terminal::size().map_or(80, |(cols, _)| cols)),
+                    self.cell_metrics.width_px / self.cell_metrics.height_px,
+                ));
                 self.warning = Some(format!("graphic render failed: {error}"));
             }
         }

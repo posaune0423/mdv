@@ -104,7 +104,7 @@
 
 - Root cause: the image pipeline was working, but `examples/rich_markdown.md` referenced a `4x4` fixture image. The GitHub HTML path renders images at intrinsic size, so the final WebKit snapshot only painted a `4px` image, which is effectively invisible in terminal viewing.
 - Fix: replaced `examples/pixel.png` with a visible `96x96` PNG fixture while keeping the same filename and Markdown source, so the rich example now demonstrates image rendering instead of an almost invisible pixel.
-- Regression coverage: [tests/unit/render_pipeline/webkit_snapshot.rs](/Users/asumayamada/Private/posaune0423/mdv/tests/unit/render_pipeline/webkit_snapshot.rs#L271) now requires the rich fixture image to render at least `32px` wide and tall in the snapshot path.
+- Regression coverage: [tests/unit/render_pipeline/webkit_snapshot.rs](../../tests/unit/render_pipeline/webkit_snapshot.rs#L271) now requires the rich fixture image to render at least `32px` wide and tall in the snapshot path.
 - Verification:
 - `cargo test webkit_snapshot_keeps_rich_fixture_image_and_mermaid_visible -- --nocapture` passed
 - `cargo test webkit_snapshot_renders_local_markdown_images -- --nocapture` passed

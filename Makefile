@@ -48,7 +48,7 @@ ci: fmt-check lint test
 install-local:
 	cargo install --path . --force
 
-run-local:
+run-local: build
 	./bin/mdv $(FILE)
 
 release-metadata:

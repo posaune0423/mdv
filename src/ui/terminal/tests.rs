@@ -190,7 +190,7 @@ fn resize_events_defer_layout_refresh_until_draw() {
 }
 
 #[test]
-fn try_new_surfaces_graphic_mode_failure() {
+fn try_new_degrades_gracefully_when_graphic_mode_unavailable() {
     let file = NamedTempFile::new()
         .unwrap_or_else(|error| panic!("temp markdown should be created: {error}"));
     let source = "# Title\n\nParagraph.\n";
@@ -204,7 +204,7 @@ fn try_new_surfaces_graphic_mode_failure() {
     let document = crate::render::markdown::parse_document(path.clone(), source)
         .unwrap_or_else(|error| panic!("document should parse: {error}"));
 
-    let error = TerminalViewer::try_new(
+    let viewer = TerminalViewer::try_new(
         AppConfig {
             path: path.clone(),
             watch: false,
@@ -215,12 +215,11 @@ fn try_new_surfaces_graphic_mode_failure() {
         document,
         source.to_string(),
     )
-    .err()
-    .unwrap_or_else(|| panic!("viewer should fail when graphic mode is unavailable"));
+    .unwrap_or_else(|error| panic!("viewer should degrade gracefully, not fail: {error}"));
 
-    let message = format!("{error:#}");
-    assert!(message.contains("interactive graphic render failed"));
-    assert!(message.contains("graphic mode disabled during tests"));
+    assert!(viewer.graphic_page.is_none(), "graphic page should be None in test mode");
+    assert!(viewer.rendered.is_some(), "text-mode fallback should be populated");
+    assert!(viewer.warning.is_some(), "warning should be set when graphic mode is unavailable");
 }
 
 fn sample_viewer(source: &str) -> TerminalViewer {

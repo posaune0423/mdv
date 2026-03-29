@@ -3,17 +3,47 @@ use crate::cli::Theme;
 pub(super) fn retint_code_tokens(html: &str, theme: Theme) -> String {
     match theme {
         Theme::Light | Theme::System => html.to_string(),
-        Theme::Dark => [
-            ("#b48ead", "#ff7b72"),
-            ("#8fa1b3", "#79c0ff"),
-            ("#a3be8c", "#a5d6ff"),
-            ("#d08770", "#ffa657"),
-            ("#96b5b4", "#7ee787"),
-            ("#65737e", "#8b949e"),
-        ]
-        .into_iter()
-        .fold(html.to_string(), |acc, (from, to)| acc.replace(from, to)),
+        Theme::Dark => {
+            let color_map: &[(&str, &str)] = &[
+                ("#b48ead", "#ff7b72"),
+                ("#8fa1b3", "#79c0ff"),
+                ("#a3be8c", "#a5d6ff"),
+                ("#d08770", "#ffa657"),
+                ("#96b5b4", "#7ee787"),
+                ("#65737e", "#8b949e"),
+            ];
+            retint_style_colors(html, color_map)
+        }
     }
+}
+
+/// Replace hex colors only inside `style="color:#..."` attributes so that
+/// user-authored text containing the same hex values is not corrupted.
+fn retint_style_colors(html: &str, color_map: &[(&str, &str)]) -> String {
+    let mut output = String::with_capacity(html.len());
+    let mut rest = html;
+    let needle = "style=\"color:";
+
+    while let Some(pos) = rest.find(needle) {
+        // Copy everything before this style attribute verbatim.
+        output.push_str(&rest[..pos]);
+        let after_prefix = &rest[pos + needle.len()..];
+        // Find the closing quote of the style attribute value.
+        let close = after_prefix.find('"').unwrap_or(after_prefix.len());
+        let color_value = &after_prefix[..close];
+
+        output.push_str(needle);
+        let mut replaced = color_value.to_string();
+        for &(from, to) in color_map {
+            replaced = replaced.replace(from, to);
+        }
+        output.push_str(&replaced);
+
+        rest = &after_prefix[close..];
+    }
+
+    output.push_str(rest);
+    output
 }
 
 pub(super) fn decorate_code_blocks(html: &str) -> String {
@@ -144,25 +174,90 @@ pub(super) fn inject_alert_icons(html: &str) -> String {
 pub(super) fn restore_supported_raw_html(html: &str) -> String {
     let mut output = String::with_capacity(html.len());
     let mut rest = html;
+    let mut inside_code_or_pre = false;
 
-    while let Some(start) = rest.find("&lt;") {
-        output.push_str(&rest[..start]);
-        let tag_segment = &rest[start..];
-        let Some(end) = tag_segment.find("&gt;") else {
-            output.push_str(tag_segment);
+    loop {
+        if inside_code_or_pre {
+            // Look for the closing </code> or </pre> tag before doing anything else.
+            if let Some(close_pos) = find_code_pre_close(rest) {
+                let end = close_pos.0 + close_pos.1;
+                output.push_str(&rest[..end]);
+                rest = &rest[end..];
+                inside_code_or_pre = false;
+                continue;
+            }
+            // No closing tag found — rest of document is inside code/pre.
+            output.push_str(rest);
             return output;
-        };
-        let escaped_tag = &tag_segment[..end + "&gt;".len()];
-        if let Some(restored) = restore_supported_tag(escaped_tag) {
-            output.push_str(&restored);
-        } else {
-            output.push_str(escaped_tag);
         }
-        rest = &tag_segment[end + "&gt;".len()..];
-    }
 
-    output.push_str(rest);
-    output
+        // Find the next interesting position: either an escaped tag or a <code>/<pre> open.
+        let escaped_pos = rest.find("&lt;");
+        let code_open = find_code_pre_open(rest);
+
+        match (escaped_pos, code_open) {
+            (None, None) => {
+                output.push_str(rest);
+                return output;
+            }
+            // A <code>/<pre> open comes before (or at) the next escaped tag.
+            (_, Some((co_pos, co_len))) if escaped_pos.is_none_or(|ep| co_pos <= ep) => {
+                let end = co_pos + co_len;
+                output.push_str(&rest[..end]);
+                rest = &rest[end..];
+                inside_code_or_pre = true;
+            }
+            // An escaped tag comes first — try to restore it.
+            (Some(start), _) => {
+                output.push_str(&rest[..start]);
+                let tag_segment = &rest[start..];
+                let Some(end) = tag_segment.find("&gt;") else {
+                    output.push_str(tag_segment);
+                    return output;
+                };
+                let escaped_tag = &tag_segment[..end + "&gt;".len()];
+                if let Some(restored) = restore_supported_tag(escaped_tag) {
+                    output.push_str(&restored);
+                } else {
+                    output.push_str(escaped_tag);
+                }
+                rest = &tag_segment[end + "&gt;".len()..];
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+/// Find the start position and byte-length of the next `<code` or `<pre` opening tag.
+fn find_code_pre_open(html: &str) -> Option<(usize, usize)> {
+    let mut best: Option<(usize, usize)> = None;
+    for needle in ["<code", "<pre"] {
+        let Some(pos) = html.find(needle) else { continue };
+        let after = pos + needle.len();
+        if after < html.len() && !matches!(html.as_bytes()[after], b'>' | b' ' | b'\t' | b'\n') {
+            continue;
+        }
+        if let Some(close) = html[pos..].find('>') {
+            let tag_len = close + 1;
+            if best.is_none_or(|(bp, _)| pos < bp) {
+                best = Some((pos, tag_len));
+            }
+        }
+    }
+    best
+}
+
+/// Find the end position (start, byte-length) of the next `</code>` or `</pre>` closing tag.
+fn find_code_pre_close(html: &str) -> Option<(usize, usize)> {
+    let mut best: Option<(usize, usize)> = None;
+    for needle in ["</code>", "</pre>"] {
+        if let Some(pos) = html.find(needle)
+            && best.is_none_or(|(bp, _)| pos < bp)
+        {
+            best = Some((pos, needle.len()));
+        }
+    }
+    best
 }
 
 fn restore_supported_tag(escaped_tag: &str) -> Option<String> {
@@ -323,7 +418,8 @@ fn is_safe_src(src: &str) -> bool {
     if is_safe_href(src) {
         return true;
     }
+    let lower = src.trim_start().to_ascii_lowercase();
     // Allow bare relative paths (e.g. "docs/screenshot.jpg", "image.png")
     // but reject anything that looks like a protocol other than http(s)
-    !src.contains("://") && !src.starts_with("javascript:")
+    !src.contains("://") && !lower.starts_with("javascript:") && !lower.starts_with("data:")
 }
