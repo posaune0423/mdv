@@ -80,10 +80,7 @@ fn preserves_non_layout_html_blocks_as_plain_text() {
 
     assert!(matches!(
         document.blocks.as_slice(),
-        [mdv::core::document::Block {
-            kind: BlockKind::Paragraph { .. },
-            ..
-        }]
+        [mdv::core::document::Block { kind: BlockKind::Paragraph { .. }, .. }]
     ));
 }
 

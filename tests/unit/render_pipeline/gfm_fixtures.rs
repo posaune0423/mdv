@@ -93,18 +93,9 @@ fn html_img_fixture_restores_img_tags_in_github_html() {
         body.contains(r#"<img src="../../../../examples/pixel.png""#),
         "standalone <img> should be restored, got:\n{body}"
     );
-    assert!(
-        body.contains(r#"width="700""#),
-        "width attribute should be preserved, got:\n{body}"
-    );
-    assert!(
-        body.contains(r#"<p align="center">"#),
-        "<p align> should be restored, got:\n{body}"
-    );
-    assert!(
-        body.contains("</p>"),
-        "</p> should be restored, got:\n{body}"
-    );
+    assert!(body.contains(r#"width="700""#), "width attribute should be preserved, got:\n{body}");
+    assert!(body.contains(r#"<p align="center">"#), "<p align> should be restored, got:\n{body}");
+    assert!(body.contains("</p>"), "</p> should be restored, got:\n{body}");
 }
 
 #[test]

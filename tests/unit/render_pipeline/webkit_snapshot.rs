@@ -278,7 +278,10 @@ fn webkit_snapshot_renders_html_img_from_project_readme() {
     let body_start = html.find("<article").unwrap();
     let body_end = html.find("</article>").unwrap();
     let body = &html[body_start..body_end];
-    eprintln!("=== README article (first 500 chars) ===\n{}\n=== END ===", &body[..body.len().min(500)]);
+    eprintln!(
+        "=== README article (first 500 chars) ===\n{}\n=== END ===",
+        &body[..body.len().min(500)]
+    );
     assert!(
         body.contains(r#"<img src="docs/screenshot.jpg""#),
         "README <img> tag should be restored in github html"
@@ -288,7 +291,10 @@ fn webkit_snapshot_renders_html_img_from_project_readme() {
         .unwrap_or_else(|error| panic!("README webkit snapshot should render: {error}"));
 
     // The screenshot image should load successfully
-    let screenshot_assets: Vec<_> = snapshot.diagnostics.images.iter()
+    let screenshot_assets: Vec<_> = snapshot
+        .diagnostics
+        .images
+        .iter()
         .filter(|img| img.source.contains("screenshot"))
         .collect();
     assert!(
