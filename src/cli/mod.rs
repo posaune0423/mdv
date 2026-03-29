@@ -2,11 +2,16 @@ mod args;
 
 pub use args::{MdvArgs, MdvCommand, Theme};
 
-use clap::Parser;
-
 #[must_use]
 pub fn parse() -> MdvArgs {
-    MdvArgs::parse()
+    let raw_args: Vec<_> = std::env::args_os().collect();
+
+    if requested_version_flag(&raw_args) {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        std::process::exit(0);
+    }
+
+    MdvArgs::parse_from(raw_args)
 }
 
 #[must_use]
@@ -29,4 +34,8 @@ pub fn startup_message(args: &MdvArgs) -> String {
     message.push_str(&format!(" theme={}", args.theme.as_str()));
 
     message
+}
+
+fn requested_version_flag(args: &[std::ffi::OsString]) -> bool {
+    args.len() == 2 && args[1].to_str().is_some_and(|flag| matches!(flag, "--version" | "-V"))
 }

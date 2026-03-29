@@ -1,53 +1,34 @@
 use std::{
     fs::{self, File},
     io,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
-use anyhow::{Context, Result, bail};
-use flate2::read::GzDecoder;
-use tar::Archive;
+use anyhow::{Context, Result};
 
 const REPOSITORY: &str = "posaune0423/mdv";
-const DEFAULT_CHANNEL: &str = "main";
+const MAIN_BINARY_URL: &str = "https://raw.githubusercontent.com/posaune0423/mdv/main/bin/mdv";
 
 #[must_use]
-pub fn release_asset_name(os: &str, arch: &str) -> Option<String> {
-    let target = match (os, arch) {
-        ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
-        ("linux", "aarch64") => "aarch64-unknown-linux-gnu",
-        ("macos", "x86_64") => "x86_64-apple-darwin",
-        ("macos", "aarch64") => "aarch64-apple-darwin",
-        _ => return None,
-    };
-
-    Some(format!("mdv-{target}.tar.gz"))
-}
-
-#[must_use]
-pub fn main_channel_asset_url(os: &str, arch: &str) -> Option<String> {
-    release_asset_name(os, arch).map(|asset| asset_download_url(DEFAULT_CHANNEL, &asset))
+pub const fn main_binary_url() -> &'static str {
+    MAIN_BINARY_URL
 }
 
 pub fn update_current_executable() -> Result<()> {
-    let asset =
-        release_asset_name(std::env::consts::OS, std::env::consts::ARCH).ok_or_else(|| {
-            anyhow::anyhow!(
-                "self-update is only supported on Linux x86_64/aarch64 and macOS x86_64/aarch64"
-            )
-        })?;
-    let channel = configured_channel()?;
-    let url = asset_download_url(&channel, &asset);
     let current_exe =
         std::env::current_exe().context("failed to resolve the current mdv executable path")?;
     let temp_dir = tempfile::tempdir().context("failed to create a temporary update directory")?;
-    let archive_path = temp_dir.path().join(&asset);
+    let latest_binary_path = temp_dir.path().join("mdv-main");
 
-    download_release_archive(&url, &archive_path)?;
-    let extracted = extract_archive_binary(&archive_path, temp_dir.path())?;
-    install_replacement(&current_exe, &extracted)?;
+    download_main_binary(main_binary_url(), &latest_binary_path)?;
+    if binaries_match(&current_exe, &latest_binary_path)? {
+        println!("mdv is already up to date at {}", current_exe.display());
+        return Ok(());
+    }
 
-    println!("Updated mdv from channel '{channel}' at {}", current_exe.display());
+    install_replacement(&current_exe, &latest_binary_path)?;
+
+    println!("Updated mdv from {} to {}", main_binary_url(), current_exe.display());
     if directory_is_on_path(current_exe.parent().unwrap_or_else(|| Path::new("."))) {
         println!("PATH continues to resolve mdv from {}", current_exe.display());
     } else {
@@ -60,22 +41,9 @@ pub fn update_current_executable() -> Result<()> {
     Ok(())
 }
 
-fn configured_channel() -> Result<String> {
-    let channel = std::env::var("MDV_CHANNEL").unwrap_or_else(|_| DEFAULT_CHANNEL.to_string());
-    let channel = channel.trim();
-    if channel.is_empty() {
-        bail!("MDV_CHANNEL must not be empty");
-    }
-    Ok(channel.to_string())
-}
-
-fn asset_download_url(channel: &str, asset: &str) -> String {
-    format!("https://github.com/{REPOSITORY}/releases/download/{channel}/{asset}")
-}
-
-fn download_release_archive(url: &str, destination: &Path) -> Result<()> {
+fn download_main_binary(url: &str, destination: &Path) -> Result<()> {
     let response = ureq::get(url)
-        .set("User-Agent", &format!("mdv/{}", env!("CARGO_PKG_VERSION")))
+        .set("User-Agent", &format!("{REPOSITORY}/{}", env!("CARGO_PKG_VERSION")))
         .call()
         .with_context(|| format!("failed to download mdv from {url}"))?;
     let mut reader = response.into_reader();
@@ -86,29 +54,15 @@ fn download_release_archive(url: &str, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-fn extract_archive_binary(archive_path: &Path, temp_dir: &Path) -> Result<PathBuf> {
-    let archive_file = File::open(archive_path)
-        .with_context(|| format!("failed to open {}", archive_path.display()))?;
-    let decoder = GzDecoder::new(archive_file);
-    let mut archive = Archive::new(decoder);
-    let extracted_path = temp_dir.join("mdv-extracted");
-
-    for entry in archive.entries().context("failed to read release archive entries")? {
-        let mut entry = entry.context("failed to read a release archive entry")?;
-        if entry.path().context("failed to inspect a release archive entry path")?.as_ref()
-            == Path::new("mdv")
-        {
-            entry
-                .unpack(&extracted_path)
-                .with_context(|| format!("failed to unpack {}", extracted_path.display()))?;
-            return Ok(extracted_path);
-        }
-    }
-
-    bail!("release archive did not contain a top-level mdv binary")
+fn binaries_match(current_exe: &Path, latest_binary: &Path) -> Result<bool> {
+    let current = fs::read(current_exe)
+        .with_context(|| format!("failed to read {}", current_exe.display()))?;
+    let latest = fs::read(latest_binary)
+        .with_context(|| format!("failed to read {}", latest_binary.display()))?;
+    Ok(current == latest)
 }
 
-fn install_replacement(current_exe: &Path, extracted: &Path) -> Result<()> {
+fn install_replacement(current_exe: &Path, replacement: &Path) -> Result<()> {
     let install_dir = current_exe
         .parent()
         .with_context(|| format!("{} has no parent directory", current_exe.display()))?;
@@ -119,10 +73,10 @@ fn install_replacement(current_exe: &Path, extracted: &Path) -> Result<()> {
             .with_context(|| format!("failed to remove stale {}", staged.display()))?;
     }
 
-    fs::copy(extracted, &staged)
+    fs::copy(replacement, &staged)
         .with_context(|| format!("failed to stage {}", staged.display()))?;
-    let permissions = fs::metadata(extracted)
-        .with_context(|| format!("failed to read {}", extracted.display()))?
+    let permissions = fs::metadata(current_exe)
+        .with_context(|| format!("failed to read {}", current_exe.display()))?
         .permissions();
     fs::set_permissions(&staged, permissions)
         .with_context(|| format!("failed to set permissions on {}", staged.display()))?;

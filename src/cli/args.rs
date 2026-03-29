@@ -43,10 +43,10 @@ impl MdvArgs {
 
 #[derive(Clone, Debug, Eq, PartialEq, Subcommand)]
 pub enum MdvCommand {
-    /// Install the latest main build over the current mdv executable.
+    /// Replace the current mdv executable when `main`'s CI-generated binary changes.
     #[command(
         visible_alias = "upgrade",
-        about = "Install the latest main build over the current mdv executable"
+        about = "Replace the current mdv executable when GitHub main publishes a different CI-generated bin/mdv"
     )]
     Update,
 }

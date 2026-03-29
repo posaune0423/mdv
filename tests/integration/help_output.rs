@@ -1,5 +1,5 @@
 use assert_cmd::Command;
-use predicates::str::contains;
+use predicates::str::{contains, diff};
 
 #[test]
 fn help_mentions_core_flags() {
@@ -20,7 +20,7 @@ fn help_mentions_core_flags() {
 }
 
 #[test]
-fn update_help_mentions_latest_main_install() {
+fn update_help_mentions_main_binary_replacement() {
     let mut command = match Command::cargo_bin("mdv") {
         Ok(command) => command,
         Err(error) => panic!("binary should build: {error}"),
@@ -30,6 +30,20 @@ fn update_help_mentions_latest_main_install() {
         .args(["update", "--help"])
         .assert()
         .success()
-        .stdout(contains("latest main build"))
-        .stdout(contains("current mdv executable"));
+        .stdout(contains("GitHub main"))
+        .stdout(contains("bin/mdv"));
+}
+
+#[test]
+fn version_flag_prints_the_package_version() {
+    let mut command = match Command::cargo_bin("mdv") {
+        Ok(command) => command,
+        Err(error) => panic!("binary should build: {error}"),
+    };
+
+    command
+        .arg("--version")
+        .assert()
+        .success()
+        .stdout(diff(format!("{}\n", env!("CARGO_PKG_VERSION"))));
 }

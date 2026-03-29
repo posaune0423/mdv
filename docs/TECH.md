@@ -172,24 +172,17 @@ GitHub Actions の `ci.yml` は次を実行する。
 - format check
 - clippy
 - test
-- host-native release-asset check
 
 Rust toolchain は `1.92.0` に固定されている。
 
-### 8.3 Release
+### 8.3 Distribution
 
-`main-channel.yml` は `main` push を契機に各 target の archive を作り、`main` tag の rolling release を更新する。
+release automation は現在持たない。配布契約は次の 2 本だけである。
 
-`release.yml` は `main` push ごとに `release-please` を実行し、release PR の更新または stable release の作成を行う。`release_created` のときだけ reusable release-assets workflow を呼び出して次を行う。
+- `scripts/install.sh` は GitHub `main` 上の追跡対象 `bin/mdv` を取得して install directory に配置する
+- `mdv update` は現在の実行ファイルと GitHub `main` の `bin/mdv` を byte-for-byte で比較し、差分があるときだけ置き換える
 
-- Linux x86_64 / arm64 ビルド
-- macOS x86_64 / arm64 ビルド
-- `tar.gz` アーカイブ作成
-- packaged archive の extract / `mdv --help` check
-- `SHA256SUMS` 生成
-- 作成済み GitHub Release への asset upload
-
-インストーラは `scripts/install.sh` が既定で rolling `main` channel のアーカイブを取得し、`MDV_CHANNEL` を指定すると特定 tag の配布物へ切り替えられる。
+repo の `bin/mdv` は install / update の実体であり、`main` への push 後に `ci.yml` の macOS job が自動生成して必要時のみ commit する。ローカルでは `make build-tracked-bin` で同じ packaging path を再現できるが、追跡 binary の更新責務は人手ではなく CI が持つ。
 
 ## 9. テスト戦略
 

@@ -26,6 +26,7 @@ If you live in [Ghostty](https://ghostty.org/) or [Kitty](https://sw.kovidgoyal.
 | **Syntax highlighting** | 100+ languages via [syntect](https://github.com/trishume/syntect) |
 | **System/light/dark themes** | `system` by default, with explicit `light` / `dark` overrides |
 | **Watch mode** | `--watch` auto-reloads on file change |
+| **Quick update** | `mdv update` replaces the current executable when `main`'s CI-generated `bin/mdv` changes |
 | **Pipe-friendly** | Plain-text fallback when stdout is not a TTY — works in CI and scripts |
 | **Vim navigation** | `j`/`k`/`g`/`G`/PageUp/PageDown |
 
@@ -37,6 +38,8 @@ If you live in [Ghostty](https://ghostty.org/) or [Kitty](https://sw.kovidgoyal.
 curl --proto '=https' --tlsv1.2 -LsSf \
   https://raw.githubusercontent.com/posaune0423/mdv/main/scripts/install.sh | sh
 ```
+
+This installs the CI-generated [`bin/mdv`](bin/mdv) artifact from `main`. If that binary does not match your host platform, build from source instead.
 
 **Run** (in Ghostty or Kitty):
 
@@ -51,8 +54,9 @@ mdv README.md                            # system theme (default)
 mdv --theme dark notes.md                # dark theme
 mdv --watch docs/guide.md               # auto-reload on save
 mdv --no-mermaid spec.md                # skip Mermaid rendering
-mdv update                              # install the latest main build over this mdv binary
-mdv ./CHANGELOG.md | head -n 50         # plain-text output (pipe/CI)
+mdv update                              # replace this mdv if main/bin/mdv changed
+mdv --version                           # print the current version
+mdv ./README.md | head -n 50            # plain-text output (pipe/CI)
 ```
 
 ### Keyboard shortcuts
@@ -78,10 +82,7 @@ mdv ./CHANGELOG.md | head -n 50         # plain-text output (pipe/CI)
 
 | Method | Command / notes |
 |--------|-----------------|
-| **Install script** | See [Quick start](#quick-start). Defaults to the rolling `main` channel; set `MDV_CHANNEL=vMAJOR.MINOR.PATCH` to pin a release tag. |
-| **GitHub Releases** | Download a prebuilt archive from [Releases](https://github.com/posaune0423/mdv/releases). Linux x86_64/arm64, macOS Intel/Apple Silicon. SHA256SUMS included. |
-| **Homebrew** | `brew install mdv` (when available in [homebrew-core](https://github.com/Homebrew/homebrew-core)) |
-| **mise** | `mise use -g github:posaune0423/mdv` |
+| **Install script** | See [Quick start](#quick-start). Downloads the CI-generated `main` branch [`bin/mdv`](bin/mdv) and installs it into `MDV_INSTALL_DIR` or `$HOME/.local/bin`. |
 | **Cargo** | `cargo install --path . --locked --force` or `make install-local` from a clone |
 
 ## Troubleshooting
@@ -89,7 +90,7 @@ mdv ./CHANGELOG.md | head -n 50         # plain-text output (pipe/CI)
 | Symptom | What to try |
 |---------|-------------|
 | `mdv: command not found` | Ensure `$HOME/.local/bin` is on `PATH`, then restart the terminal. |
-| `mdv update` fails | Confirm the current `mdv` location is writable and the host platform has a matching published release asset for the selected channel (`main` by default, or `MDV_CHANNEL`). |
+| `mdv update` fails | Confirm the current `mdv` location is writable and GitHub `main` exposes the expected [`bin/mdv`](bin/mdv) artifact. |
 | Plain text instead of rich viewer | Requires a TTY in Ghostty or Kitty. Pipes and redirects trigger headless mode by design. |
 | Mermaid diagrams show placeholders | Install `mmdc` or use `npx @mermaid-js/mermaid-cli`. Use `--no-mermaid` to skip entirely. |
 | Graphic / snapshot issues | Rich rendering uses WebKit (macOS only). See [docs/TECH.md](docs/TECH.md). |
@@ -100,7 +101,6 @@ mdv ./CHANGELOG.md | head -n 50         # plain-text output (pipe/CI)
 - [GFM features & authoring](docs/MARKDOWN.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Development & contributing](docs/DEVELOPMENT.md)
-- [Changelog](CHANGELOG.md)
 
 ## Contributing
 

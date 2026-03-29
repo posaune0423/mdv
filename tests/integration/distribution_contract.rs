@@ -1,51 +1,90 @@
-use std::fs;
+use std::{fs, path::Path};
+
+use serde_yaml::{Mapping, Value};
 
 #[test]
-fn install_script_downloads_the_main_channel_binary() {
+fn install_script_downloads_the_tracked_main_binary_with_feedback() {
     let script = fs::read_to_string("scripts/install.sh").unwrap_or_else(|error| {
         panic!("install script should be readable from the repository root: {error}")
     });
 
     assert!(
-        script.contains("MDV_CHANNEL:-main"),
-        "install script should default to the rolling main channel"
+        script.contains("raw.githubusercontent.com/${REPO}/main/bin/mdv"),
+        "install script should download the tracked main binary"
     );
-    assert!(
-        script.contains("/releases/download/${channel}/"),
-        "install script should resolve binaries from the selected published channel"
-    );
+    assert!(script.contains("spinner"), "install script should provide loading feedback");
+    assert!(script.contains("_____"), "install script should print the success ASCII banner");
 }
 
 #[test]
-fn ci_workflow_uses_release_assets_naming() {
+fn ci_workflow_refreshes_the_tracked_binary_on_main_pushes() {
     let workflow = fs::read_to_string(".github/workflows/ci.yml")
         .unwrap_or_else(|error| panic!("ci workflow should be readable: {error}"));
+    let parsed = parse_yaml(&workflow);
+    let root = parsed.as_mapping().unwrap_or_else(|| panic!("workflow root should be a mapping"));
+    let jobs = mapping_field(root, "jobs");
+    let triggers = mapping_field(root, "on");
+    let push = mapping_field(triggers, "push");
+    let branches = sequence_field(push, "branches");
 
     assert!(
-        workflow.contains("  release_assets:\n"),
-        "ci workflow should use a release_assets job name"
+        jobs.contains_key(Value::String("checks".to_string())),
+        "ci workflow should keep the core checks job"
     );
     assert!(
-        workflow.contains("make release-assets-check"),
-        "ci workflow should verify the release-assets check path"
+        jobs.contains_key(Value::String("refresh_tracked_binary".to_string())),
+        "ci workflow should refresh bin/mdv from CI on main pushes"
+    );
+    assert!(
+        workflow.contains("github.actor != 'github-actions[bot]'"),
+        "ci workflow should avoid infinite bot-triggered refresh loops"
+    );
+    assert!(
+        workflow.contains("git add bin/mdv"),
+        "ci workflow should commit refreshed bin/mdv back to main"
+    );
+    assert!(
+        branches.iter().any(|branch| branch.as_str() == Some("main")),
+        "ci workflow should run on pushes to main"
+    );
+    assert!(
+        !jobs.contains_key(Value::String("release_assets".to_string())),
+        "ci workflow should no longer define the old release asset job"
     );
 }
 
 #[test]
-fn release_workflow_is_release_please_driven() {
-    let workflow = fs::read_to_string(".github/workflows/release.yml")
-        .unwrap_or_else(|error| panic!("release workflow should be readable: {error}"));
+fn release_automation_files_are_removed() {
+    assert!(
+        !Path::new(".github/workflows/main-channel.yml").exists(),
+        "main-channel workflow should be removed"
+    );
+    assert!(
+        !Path::new(".github/workflows/release-assets.yml").exists(),
+        "release-assets workflow should be removed"
+    );
+    assert!(
+        !Path::new(".github/workflows/release.yml").exists(),
+        "release workflow should be removed"
+    );
+}
 
-    assert!(
-        workflow.contains("googleapis/release-please-action@v4"),
-        "release workflow should use release-please for automated versioning"
-    );
-    assert!(
-        workflow.contains("branches:\n      - main"),
-        "release workflow should run from main pushes instead of manual tag pushes"
-    );
-    assert!(
-        !workflow.contains("tags:\n      - \"v*\""),
-        "release workflow should not rely on tag-push triggers anymore"
-    );
+fn parse_yaml(source: &str) -> Value {
+    serde_yaml::from_str::<Value>(source)
+        .unwrap_or_else(|error| panic!("workflow should be valid YAML: {error}"))
+}
+
+fn mapping_field<'a>(mapping: &'a Mapping, key: &str) -> &'a Mapping {
+    mapping
+        .get(Value::String(key.to_string()))
+        .and_then(Value::as_mapping)
+        .unwrap_or_else(|| panic!("workflow field `{key}` should be a mapping"))
+}
+
+fn sequence_field<'a>(mapping: &'a Mapping, key: &str) -> &'a [Value] {
+    mapping
+        .get(Value::String(key.to_string()))
+        .and_then(Value::as_sequence)
+        .map(Vec::as_slice)
+        .unwrap_or_else(|| panic!("workflow field `{key}` should be a sequence"))
 }

@@ -1,16 +1,13 @@
 SHELL := /bin/sh
 UNAME_S := $(shell uname -s)
 
-.PHONY: build fmt fmt-check lint test test-unit test-integration test-e2e check ci install-local run-local release-metadata release-package release-assets-check
-
-HOST_TARGET := $(shell rustc -vV | sed -n 's/^host: //p')
-PACKAGE_VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
-TARGET ?= $(HOST_TARGET)
-OUT_DIR ?= target/release-dist
+.PHONY: build build-tracked-bin fmt fmt-check lint test test-unit test-integration test-e2e check ci install-local run-local
 
 build:
-	mkdir -p bin
 	cargo build --release
+
+build-tracked-bin: build
+	mkdir -p bin
 ifneq ($(UNAME_S),Darwin)
 	cp target/release/mdv bin/mdv
 else
@@ -50,12 +47,3 @@ install-local:
 
 run-local: build
 	./bin/mdv $(FILE)
-
-release-metadata:
-	./scripts/verify-release-metadata.sh v$(PACKAGE_VERSION)
-
-release-package:
-	./scripts/package-release.sh $(TARGET) $(OUT_DIR)
-
-release-assets-check: release-metadata release-package
-	./scripts/verify-release-archive.sh $(OUT_DIR)/mdv-$(TARGET).tar.gz $(OUT_DIR)/SHA256SUMS.part

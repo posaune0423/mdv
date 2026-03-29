@@ -19,12 +19,8 @@ Default install directory: $HOME/.local/bin (override with MDV_INSTALL_DIR).
 
 After install: ensure the install directory is on PATH (e.g. export PATH="$HOME/.local/bin:$PATH").
 
-The install script defaults to the rolling `main` channel. Set `MDV_CHANNEL=vX.Y.Z` to pin a release tag instead.
-
 Other options:
-- GitHub Releases: download archive, extract `mdv`, put on PATH.
-- Homebrew: `brew install mdv` when available in homebrew-core; or use a third-party tap (Formula lives in the tap repo, not the mdv app repo).
-- mise: `mise use -g github:posaune0423/mdv` (optional tool_alias in ~/.config/mise/config.toml: mdv = "github:posaune0423/mdv").
+- The install script downloads the CI-generated `main` branch `bin/mdv` artifact and places it on PATH.
 - From source (Rust 1.92+, edition 2024): `cargo install --path . --locked --force` or `make install-local` from a clone.
 
 ## Basic usage
@@ -36,6 +32,8 @@ Examples:
   mdv README.md
   mdv --theme dark --watch ./docs/guide.md
   mdv --no-mermaid notes.md
+  mdv update
+  mdv --version
   mdv --help
 
 ## CLI flags (clap / MdvArgs)
@@ -48,7 +46,6 @@ Examples:
 ## Environment variables (common)
 
 - MDV_INSTALL_DIR: install script target directory (default ~/.local/bin).
-- MDV_CHANNEL: install/update channel or release tag (default main).
 - MDV_MERMAID_CMD: optional explicit command for Mermaid CLI; otherwise mmdc or npx @mermaid-js/mermaid-cli may be used (see docs/TECH.md).
 
 ## Troubleshooting (short)
