@@ -14,8 +14,7 @@ Authoritative details: README.md, docs/MARKDOWN.md, docs/ARCHITECTURE.md, docs/T
 
 Default install directory: $HOME/.local/bin (override with MDV_INSTALL_DIR).
 
-  curl --proto '=https' --tlsv1.2 -LsSf \
-    https://raw.githubusercontent.com/posaune0423/mdv/main/scripts/install.sh | sh
+  curl -fsSL https://raw.githubusercontent.com/posaune0423/mdv/main/scripts/install.sh | sh
 
 After install: ensure the install directory is on PATH (e.g. export PATH="$HOME/.local/bin:$PATH").
 

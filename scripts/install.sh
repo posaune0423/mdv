@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install the tracked mdv binary from the main branch.
 # Usage:
-#   curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/posaune0423/mdv/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/posaune0423/mdv/main/scripts/install.sh | sh
 # Optional env:
 #   MDV_INSTALL_DIR  directory for the binary (default: $HOME/.local/bin)
 
