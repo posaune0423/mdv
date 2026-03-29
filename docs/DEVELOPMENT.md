@@ -15,37 +15,42 @@ chmod +x ./mdv   # once, if needed
 make ci    # fmt-check, clippy -D warnings, full test suite
 ```
 
+## Git hooks
+
+This repo uses [`lefthook`](https://github.com/evilmartians/lefthook) for local git hooks.
+
+```bash
+brew install lefthook
+make hooks-install
+```
+
+Configured hooks:
+
+- `pre-commit`: `cargo fmt --all -- --check` and `cargo check --workspace --all-targets --all-features`
+- `pre-push`: `make ci`
+
 | Command | Purpose |
 |---------|---------|
 | `make fmt` / `make fmt-check` | `rustfmt` |
 | `make lint` | `clippy` with warnings denied |
 | `make test` | All tests |
 | `make test-unit` / `test-integration` / `test-e2e` | Split suites |
-| `make release-smoke` | Validate release metadata, package a host-native archive, and verify the packaged binary |
+| `make build` | Build `target/release/mdv` |
+| `make build-tracked-bin` | Build `target/release/mdv` and refresh the local `bin/mdv` copy using the same path CI uses on `main` |
+| `make hooks-install` | Install git hooks from `lefthook.yml` into `.git/hooks` |
 
 ## Contributing
 
 Issues and pull requests are welcome. Please run `make ci` before opening a PR so formatting, Clippy, and tests match what GitHub Actions enforces.
 
-## Releases
+## Distribution
 
-Versioning is **Cargo-first**: update `Cargo.toml` and [CHANGELOG.md](../CHANGELOG.md), then create and push an annotated tag `vMAJOR.MINOR.PATCH`. [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds archives and attaches them to a GitHub Release for that tag.
+This repository currently has no release automation and no changelog workflow. Distribution is intentionally simple:
 
-Before pushing the tag, run:
-
-```bash
-make release-smoke
-```
-
-The release workflow now rejects tags that do not match `Cargo.toml` and refuses to publish if the packaged archive cannot be extracted into a working `mdv` binary.
-
-Once a release exists, installed users can update in place with:
-
-```bash
-mdv update
-```
-
-`mdv update` downloads the latest GitHub Release archive for the current host platform and replaces the currently running `mdv` executable, so an existing PATH entry keeps working when `mdv` was already being launched from PATH.
+- `scripts/install.sh` downloads GitHub `main`'s CI-generated `bin/mdv` and installs it into the selected bin directory.
+- `mdv update` downloads that same CI-generated `bin/mdv`, compares it to the current executable, and replaces the current file only when the bytes differ.
+- Pushes to `main` run `.github/workflows/ci.yml`, which builds `bin/mdv` on macOS and commits the refreshed artifact back to `main` when the bytes change.
+- `make build-tracked-bin` exists for local reproduction of the CI packaging path, but the tracked `bin/mdv` contract is owned by CI rather than manual contributor updates.
 
 ### Contributors
 

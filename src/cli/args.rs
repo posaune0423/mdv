@@ -5,7 +5,6 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[derive(Clone, Debug, Eq, Parser, PartialEq)]
 #[command(
     name = "mdv",
-    version,
     about = "High-fidelity Markdown viewer for Ghostty and Kitty",
     arg_required_else_help = true,
     args_conflicts_with_subcommands = true
@@ -28,6 +27,10 @@ pub struct MdvArgs {
     /// Disable Mermaid rendering and show placeholders instead.
     #[arg(long = "no-mermaid")]
     pub no_mermaid: bool,
+
+    /// Print the current version.
+    #[arg(short = 'V', long = "version", global = true)]
+    pub version: bool,
 }
 
 impl MdvArgs {
@@ -43,10 +46,10 @@ impl MdvArgs {
 
 #[derive(Clone, Debug, Eq, PartialEq, Subcommand)]
 pub enum MdvCommand {
-    /// Install the latest GitHub Release over the current mdv executable.
+    /// Replace the current mdv executable when `main`'s CI-generated binary changes.
     #[command(
         visible_alias = "upgrade",
-        about = "Install the latest GitHub Release over the current mdv executable"
+        about = "Replace the current mdv executable when GitHub main publishes a different CI-generated bin/mdv"
     )]
     Update,
 }

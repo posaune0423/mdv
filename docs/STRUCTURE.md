@@ -16,6 +16,7 @@
 ├── .agents/
 ├── .cargo/
 ├── .github/
+├── bin/
 ├── docs/
 ├── examples/
 ├── scripts/
@@ -33,7 +34,8 @@
 | --- | --- |
 | `docs/` | 製品・技術・構造ドキュメント、および初期設計メモ |
 | `.agents/memory/` | エージェント用の task memory と lessons |
-| `.github/workflows/` | CI と release workflow |
+| `.github/workflows/` | CI workflow |
+| `bin/` | install / update 対象として git 管理する `mdv` binary |
 | `scripts/` | 配布用 install script |
 | `examples/` | rich Markdown fixture とサンプル画像 |
 | `src/` | 本体実装 |
@@ -237,10 +239,10 @@ tests/
 | `Cargo.lock` | 依存 lock |
 | `rust-toolchain.toml` | Rust version 固定 |
 | `.cargo/config.toml` | cargo alias |
-| `Makefile` | build / test / lint の短縮コマンド |
-| `scripts/install.sh` | GitHub Releases からのインストール |
-| `.github/workflows/ci.yml` | CI |
-| `.github/workflows/release.yml` | Release packaging |
+| `Makefile` | build / test / lint の短縮コマンドと CI 再現用 `build-tracked-bin` |
+| `bin/mdv` | install script と `mdv update` が参照する追跡 binary |
+| `scripts/install.sh` | GitHub `main` の `bin/mdv` を取得して install する |
+| `.github/workflows/ci.yml` | fmt / clippy / test を回し、`main` push 後は `bin/mdv` も自動生成して commit する CI |
 
 ## 7. 設計上の見どころ
 

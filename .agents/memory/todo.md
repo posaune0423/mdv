@@ -1,3 +1,86 @@
+## Current Task
+
+- [x] Move `bin/mdv` generation responsibility from humans to CI
+- [x] Refresh `bin/mdv` automatically after pushes to `main`
+- [x] Update local build/docs/tests to match the new CI-owned binary contract
+- [x] Run the relevant verification and record the outcome below
+
+## Current Task Review
+
+- CI contract: `.github/workflows/ci.yml` now keeps the existing `checks` job and adds a `refresh_tracked_binary` job that runs only for non-bot pushes to `main`, builds `bin/mdv` on `macos-latest`, and commits the file back only when the bytes changed.
+- Loop prevention: the refresh job is gated by `github.actor != 'github-actions[bot]'`, so the follow-up bot commit can still run checks without recursively regenerating `bin/mdv`.
+- Build contract: `make build` now only builds `target/release/mdv`; `make build-tracked-bin` reproduces the CI packaging path locally without implying that contributors should hand-maintain the tracked repo binary.
+- Docs and CLI copy: README, development/tech/structure docs, `llm.txt`, and the `update` subcommand help now describe `bin/mdv` as CI-generated from `main`, not manually refreshed by contributors.
+- Regression coverage:
+- `tests/integration/distribution_contract.rs` now requires the CI workflow to include the tracked-binary refresh job, bot-loop guard, and `git add bin/mdv` commit path.
+- Verification:
+- `cargo test --test integration ci_workflow_refreshes_the_tracked_binary_on_main_pushes -- --nocapture` passed
+- `cargo test --test integration distribution_contract -- --nocapture` passed
+- `cargo test --test integration help_output -- --nocapture` passed
+- `cargo fmt --all --check` passed
+
+## Current Task
+
+- [x] Make `mdv --version` print only the numeric version string
+- [x] Update regression coverage to require exact numeric-only stdout
+- [x] Run the targeted verification and record the outcome below
+
+## Current Task Review
+
+- Contract change: `mdv --version` now prints only `CARGO_PKG_VERSION` followed by a newline, without the `mdv ` prefix.
+- Implementation: `src/cli/mod.rs` intercepts the standalone `--version` and `-V` invocation before Clap emits its default banner, then exits successfully after printing the raw version string.
+- Regression coverage: `tests/integration/help_output.rs` now requires exact stdout equality with `0.1.0\n`-style output instead of substring matching.
+- Verification:
+- `cargo test --test integration version_flag_prints_the_package_version -- --nocapture` passed
+- `cargo test --test integration help_ -- --nocapture` passed
+- `cargo run --quiet -- --version` printed `0.1.0`
+- `cargo fmt --all --check` passed
+
+## Current Task
+
+- [x] Remove release, release-assets, and main-channel automation from the repository
+- [x] Remove changelog and stale release references from docs, workflows, scripts, and tests
+- [x] Change `scripts/install.sh` to download the tracked `main` branch `bin/mdv`, show ANSI loading feedback, and print the requested ASCII banner on success
+- [x] Keep `mdv update`, but make it compare the current executable with GitHub `main`'s `bin/mdv` and replace only when newer content exists
+- [x] Add regression coverage for `mdv --version` and the new install/update distribution contract
+- [x] Run formatting and the relevant test suite, then record the outcome below
+
+## Current Task Review
+
+- Distribution model changed from release assets to a tracked repo artifact: `scripts/install.sh` now downloads GitHub `main`'s `bin/mdv`, shows ANSI spinner feedback during download, and prints the requested ASCII banner after install.
+- `mdv update` was kept, but its behavior now matches the simplified model: it downloads GitHub `main`'s `bin/mdv`, compares it byte-for-byte with the current executable, and replaces the current file only when the contents differ.
+- Release automation and related files were removed: `main-channel.yml`, `release-assets.yml`, `release.yml`, release packaging scripts, release-please metadata, and `CHANGELOG.md`.
+- CLI/docs/tests were updated to match the new contract, and regression coverage now checks both `mdv --version` and the main-binary install/update path.
+- Verification:
+- `cargo fmt --all` passed
+- `sh -n scripts/install.sh` passed
+- `cargo test --workspace --all-targets --all-features` passed
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed
+- `cargo run --quiet -- --version` returned `0.1.0`
+- `cargo run --quiet -- update --help` showed the new main-binary replacement help text
+
+## Current Task
+
+- [x] Add `lefthook` configuration for local git hooks using the existing repo quality gates
+- [x] Add a simple install entrypoint for `lefthook`
+- [x] Document the hook workflow and add regression coverage for the config
+- [x] Run verification and record the outcome below
+
+## Current Task Review
+
+- Added [`lefthook.yml`](/Users/asumayamada/Private/posaune0423/mdv/lefthook.yml) with `pre-commit` gates for `cargo fmt --all -- --check` and `cargo check --workspace --all-targets --all-features`, plus a `pre-push` gate that reuses `make ci`.
+- Added [`hooks-install`](/Users/asumayamada/Private/posaune0423/mdv/Makefile) to [`Makefile`](/Users/asumayamada/Private/posaune0423/mdv/Makefile) and documented the local hook workflow in [`docs/DEVELOPMENT.md`](/Users/asumayamada/Private/posaune0423/mdv/docs/DEVELOPMENT.md).
+- Added regression coverage in [`tests/integration/distribution_contract.rs`](/Users/asumayamada/Private/posaune0423/mdv/tests/integration/distribution_contract.rs) so the repo keeps the expected hook commands.
+- Installed `lefthook@2.1.3` via `mise use -g lefthook@2.1.3` and synced hooks with `lefthook install`.
+- Verification:
+- `cargo fmt --all` passed
+- `cargo test --test integration distribution_contract -- --nocapture` passed
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed
+- `cargo check --workspace --all-targets --all-features` passed
+- `lefthook install` synced `pre-commit` and `pre-push`
+- `lefthook run pre-commit --force` passed
+- `lefthook run pre-push --force` passed
+
 ## Documentation Task
 
 - [x] Audit the repository entrypoints, rendering pipeline, packaging, and tests for `mdv`
@@ -258,6 +341,32 @@
 - [x] Fix the release artifact path so the built binary survives macOS execution policy checks
 - [x] Re-run build, lint, format, and the exact interactive startup command
 
+## Current Task
+
+- [x] Inspect the current install/update asset resolution and main-vs-release packaging path
+- [x] Add regression coverage for the new main-channel install/update contract before changing implementation
+- [x] Publish a rolling `main` binary channel and switch `scripts/install.sh` plus `mdv update` to consume it
+- [x] Replace `release-smoke` naming with clearer packaging terminology where it still appears
+- [x] Rework stable release automation around `release-please` while keeping asset packaging automated in GitHub Actions
+- [x] Re-run packaging, tests, help output, workflow syntax checks, and record the outcome below
+
+## Current Task Review
+
+- Install/update contract: `scripts/install.sh` and `mdv update` now default to the rolling `main` channel instead of `releases/latest`, and both accept `MDV_CHANNEL` to pin a specific release tag when needed.
+- Rolling binaries: added [`.github/workflows/main-channel.yml`](../../.github/workflows/main-channel.yml) to build all supported targets on every `main` push, move the `main` tag forward, and refresh the prerelease assets that install/update consume.
+- Stable release automation: replaced manual tag-push release publishing with [`.github/workflows/release.yml`](../../.github/workflows/release.yml) driven by `googleapis/release-please-action`, plus [`release-please-config.json`](../../release-please-config.json) and [`.release-please-manifest.json`](../../.release-please-manifest.json).
+- Packaging reuse: extracted the shared multi-target archive build into [`.github/workflows/package-artifacts.yml`](../../.github/workflows/package-artifacts.yml) so rolling `main` and stable releases use the same packaging path.
+- CI naming: renamed the old `release-smoke` CI job/target to `packaging` / `package-check` so the CI workflow no longer uses release wording for a verification-only job.
+- Docs sync: updated README, `llm.txt`, and project docs so install/update, release automation, and packaging commands match the new workflow.
+- Verification:
+- `cargo fmt --all --check` passed
+- `cargo test --workspace --all-targets --all-features` passed
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed
+- `cargo run --quiet -- update --help` passed
+- `make package-check` passed
+- `ruby -e 'require "yaml"; %w[.github/workflows/ci.yml .github/workflows/main-channel.yml .github/workflows/package-artifacts.yml .github/workflows/release.yml].each { |f| YAML.load_file(f) }'` passed
+- `git diff --check` passed
+
 ## Current Task Review
 
 - Root cause: the previous close-out stopped at tests and partial startup checks. The user's exact release command still failed because macOS was killing `./bin/mdv` with `SIGKILL (Code Signature Invalid)` under `taskgated`.
@@ -350,3 +459,35 @@
 - `cargo fmt --all --check` passed
 - `cargo clippy --workspace --all-targets -- -D warnings` passed
 - `make build && ./bin/mdv --theme dark README.md` reached interactive startup with the dark-theme code path
+
+## Current Task
+
+- [ ] Define a lightweight changesets-style contract that fits this Rust-only repo
+- [ ] Implement release-fragment tooling that updates `Cargo.toml` and `CHANGELOG.md`
+- [ ] Add regression coverage for fragment application and metadata validation
+- [ ] Update contributor/release docs for the new workflow
+- [ ] Re-run verification and record the outcome below
+
+## Current Task Review
+
+- Scope: added a repo-native changesets-style release flow without introducing a Node toolchain.
+- Contract:
+- release fragments now live under `.changeset/*.md`
+- each fragment declares `bump: patch|minor|major` front matter and carries the markdown body that should land in the release notes
+- `scripts/apply-changesets.sh` now computes the highest pending bump, updates `Cargo.toml`, folds fragment bodies into `CHANGELOG.md`, updates compare/release links, and deletes the processed fragments
+- `scripts/verify-release-metadata.sh` now also rejects releases while pending `.changeset/*.md` files still exist
+- Developer workflow:
+- `make release-prepare` applies pending fragments
+- `make package-check` still verifies release metadata and packaged archives before tagging
+- Regression coverage:
+- `tests/release_changesets.rs` now verifies fragment application, version bumping, changelog link updates, fragment cleanup, and release metadata rejection when pending fragments remain
+- Verification:
+- `cargo test --test release_changesets -- --nocapture` passed
+- `cargo clippy --test release_changesets -- -D warnings` passed
+- `cargo fmt --all --check` passed
+- `make release-prepare` passed with `changesets: no pending fragments`
+- `make package-check` passed
+- `git diff --check` passed
+- Repo-wide verification status:
+- `cargo test --workspace --all-targets --all-features` is currently blocked by an existing uncommitted test expectation in `tests/integration/distribution_contract.rs` that requires a release-please-driven workflow (`release_workflow_is_release_please_driven`)
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` is currently blocked by existing unwrap/expect violations in other modified test files outside this task's scope

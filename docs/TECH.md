@@ -175,19 +175,14 @@ GitHub Actions の `ci.yml` は次を実行する。
 
 Rust toolchain は `1.92.0` に固定されている。
 
-### 8.3 Release
+### 8.3 Distribution
 
-`release.yml` は tag push を契機に次を行う。
+release automation は現在持たない。配布契約は次の 2 本だけである。
 
-- tag と `Cargo.toml` / `CHANGELOG.md` の整合を検証
-- Linux x86_64 / arm64 ビルド
-- macOS x86_64 / arm64 ビルド
-- `tar.gz` アーカイブ作成
-- packaged archive の extract / `mdv --help` smoke check
-- `SHA256SUMS` 生成
-- GitHub Release 公開
+- `scripts/install.sh` は GitHub `main` 上の追跡対象 `bin/mdv` を取得して install directory に配置する
+- `mdv update` は現在の実行ファイルと GitHub `main` の `bin/mdv` を byte-for-byte で比較し、差分があるときだけ置き換える
 
-インストーラは `scripts/install.sh` が GitHub Releases から適切なアーカイブを取得する。
+repo の `bin/mdv` は install / update の実体であり、`main` への push 後に `ci.yml` の macOS job が自動生成して必要時のみ commit する。ローカルでは `make build-tracked-bin` で同じ packaging path を再現できるが、追跡 binary の更新責務は人手ではなく CI が持つ。
 
 ## 9. テスト戦略
 

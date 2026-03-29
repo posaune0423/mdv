@@ -6,6 +6,9 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   checks:
     runs-on: ubuntu-latest
@@ -31,11 +34,15 @@ jobs:
       - name: Test
         run: cargo test --workspace --all-targets --all-features
 
-  release-smoke:
-    runs-on: ubuntu-latest
+  refresh_tracked_binary:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
+    needs: checks
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -44,8 +51,26 @@ jobs:
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
-        with:
-          key: release-smoke
 
-      - name: Smoke-test release packaging
-        run: make release-smoke
+      - name: Build tracked binary
+        run: make build-tracked-bin
+
+      - name: Detect tracked binary changes
+        id: tracked_binary
+        run: |
+          if git diff --quiet -- bin/mdv; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit refreshed tracked binary
+        if: steps.tracked_binary.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bin/mdv
+          git commit -m "ci: refresh tracked binary"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main

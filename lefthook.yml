@@ -1,0 +1,14 @@
+pre-commit:
+  commands:
+    fmt:
+      always_run: true
+      run: cargo fmt --all -- --check
+    check:
+      always_run: true
+      run: cargo check --workspace --all-targets --all-features
+
+pre-push:
+  commands:
+    ci:
+      always_run: true
+      run: make ci

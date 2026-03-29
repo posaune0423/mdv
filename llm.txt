@@ -19,12 +19,8 @@ Default install directory: $HOME/.local/bin (override with MDV_INSTALL_DIR).
 
 After install: ensure the install directory is on PATH (e.g. export PATH="$HOME/.local/bin:$PATH").
 
-Pin installer to a release tag by replacing `main` with `vX.Y.Z` in the URL path to scripts/install.sh.
-
 Other options:
-- GitHub Releases: download archive, extract `mdv`, put on PATH.
-- Homebrew: `brew install mdv` when available in homebrew-core; or use a third-party tap (Formula lives in the tap repo, not the mdv app repo).
-- mise: `mise use -g github:posaune0423/mdv` (optional tool_alias in ~/.config/mise/config.toml: mdv = "github:posaune0423/mdv").
+- The install script downloads the CI-generated `main` branch `bin/mdv` artifact and places it on PATH.
 - From source (Rust 1.92+, edition 2024): `cargo install --path . --locked --force` or `make install-local` from a clone.
 
 ## Basic usage
@@ -36,13 +32,15 @@ Examples:
   mdv README.md
   mdv --theme dark --watch ./docs/guide.md
   mdv --no-mermaid notes.md
+  mdv update
+  mdv --version
   mdv --help
 
 ## CLI flags (clap / MdvArgs)
 
 - path: required positional argument — Markdown file to open (PathBuf).
 - --watch: reload when the file changes on disk.
-- --theme <light|dark>: default is light.
+- --theme <system|light|dark>: default is system.
 - --no-mermaid: disable Mermaid rendering; show placeholders.
 
 ## Environment variables (common)

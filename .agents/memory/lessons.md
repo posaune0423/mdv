@@ -31,3 +31,7 @@
 - When README-style raw HTML is part of the intended rich output, "visible as escaped text" is not enough. Distinguish plain-text normalization from interactive HTML rendering and verify supported wrappers like `<div align="center">` actually affect layout in the rich path.
 - When a user changes a CLI/product default, do not preserve the old default out of convenience. Update the CLI contract, runtime behavior, and docs together so the default the user experiences matches the request exactly.
 - When release or CLI behavior changes, do not stop at code and tests. Re-scan README for stale commands, defaults, and install/update instructions before calling the task done.
+- Do not conflate `raw.githubusercontent.com/.../main/scripts/install.sh` with "latest stable release". If the user wants latest `main`, provide a rolling published main-channel binary and keep stable release automation separate.
+- When adopting release automation for OSS, prefer a release-PR flow such as `release-please`, and attach packaged assets in the same workflow that creates the release rather than relying on tag-triggered follow-up workflows from `GITHUB_TOKEN`.
+- When the user wants a simpler main-only distribution model, remove release automation end-to-end instead of preserving release/update machinery out of habit.
+- If the user further simplifies distribution to a tracked repo binary, stop redesigning around source builds and align install/update around that exact artifact.
