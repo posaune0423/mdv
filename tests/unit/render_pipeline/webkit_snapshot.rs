@@ -348,6 +348,78 @@ fn webkit_snapshot_renders_badge_fixture_images_with_nonzero_size() {
 
 #[cfg(target_os = "macos")]
 #[test]
+fn webkit_snapshot_renders_centered_block_fixture_assets() {
+    let fixture_dir = gfm_fixture_dir("html-centered-blocks");
+    let html = build_github_html(
+        &gfm_fixture_input("html-centered-blocks"),
+        &fixture_dir,
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("centered block fixture html should render: {error}"));
+
+    let snapshot = render_html_to_png(&html, &fixture_dir, 960)
+        .unwrap_or_else(|error| panic!("centered block fixture snapshot should render: {error}"));
+
+    assert!(snapshot.diagnostics.images_ready);
+    assert_eq!(snapshot.diagnostics.images.len(), 4);
+
+    let centered_pngs: Vec<_> = snapshot
+        .diagnostics
+        .images
+        .iter()
+        .filter(|asset| asset.source.contains("pixel.png"))
+        .collect();
+    assert_eq!(centered_pngs.len(), 2);
+    assert!(
+        centered_pngs.iter().any(|asset| asset.rendered_width_px >= 200.0),
+        "expected at least one wide centered image, got {:?}",
+        centered_pngs.iter().map(|asset| asset.rendered_width_px).collect::<Vec<_>>()
+    );
+    assert!(
+        centered_pngs.iter().any(|asset| asset.rendered_width_px >= 300.0),
+        "expected the larger centered image to remain visibly wide, got {:?}",
+        centered_pngs.iter().map(|asset| asset.rendered_width_px).collect::<Vec<_>>()
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn webkit_snapshot_respects_explicit_html_img_height_attributes() {
+    let fixture_dir = gfm_fixture_dir("html-centered-blocks");
+    let html = build_github_html(
+        &gfm_fixture_input("html-centered-blocks"),
+        &fixture_dir,
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("centered block fixture html should render: {error}"));
+
+    let snapshot = render_html_to_png(&html, &fixture_dir, 960)
+        .unwrap_or_else(|error| panic!("centered block fixture snapshot should render: {error}"));
+
+    let badges: Vec<_> = snapshot
+        .diagnostics
+        .images
+        .iter()
+        .filter(|asset| {
+            asset.source.contains("badge-ci.svg") || asset.source.contains("badge-license.svg")
+        })
+        .collect();
+
+    assert_eq!(badges.len(), 2, "expected both badges in diagnostics");
+
+    for badge in badges {
+        assert_px_close(
+            badge.rendered_height_px,
+            28.0,
+            &format!("{} rendered height", badge.source),
+        );
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
 fn webkit_snapshot_allows_remote_badge_failures_without_aborting_page_render() {
     let fixture_dir = gfm_fixture_dir("badges-remote");
     let html = build_github_html(

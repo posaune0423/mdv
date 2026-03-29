@@ -5,8 +5,6 @@ UNAME_S := $(shell uname -s)
 
 build:
 	cargo build --release
-
-build-tracked-bin: build
 	mkdir -p bin
 ifneq ($(UNAME_S),Darwin)
 	cp target/release/mdv bin/mdv
@@ -15,6 +13,8 @@ else
 	cp target/release/mdv bin/mdv
 	codesign --force --sign - bin/mdv
 endif
+
+build-tracked-bin: build
 
 fmt:
 	cargo fmt --all

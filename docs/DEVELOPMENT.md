@@ -35,8 +35,8 @@ Configured hooks:
 | `make lint` | `clippy` with warnings denied |
 | `make test` | All tests |
 | `make test-unit` / `test-integration` / `test-e2e` | Split suites |
-| `make build` | Build `target/release/mdv` |
-| `make build-tracked-bin` | Build `target/release/mdv` and refresh the local `bin/mdv` copy using the same path CI uses on `main` |
+| `make build` | Build `target/release/mdv` and refresh the local `bin/mdv` copy so `./bin/mdv` runs the latest local build |
+| `make build-tracked-bin` | Alias for `make build`; kept for the CI packaging path name |
 | `make hooks-install` | Install git hooks from `lefthook.yml` into `.git/hooks` |
 
 ## Contributing
@@ -50,7 +50,7 @@ This repository currently has no release automation and no changelog workflow. D
 - `scripts/install.sh` downloads GitHub `main`'s CI-generated `bin/mdv` and installs it into the selected bin directory.
 - `mdv update` downloads that same CI-generated `bin/mdv`, compares it to the current executable, and replaces the current file only when the bytes differ.
 - Pushes to `main` run `.github/workflows/ci.yml`, which builds `bin/mdv` on macOS and commits the refreshed artifact back to `main` when the bytes change.
-- `make build-tracked-bin` exists for local reproduction of the CI packaging path, but the tracked `bin/mdv` contract is owned by CI rather than manual contributor updates.
+- `make build` refreshes the local `bin/mdv` copy as a runnable development artifact, while CI still owns the committed `main` branch `bin/mdv` that install/update consume.
 
 ### Contributors
 

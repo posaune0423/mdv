@@ -187,6 +187,18 @@ fn collect_text_segments<'a>(
                 });
             }
         }
+        NodeValue::Math(math) => {
+            let value = if math.display_math {
+                format!("$${}$$", math.literal)
+            } else if math.dollar_math {
+                format!("${}$", math.literal)
+            } else {
+                format!("$`{}`$", math.literal)
+            };
+            if !value.is_empty() {
+                parts.push(InlineSegment { text: value, style });
+            }
+        }
         NodeValue::HtmlInline(literal) => {
             if !literal.is_empty() {
                 parts.push(InlineSegment { text: literal.clone(), style });

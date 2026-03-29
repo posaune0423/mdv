@@ -71,3 +71,27 @@ fn headless_render_supports_stdin_with_dash_path() {
         .stdout(contains("# Title"))
         .stdout(contains("Paragraph with <br/> inline HTML."));
 }
+
+#[test]
+fn headless_render_keeps_math_expressions_visible() {
+    let file = match NamedTempFile::new() {
+        Ok(file) => file,
+        Err(error) => panic!("temp file should be created: {error}"),
+    };
+    let source = "Inline $e^{i\\pi} + 1 = 0$ and $$a^2 + b^2 = c^2$$.\n";
+    if let Err(error) = std::fs::write(file.path(), source) {
+        panic!("fixture should be written: {error}");
+    }
+
+    let mut command = match Command::cargo_bin("mdv") {
+        Ok(command) => command,
+        Err(error) => panic!("binary should build: {error}"),
+    };
+
+    command
+        .arg(file.path())
+        .assert()
+        .success()
+        .stdout(contains("$e^{i\\pi} + 1 = 0$"))
+        .stdout(contains("$$a^2 + b^2 = c^2$$"));
+}

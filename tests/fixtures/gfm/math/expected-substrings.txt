@@ -1,0 +1,2 @@
+<span data-math-style="inline">e^{i\pi} + 1 = 0</span>
+<span data-math-style="display">a^2 + b^2 = c^2</span>

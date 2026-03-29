@@ -197,19 +197,19 @@ pub(super) fn restore_supported_raw_html(html: &str) -> String {
 
         match (escaped_pos, code_open) {
             (None, None) => {
-                output.push_str(rest);
+                output.push_str(&decode_double_escaped_entities(rest));
                 return output;
             }
             // A <code>/<pre> open comes before (or at) the next escaped tag.
             (_, Some((co_pos, co_len))) if escaped_pos.is_none_or(|ep| co_pos <= ep) => {
                 let end = co_pos + co_len;
-                output.push_str(&rest[..end]);
+                output.push_str(&decode_double_escaped_entities(&rest[..end]));
                 rest = &rest[end..];
                 inside_code_or_pre = true;
             }
             // An escaped tag comes first — try to restore it.
             (Some(start), _) => {
-                output.push_str(&rest[..start]);
+                output.push_str(&decode_double_escaped_entities(&rest[..start]));
                 let tag_segment = &rest[start..];
                 let Some(end) = tag_segment.find("&gt;") else {
                     output.push_str(tag_segment);
@@ -226,6 +226,60 @@ pub(super) fn restore_supported_raw_html(html: &str) -> String {
             _ => unreachable!(),
         }
     }
+}
+
+fn decode_double_escaped_entities(text: &str) -> String {
+    let mut output = String::with_capacity(text.len());
+    let mut cursor = 0;
+
+    while let Some(offset) = text[cursor..].find("&amp;") {
+        let marker = cursor + offset;
+        output.push_str(&text[cursor..marker]);
+
+        let entity_start = marker + "&amp;".len();
+        let remaining = &text[entity_start..];
+        if let Some(entity_len) = escaped_entity_len(remaining) {
+            output.push('&');
+            output.push_str(&remaining[..entity_len]);
+            cursor = entity_start + entity_len;
+        } else {
+            output.push_str("&amp;");
+            cursor = entity_start;
+        }
+    }
+
+    output.push_str(&text[cursor..]);
+    output
+}
+
+fn escaped_entity_len(text: &str) -> Option<usize> {
+    let candidate = text.strip_prefix('#').map_or(text, |_| &text[1..]);
+    let is_numeric = text.starts_with('#');
+    let is_hex = text.starts_with("#x") || text.starts_with("#X");
+
+    if is_hex {
+        let digits = text.strip_prefix("#x").or_else(|| text.strip_prefix("#X"))?;
+        let end = digits.find(';')?;
+        if end == 0 || !digits[..end].chars().all(|ch| ch.is_ascii_hexdigit()) {
+            return None;
+        }
+        return Some(2 + end + 1);
+    }
+
+    if is_numeric {
+        let end = candidate.find(';')?;
+        if end == 0 || !candidate[..end].chars().all(|ch| ch.is_ascii_digit()) {
+            return None;
+        }
+        return Some(1 + end + 1);
+    }
+
+    let end = text.find(';')?;
+    let name = &text[..end];
+    if name.is_empty() || !name.chars().all(|ch| ch.is_ascii_alphanumeric()) {
+        return None;
+    }
+    Some(end + 1)
 }
 
 /// Find the start position and byte-length of the next `<code` or `<pre` opening tag.
@@ -267,8 +321,6 @@ fn restore_supported_tag(escaped_tag: &str) -> Option<String> {
 
     match decoded {
         "br" | "br/" | "br /" => return Some("<br/>".to_string()),
-        "div" => return Some("<div>".to_string()),
-        "/div" => return Some("</div>".to_string()),
         "sub" => return Some("<sub>".to_string()),
         "/sub" => return Some("</sub>".to_string()),
         "sup" => return Some("<sup>".to_string()),
@@ -277,21 +329,21 @@ fn restore_supported_tag(escaped_tag: &str) -> Option<String> {
         _ => {}
     }
 
-    if decoded == "p" {
-        return Some("<p>".to_string());
+    if let Some(block) = restore_block_tag(decoded) {
+        return Some(block);
     }
-    if decoded == "/p" {
-        return Some("</p>".to_string());
+    if let Some(block) = restore_block_tag_close(decoded) {
+        return Some(block);
     }
 
-    if let Some(div) = restore_div_with_align(decoded) {
-        return Some(div);
-    }
-    if let Some(p) = restore_p_with_align(decoded) {
-        return Some(p);
-    }
     if let Some(anchor) = restore_anchor(decoded) {
         return Some(anchor);
+    }
+    if let Some(picture) = restore_picture_tag(decoded) {
+        return Some(picture);
+    }
+    if let Some(source) = restore_source_tag(decoded) {
+        return Some(source);
     }
     if let Some(img) = restore_img(decoded) {
         return Some(img);
@@ -300,49 +352,103 @@ fn restore_supported_tag(escaped_tag: &str) -> Option<String> {
     None
 }
 
-fn restore_div_with_align(tag: &str) -> Option<String> {
-    let attrs = tag.strip_prefix("div")?.trim();
-    if attrs.is_empty() {
-        return Some("<div>".to_string());
-    }
-
-    let align = parse_single_attribute(attrs, "align")?;
-    if !matches!(align.as_str(), "left" | "center" | "right") {
+fn restore_block_tag(tag: &str) -> Option<String> {
+    let (name, attrs) = split_tag_name(tag)?;
+    if !matches!(
+        name,
+        "div" | "p" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "details" | "summary"
+    ) {
         return None;
     }
 
-    Some(format!(r#"<div align="{align}">"#))
+    if attrs.is_empty() {
+        return Some(format!("<{name}>"));
+    }
+
+    let parsed = parse_attributes_and_flags(attrs)?;
+    let align = parsed
+        .attrs
+        .iter()
+        .find(|(attr_name, _)| attr_name == "align")
+        .map(|(_, value)| value.as_str());
+
+    let mut output = format!("<{name}");
+
+    if let Some(value) = align {
+        if !matches!(value, "left" | "center" | "right") {
+            return None;
+        }
+        output.push_str(&format!(r#" align="{value}""#));
+    }
+
+    if name == "details" && parsed.flags.iter().any(|flag| flag == "open") {
+        output.push_str(" open");
+    }
+
+    output.push('>');
+    Some(output)
+}
+
+fn restore_block_tag_close(tag: &str) -> Option<String> {
+    let name = tag.strip_prefix('/')?;
+    if matches!(
+        name,
+        "div" | "p" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "details" | "summary" | "picture"
+    ) {
+        return Some(format!("</{name}>"));
+    }
+    None
 }
 
 fn restore_anchor(tag: &str) -> Option<String> {
     let attrs = tag.strip_prefix('a')?.trim();
-    let href = parse_single_attribute(attrs, "href")?;
-    if !is_safe_href(&href) {
+    let attrs = parse_attributes_strict(attrs)?;
+    let href = attrs.iter().find(|(name, _)| name == "href").map(|(_, value)| value.as_str())?;
+    if !is_safe_href(href) {
         return None;
     }
 
     Some(format!(r#"<a href="{href}">"#))
 }
 
-fn restore_p_with_align(tag: &str) -> Option<String> {
-    let attrs = tag.strip_prefix('p')?.trim();
-    if attrs.is_empty() {
-        return Some("<p>".to_string());
-    }
-
-    let align = parse_single_attribute(attrs, "align")?;
-    if !matches!(align.as_str(), "left" | "center" | "right") {
+fn restore_picture_tag(tag: &str) -> Option<String> {
+    let (name, attrs) = split_tag_name(tag)?;
+    if name != "picture" {
         return None;
     }
+    if !attrs.is_empty() {
+        return None;
+    }
+    Some("<picture>".to_string())
+}
 
-    Some(format!(r#"<p align="{align}">"#))
+fn restore_source_tag(tag: &str) -> Option<String> {
+    let body = tag.strip_prefix("source")?.trim();
+    let body = body.strip_suffix('/').unwrap_or(body).trim();
+    let attrs = parse_attributes_strict(body)?;
+
+    let mut result = String::from("<source");
+    for (name, value) in &attrs {
+        match name.as_str() {
+            "media" | "type" | "sizes" => result.push_str(&format!(r#" {name}="{value}""#)),
+            "srcset" => {
+                if !is_safe_srcset(value) {
+                    return None;
+                }
+                result.push_str(&format!(r#" {name}="{value}""#));
+            }
+            _ => return None,
+        }
+    }
+    result.push_str(" />");
+    Some(result)
 }
 
 fn restore_img(tag: &str) -> Option<String> {
     let body = tag.strip_prefix("img")?.trim();
     let body = body.strip_suffix('/').unwrap_or(body).trim();
 
-    let attrs = parse_attributes(body);
+    let attrs = parse_attributes_strict(body)?;
     let src = attrs.iter().find(|(name, _)| *name == "src").map(|(_, value)| value.as_str())?;
     if !is_safe_src(src) {
         return None;
@@ -355,7 +461,7 @@ fn restore_img(tag: &str) -> Option<String> {
             "alt" | "width" | "height" => {
                 result.push_str(&format!(r#" {name}="{value}""#));
             }
-            _ => return None,
+            _ => {}
         }
     }
     result.push_str(" />");
@@ -363,14 +469,31 @@ fn restore_img(tag: &str) -> Option<String> {
     Some(result)
 }
 
-fn parse_attributes(input: &str) -> Vec<(String, String)> {
+fn split_tag_name(tag: &str) -> Option<(&str, &str)> {
+    let trimmed = tag.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    match trimmed.split_once(char::is_whitespace) {
+        Some((name, attrs)) => Some((name, attrs.trim())),
+        None => Some((trimmed, "")),
+    }
+}
+
+fn parse_attributes_strict(input: &str) -> Option<Vec<(String, String)>> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Some(Vec::new());
+    }
+
     let mut attrs = Vec::new();
-    let mut rest = input.trim();
+    let mut rest = input;
 
     while !rest.is_empty() {
         let (name, after_name) = match rest.split_once('=') {
             Some((name, after)) => (name.trim(), after.trim()),
-            None => break,
+            None => return None,
         };
         let quoted = match after_name.strip_prefix('"') {
             Some(after_quote) => match after_quote.split_once('"') {
@@ -378,30 +501,68 @@ fn parse_attributes(input: &str) -> Vec<(String, String)> {
                     rest = remainder.trim();
                     value
                 }
-                None => break,
+                None => return None,
             },
-            None => break,
+            None => return None,
         };
         if quoted.contains('<') || quoted.contains('>') {
-            break;
+            return None;
         }
         attrs.push((name.to_string(), quoted.to_string()));
     }
 
-    attrs
+    Some(attrs)
 }
 
-fn parse_single_attribute(attrs: &str, expected_name: &str) -> Option<String> {
-    let (name, value) = attrs.split_once('=')?;
-    if name.trim() != expected_name {
-        return None;
+struct ParsedTagAttributes {
+    attrs: Vec<(String, String)>,
+    flags: Vec<String>,
+}
+
+fn parse_attributes_and_flags(input: &str) -> Option<ParsedTagAttributes> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Some(ParsedTagAttributes { attrs: Vec::new(), flags: Vec::new() });
     }
-    let value = value.trim();
-    let quoted = value.strip_prefix('"')?.strip_suffix('"')?;
-    if quoted.contains('"') || quoted.contains('<') || quoted.contains('>') {
-        return None;
+
+    let mut attrs = Vec::new();
+    let mut flags = Vec::new();
+    let mut rest = input;
+
+    while !rest.is_empty() {
+        let eq_pos = rest.find('=');
+        let space_pos = rest.find(char::is_whitespace);
+
+        match (eq_pos, space_pos) {
+            (Some(eq), Some(space)) if space < eq => {
+                let flag = rest[..space].trim();
+                if flag.is_empty() {
+                    return None;
+                }
+                flags.push(flag.to_string());
+                rest = rest[space..].trim();
+            }
+            (None, Some(space)) => {
+                let flag = rest[..space].trim();
+                if flag.is_empty() {
+                    return None;
+                }
+                flags.push(flag.to_string());
+                rest = rest[space..].trim();
+            }
+            (None, None) => {
+                flags.push(rest.trim().to_string());
+                rest = "";
+            }
+            _ => {
+                let parsed = parse_attributes_strict(rest)?;
+                attrs.extend(parsed);
+                rest = "";
+            }
+        }
     }
-    Some(quoted.to_string())
+
+    Some(ParsedTagAttributes { attrs, flags })
 }
 
 fn is_safe_href(href: &str) -> bool {
@@ -422,4 +583,15 @@ fn is_safe_src(src: &str) -> bool {
     // Allow bare relative paths (e.g. "docs/screenshot.jpg", "image.png")
     // but reject anything that looks like a protocol other than http(s)
     !src.contains("://") && !lower.starts_with("javascript:") && !lower.starts_with("data:")
+}
+
+fn is_safe_srcset(srcset: &str) -> bool {
+    for candidate in srcset.split(',') {
+        let reference = candidate.split_whitespace().next().unwrap_or("");
+        if reference.is_empty() || !is_safe_src(reference) {
+            return false;
+        }
+    }
+
+    true
 }

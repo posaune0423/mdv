@@ -117,6 +117,94 @@ fn badge_fixture_preserves_badge_images_in_github_html() {
 }
 
 #[test]
+fn centered_block_fixture_ignores_extra_attrs_but_restores_centered_html() {
+    let fixture_dir = fixture_dir("html-centered-blocks");
+    let html = build_github_html(
+        &fixture_input("html-centered-blocks"),
+        &fixture_dir,
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("centered block fixture should render: {error}"));
+    let body = extract_article_body(&html);
+
+    assert!(
+        body.contains(r#"<p align="center">"#),
+        "centered wrapper should be restored even when the source had extra attrs, got:\n{body}"
+    );
+    assert!(
+        body.contains(
+            r#"<img src="../../../../examples/pixel.png" alt="marry.fun" width="240" />"#
+        ),
+        "primary centered image should be restored, got:\n{body}"
+    );
+    assert!(
+        body.contains(r#"<a href="https://example.com/live"><img src="../badges-local/badge-ci.svg" alt="Live Demo" height="28" /></a>"#),
+        "badge row should keep nested links and images even when img had ignored attrs, got:\n{body}"
+    );
+    assert!(
+        !body.contains("&lt;p align=&quot;center&quot; style="),
+        "centered wrapper should not remain escaped, got:\n{body}"
+    );
+    assert!(
+        !body.contains("&lt;img src=&quot;../badges-local/badge-ci.svg&quot;"),
+        "img tags with harmless extra attrs should not remain escaped, got:\n{body}"
+    );
+}
+
+#[test]
+fn details_fixture_restores_details_and_summary_markup() {
+    let fixture_dir = fixture_dir("html-details");
+    let html = build_github_html(
+        &fixture_input("html-details"),
+        &fixture_dir,
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("details fixture should render: {error}"));
+    let body = extract_article_body(&html);
+
+    assert!(body.contains(r#"<details open>"#), "details tag should be restored, got:\n{body}");
+    assert!(
+        body.contains("<summary>Architecture Notes</summary>"),
+        "summary tag should be restored, got:\n{body}"
+    );
+    assert!(
+        !body.contains("&lt;details open&gt;"),
+        "details wrapper should not remain escaped, got:\n{body}"
+    );
+}
+
+#[test]
+fn picture_fixture_restores_picture_and_source_markup() {
+    let fixture_dir = fixture_dir("html-picture");
+    let html = build_github_html(
+        &fixture_input("html-picture"),
+        &fixture_dir,
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("picture fixture should render: {error}"));
+    let body = extract_article_body(&html);
+
+    assert!(body.contains("<picture>"), "picture tag should be restored, got:\n{body}");
+    assert!(
+        body.contains(r#"<source media="(prefers-color-scheme: dark)" srcset="../../../../examples/pixel.png" />"#),
+        "dark-mode source should be restored, got:\n{body}"
+    );
+    assert!(
+        body.contains(
+            r#"<img src="../../../../examples/pixel.png" alt="Responsive banner" width="96" />"#
+        ),
+        "fallback img should be restored, got:\n{body}"
+    );
+    assert!(
+        !body.contains("&lt;picture&gt;"),
+        "picture wrapper should not remain escaped, got:\n{body}"
+    );
+}
+
+#[test]
 fn gfm_fixtures_generate_expected_html_fragments() {
     for fixture_dir in fixture_dirs() {
         let input = fs::read_to_string(fixture_dir.join("input.md"))
