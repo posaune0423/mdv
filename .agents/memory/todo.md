@@ -1,5 +1,19 @@
 ## Current Task
 
+- [x] Add crates.io-oriented package metadata to `Cargo.toml`
+- [x] Run a minimal manifest verification
+- [x] Commit the metadata update
+- [x] Push the commit to `origin/main`
+
+## Current Task Review
+
+- Package metadata: `Cargo.toml` now declares `rust-version`, a crates.io-friendly `description`, `keywords`, and `categories`.
+- Discoverability: the added metadata aligns the package with terminal Markdown viewing on crates.io without inventing custom manifest fields such as `topic`.
+- Verification:
+- `cargo metadata --format-version 1 --no-deps >/dev/null` passed
+
+## Current Task
+
 - [x] Add a regression test that proves empty `.mdv-webkit` parent directories are removed after cleanup
 - [x] Implement minimal workspace cleanup so `.mdv-webkit` does not linger when empty
 - [x] Run targeted WebKit snapshot tests and record the outcome below
