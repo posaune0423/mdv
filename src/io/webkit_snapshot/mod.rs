@@ -25,7 +25,7 @@ pub use self::diagnostics::{
 };
 #[cfg(target_os = "macos")]
 use self::{
-    paths::{common_read_access_root, create_workspace},
+    paths::{cleanup_workspace, common_read_access_root, create_workspace},
     script::SWIFT_SNAPSHOT_SCRIPT,
 };
 
@@ -61,7 +61,7 @@ pub fn render_html_to_png(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let _ = fs::remove_dir_all(&workspace);
+        let _ = cleanup_workspace(&workspace);
         if stderr.is_empty() {
             bail!("swift snapshot helper exited with {}", output.status);
         }
@@ -75,7 +75,7 @@ pub fn render_html_to_png(
             serde_json::from_slice::<SnapshotDiagnostics>(&bytes)
                 .context("swift snapshot helper produced invalid diagnostics report")
         })?;
-    let _ = fs::remove_dir_all(workspace);
+    let _ = cleanup_workspace(&workspace);
     Ok(SnapshotResult { png_bytes, diagnostics })
 }
 

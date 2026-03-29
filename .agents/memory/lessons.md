@@ -35,3 +35,4 @@
 - When adopting release automation for OSS, prefer a release-PR flow such as `release-please`, and attach packaged assets in the same workflow that creates the release rather than relying on tag-triggered follow-up workflows from `GITHUB_TOKEN`.
 - When the user wants a simpler main-only distribution model, remove release automation end-to-end instead of preserving release/update machinery out of habit.
 - If the user further simplifies distribution to a tracked repo binary, stop redesigning around source builds and align install/update around that exact artifact.
+- When the user asks for install/update UX parity, carry the output contract through every terminal state, including the final success line with the resolved target version.

@@ -6,7 +6,7 @@
 | Status | Active |
 | Product | `mdv` |
 | Type | Rust 製 CLI Markdown Viewer |
-| Repository Version | `0.1.0` |
+| Repository Version | `0.1.1` |
 | Primary Interface | Terminal CLI |
 | Document Basis | Repository audit on 2026-03-29 |
 

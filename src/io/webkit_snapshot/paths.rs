@@ -28,6 +28,27 @@ pub(super) fn create_workspace(base_dir: &Path, read_access_root: &Path) -> Resu
     Ok(dir)
 }
 
+pub(super) fn cleanup_workspace(workspace: &Path) -> Result<()> {
+    fs::remove_dir_all(workspace)?;
+
+    let Some(parent) = workspace.parent() else {
+        return Ok(());
+    };
+    if parent.file_name().and_then(|name| name.to_str()) != Some(".mdv-webkit") {
+        return Ok(());
+    }
+    if !parent.exists() {
+        return Ok(());
+    }
+
+    let mut entries = fs::read_dir(parent)?;
+    if entries.next().is_none() {
+        fs::remove_dir(parent)?;
+    }
+
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 pub(super) fn common_read_access_root(html: &str, base_dir: &Path) -> PathBuf {
     snapshot_asset_root(html, base_dir)

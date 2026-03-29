@@ -1,5 +1,19 @@
 ## Current Task
 
+- [x] Add a regression test that proves empty `.mdv-webkit` parent directories are removed after cleanup
+- [x] Implement minimal workspace cleanup so `.mdv-webkit` does not linger when empty
+- [x] Run targeted WebKit snapshot tests and record the outcome below
+
+## Current Task Review
+
+- Cleanup contract: WebKit snapshot teardown now removes the per-run workspace and also removes the parent `.mdv-webkit` directory when it is left empty.
+- Scope guard: the new cleanup helper only prunes parents literally named `.mdv-webkit`, so unrelated directories are untouched.
+- Regression coverage: `src/io/webkit_snapshot/tests.rs` now asserts that cleanup removes the empty `.mdv-webkit` parent after a workspace is created and torn down.
+- Verification:
+- `cargo test cleanup_workspace_removes_empty_mdv_webkit_parent -- --nocapture` passed
+- `cargo test snapshot_workspace_uses_temp_dir -- --nocapture` passed
+- `cargo fmt --all --check` passed
+
 - [x] Move `bin/mdv` generation responsibility from humans to CI
 - [x] Refresh `bin/mdv` automatically after pushes to `main`
 - [x] Update local build/docs/tests to match the new CI-owned binary contract
@@ -491,3 +505,26 @@
 - Repo-wide verification status:
 - `cargo test --workspace --all-targets --all-features` is currently blocked by an existing uncommitted test expectation in `tests/integration/distribution_contract.rs` that requires a release-please-driven workflow (`release_workflow_is_release_please_driven`)
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings` is currently blocked by existing unwrap/expect violations in other modified test files outside this task's scope
+
+## Current Task
+
+- [x] Add failing coverage for the staged `mdv update` flow, including GitHub version parsing and install yes/no messaging
+- [x] Rework `src/io/self_update.rs` to show install-like loading/status text, compare GitHub vs local versions, and emit the install decision clearly
+- [x] Run targeted verification and record the outcome below
+
+## Current Task Review
+
+- `mdv update` now prints staged, install-style status lines instead of jumping straight to a byte-compare result. The flow is now: check GitHub main state, show GitHub version, show local version, download the latest tracked binary, and print `Latest install required: yes|no`.
+- Install decisions are now version-aware. If GitHub main is newer than the local binary, `mdv update` installs it; if the local binary is already on the same or newer version, it prints `Latest install required: no` and skips replacement instead of blindly downgrading to whatever bytes are on `main`.
+- The no-op path now explains why it skipped, and the terminal copy includes versioned end-state messages such as `Already on v0.1.1` and `Successfully updated to vX.Y.Z`.
+- The package version was bumped from `0.1.0` to `0.1.1`, and the product doc now reflects the new repository version.
+- Verification:
+- `cargo fmt --all` passed
+- `cargo test --lib self_update -- --nocapture` passed
+- `cargo test --workspace --all-targets --all-features` passed
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed
+- `cargo build && tmp-copy-of-target-debug-mdv update` showed:
+- `GitHub main version: v0.1.0`
+- `Local mdv version: v0.1.1`
+- `Latest install required: no`
+- `Already on v0.1.1`
