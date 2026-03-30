@@ -7,14 +7,19 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-#[cfg(target_os = "macos")]
+#[cfg(target_os = "linux")]
+use std::{fs, path::PathBuf, sync::Arc, thread, time::Duration};
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use anyhow::Context;
 use anyhow::{Result, bail};
+#[cfg(target_os = "linux")]
+use headless_chrome::{Browser, LaunchOptions, protocol::cdp::Page, types::Bounds};
 #[cfg(target_os = "macos")]
 use tracing::info_span;
 
 mod diagnostics;
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 mod paths;
 mod script;
 #[cfg(test)]
@@ -28,6 +33,8 @@ use self::{
     paths::{cleanup_workspace, common_read_access_root, create_workspace},
     script::SWIFT_SNAPSHOT_SCRIPT,
 };
+#[cfg(target_os = "linux")]
+use self::paths::{cleanup_workspace, create_workspace};
 
 #[cfg(target_os = "macos")]
 pub fn render_html_to_png(
@@ -79,13 +86,238 @@ pub fn render_html_to_png(
     Ok(SnapshotResult { png_bytes, diagnostics })
 }
 
-#[cfg(not(target_os = "macos"))]
+// --- Linux implementation using headless Chrome ---
+
+/// Maximum number of visual stability probes before giving up.
+#[cfg(target_os = "linux")]
+const MAX_PROBES: u32 = 40;
+
+/// Interval between stability probes.
+#[cfg(target_os = "linux")]
+const PROBE_INTERVAL: Duration = Duration::from_millis(25);
+
+/// Height difference threshold (in pixels) to consider the layout stable.
+#[cfg(target_os = "linux")]
+const HEIGHT_TOLERANCE: f64 = 0.5;
+
+/// Number of consecutive stable probes required before taking the screenshot.
+#[cfg(target_os = "linux")]
+const STABLE_COUNT_REQUIRED: u32 = 2;
+
+/// JavaScript expression that probes the page's visual readiness.
+///
+/// Returns a JSON string with `height`, `fontsReady`, `imagesReady`, and
+/// `mermaidsReady` fields.
+#[cfg(target_os = "linux")]
+const VISUAL_STABILITY_JS: &str = r#"
+JSON.stringify((() => {
+  const height = Math.max(
+    document.documentElement.scrollHeight || 0,
+    document.body.scrollHeight || 0,
+    document.documentElement.offsetHeight || 0,
+    document.body.offsetHeight || 0
+  );
+  const fontsReady = !document.fonts || document.fonts.status === "loaded";
+  const isRemoteAsset = (value) => /^https?:\/\//i.test(value || "");
+  const images = Array.from(document.images || []).map((image) => {
+    const source = image.getAttribute("src") || "";
+    const currentSrc = image.currentSrc || "";
+    const resolvedSource = currentSrc || source;
+    const remote = isRemoteAsset(resolvedSource);
+    return {
+      complete: !!image.complete,
+      naturalWidth: image.naturalWidth || 0,
+      currentSrc,
+      blocking: !remote
+    };
+  });
+  const imagesReady = images.every((image) => {
+    if (!image.blocking) return true;
+    if (!image.complete) return false;
+    if (!image.currentSrc) return true;
+    return image.naturalWidth > 0;
+  });
+  const mermaids = Array.from(
+    document.querySelectorAll(".mdv-mermaid-diagram")
+  ).map((diagram) => {
+    const rect = diagram.getBoundingClientRect();
+    return { renderedWidth: rect.width || 0, renderedHeight: rect.height || 0 };
+  });
+  const mermaidsReady = mermaids.every(
+    (d) => d.renderedWidth > 0 && d.renderedHeight > 0
+  );
+  return { height, fontsReady, imagesReady, mermaidsReady };
+})())
+"#;
+
+#[cfg(target_os = "linux")]
+pub fn render_html_to_png(
+    html: &str,
+    base_dir: &Path,
+    viewport_width_px: u32,
+) -> Result<SnapshotResult> {
+    let workspace = create_workspace(base_dir, base_dir)?;
+
+    let result = render_html_to_png_inner(html, &workspace, viewport_width_px);
+
+    let _ = cleanup_workspace(&workspace);
+    result
+}
+
+#[cfg(target_os = "linux")]
+fn render_html_to_png_inner(
+    html: &str,
+    workspace: &Path,
+    viewport_width_px: u32,
+) -> Result<SnapshotResult> {
+    let html_path = workspace.join("document.html");
+    fs::write(&html_path, html).context("failed to write html snapshot input")?;
+
+    let file_url = format!(
+        "file://{}",
+        html_path
+            .to_str()
+            .context("workspace path is not valid UTF-8")?
+    );
+
+    let chrome_path = find_chrome_binary()?;
+    let initial_height: u32 = 900;
+
+    let launch_options = LaunchOptions::default_builder()
+        .path(Some(chrome_path))
+        .window_size(Some((viewport_width_px, initial_height)))
+        .args(vec![
+            std::ffi::OsStr::new("--allow-file-access-from-files"),
+            std::ffi::OsStr::new("--disable-web-security"),
+            std::ffi::OsStr::new("--force-device-scale-factor=1"),
+        ])
+        .build()
+        .map_err(|e| anyhow::anyhow!("failed to build Chrome launch options: {e}"))?;
+
+    let browser = Browser::new(launch_options).context("failed to launch headless Chrome")?;
+    let tab = browser.new_tab().context("failed to create Chrome tab")?;
+
+    tab.navigate_to(&file_url)
+        .context("failed to navigate to HTML file")?;
+    tab.wait_until_navigated()
+        .context("Chrome tab failed to finish navigation")?;
+
+    let content_height = await_visual_stability(&tab)?;
+    let snapshot_height = content_height.ceil().max(1.0);
+
+    tab.set_bounds(Bounds::Normal {
+        left: None,
+        top: None,
+        width: Some(f64::from(viewport_width_px)),
+        height: Some(snapshot_height),
+    })
+    .context("failed to resize Chrome viewport")?;
+
+    // Brief pause to let Chrome repaint after resize.
+    thread::sleep(Duration::from_millis(20));
+
+    let png_bytes = tab
+        .capture_screenshot(
+            Page::CaptureScreenshotFormatOption::Png,
+            None,
+            None,
+            true,
+        )
+        .context("failed to capture PNG screenshot")?;
+
+    Ok(SnapshotResult {
+        png_bytes,
+        diagnostics: SnapshotDiagnostics::default(),
+    })
+}
+
+/// Locate a Chrome / Chromium binary.
+///
+/// Checks the `MDV_CHROME_PATH` environment variable first, then falls back to
+/// the default search performed by `headless_chrome`.
+#[cfg(target_os = "linux")]
+fn find_chrome_binary() -> Result<PathBuf> {
+    if let Ok(path) = std::env::var("MDV_CHROME_PATH") {
+        let p = PathBuf::from(&path);
+        if p.exists() {
+            return Ok(p);
+        }
+        bail!(
+            "MDV_CHROME_PATH is set to {path:?} but the file does not exist"
+        );
+    }
+    headless_chrome::browser::default_executable()
+        .map_err(|e| anyhow::anyhow!("could not find Chrome/Chromium binary: {e}"))
+}
+
+/// Poll the page until fonts, images, and mermaid diagrams are ready **and**
+/// the measured content height has stabilised across consecutive probes.
+///
+/// Returns the final content height in CSS pixels.
+#[cfg(target_os = "linux")]
+fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<f64> {
+    let mut last_height: f64 = -1.0;
+    let mut stable_count: u32 = 0;
+
+    for probe in 0..=MAX_PROBES {
+        let remote = tab
+            .evaluate(VISUAL_STABILITY_JS, false)
+            .context("visual-stability JS evaluation failed")?;
+
+        let json_str = remote
+            .value
+            .as_ref()
+            .and_then(|v| v.as_str())
+            .context("visual-stability probe returned no value")?;
+
+        let payload: serde_json::Value =
+            serde_json::from_str(json_str).context("failed to parse visual-stability JSON")?;
+
+        let height = payload
+            .get("height")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(900.0);
+        let fonts_ready = payload
+            .get("fontsReady")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let images_ready = payload
+            .get("imagesReady")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let mermaids_ready = payload
+            .get("mermaidsReady")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        let visuals_ready = fonts_ready && images_ready && mermaids_ready;
+
+        if visuals_ready && (last_height - height).abs() < HEIGHT_TOLERANCE {
+            stable_count += 1;
+        } else {
+            stable_count = 0;
+        }
+        last_height = height;
+
+        if (visuals_ready && stable_count >= STABLE_COUNT_REQUIRED) || probe >= MAX_PROBES {
+            return Ok(height);
+        }
+
+        thread::sleep(PROBE_INTERVAL);
+    }
+
+    // Unreachable due to the `probe >= MAX_PROBES` check above, but keep the
+    // compiler happy.
+    Ok(last_height)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn render_html_to_png(
     _html: &str,
     _base_dir: &Path,
     _viewport_width_px: u32,
 ) -> Result<SnapshotResult> {
-    bail!("webkit snapshot rendering is only supported on macOS");
+    bail!("webkit snapshot rendering is only supported on macOS and Linux");
 }
 
 #[cfg(target_os = "macos")]
