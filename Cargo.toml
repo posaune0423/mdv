@@ -41,6 +41,9 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["fmt", "env-filter"] }
 ureq = "2.12.1"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+headless_chrome = "1.0"
+
 [dev-dependencies]
 assert_cmd = "2.2.0"
 predicates = "3.1.4"
