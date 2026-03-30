@@ -317,7 +317,7 @@ pub fn render_html_to_png(
     _base_dir: &Path,
     _viewport_width_px: u32,
 ) -> Result<SnapshotResult> {
-    bail!("webkit snapshot rendering is only supported on macOS and Linux");
+    bail!("snapshot rendering is not yet supported on this platform");
 }
 
 #[cfg(target_os = "macos")]

@@ -264,6 +264,8 @@ fn key_event(ch: char) -> Event {
 #[test]
 fn bcon_is_supported_terminal() {
     assert!(super::is_supported_terminal(Some("bcon"), None));
+    // Real bcon environment: TERM_PROGRAM=bcon, TERM=xterm-256color
+    assert!(super::is_supported_terminal(Some("bcon"), Some("xterm-256color")));
 }
 
 #[test]
