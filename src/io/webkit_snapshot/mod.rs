@@ -156,7 +156,10 @@ pub fn render_html_to_png(
     base_dir: &Path,
     viewport_width_px: u32,
 ) -> Result<SnapshotResult> {
-    let workspace = create_workspace(base_dir, base_dir)?;
+    // Canonicalize base_dir so that relative paths like "." are resolved to
+    // absolute paths before being passed to create_workspace and Chrome.
+    let base_dir = fs::canonicalize(base_dir).unwrap_or_else(|_| base_dir.to_path_buf());
+    let workspace = create_workspace(&base_dir, &base_dir)?;
 
     let result = render_html_to_png_inner(html, &workspace, viewport_width_px);
 
@@ -186,6 +189,7 @@ fn render_html_to_png_inner(
     let launch_options = LaunchOptions::default_builder()
         .path(Some(chrome_path))
         .window_size(Some((viewport_width_px, initial_height)))
+        .idle_browser_timeout(Duration::from_secs(60))
         .args(vec![
             std::ffi::OsStr::new("--allow-file-access-from-files"),
             std::ffi::OsStr::new("--disable-web-security"),
