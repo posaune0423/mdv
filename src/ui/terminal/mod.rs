@@ -83,8 +83,9 @@ pub struct TerminalViewer {
 
 #[must_use]
 pub fn is_supported_terminal(term_program: Option<&str>, term: Option<&str>) -> bool {
-    term_program.is_some_and(|value| value.eq_ignore_ascii_case("ghostty"))
-        || term.is_some_and(|value| value.contains("kitty"))
+    term_program.is_some_and(|value| {
+        value.eq_ignore_ascii_case("ghostty") || value.eq_ignore_ascii_case("bcon")
+    }) || term.is_some_and(|value| value.contains("kitty"))
 }
 
 impl TerminalViewer {
