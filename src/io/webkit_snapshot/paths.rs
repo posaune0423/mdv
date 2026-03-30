@@ -54,6 +54,7 @@ pub(super) fn common_read_access_root(html: &str, base_dir: &Path) -> PathBuf {
     snapshot_asset_root(html, base_dir)
 }
 
+#[cfg(any(target_os = "macos", test))]
 pub(super) fn snapshot_asset_root(html: &str, base_dir: &Path) -> PathBuf {
     let base_dir = absolutize_path(base_dir);
     let mut root = normalize_path(&base_dir);
@@ -64,6 +65,7 @@ pub(super) fn snapshot_asset_root(html: &str, base_dir: &Path) -> PathBuf {
     root
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn local_asset_references(html: &str) -> Vec<String> {
     let mut references = Vec::new();
     let mut rest = html;
@@ -81,6 +83,7 @@ fn local_asset_references(html: &str) -> Vec<String> {
     references
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn is_local_asset_reference(reference: &str) -> bool {
     !reference.is_empty()
         && !reference.starts_with("data:")
@@ -89,6 +92,7 @@ fn is_local_asset_reference(reference: &str) -> bool {
         && !reference.starts_with('#')
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn resolve_local_reference(base_dir: &Path, reference: &str) -> PathBuf {
     if let Some(path) = reference.strip_prefix("file://") {
         return normalize_path(Path::new(path));
@@ -125,6 +129,7 @@ fn normalize_path(path: &Path) -> PathBuf {
     if normalized.as_os_str().is_empty() { PathBuf::from(".") } else { normalized }
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn common_path_prefix(left: &Path, right: &Path) -> PathBuf {
     let mut prefix = PathBuf::new();
     for (left_component, right_component) in left.components().zip(right.components()) {
