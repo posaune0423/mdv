@@ -43,6 +43,7 @@ ureq = "2.12.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 headless_chrome = "1.0"
+url = "2"
 
 [dev-dependencies]
 assert_cmd = "2.2.0"

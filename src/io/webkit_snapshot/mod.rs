@@ -118,25 +118,9 @@ JSON.stringify((() => {
     document.body.offsetHeight || 0
   );
   const fontsReady = !document.fonts || document.fonts.status === "loaded";
-  const isRemoteAsset = (value) => /^https?:\/\//i.test(value || "");
-  const images = Array.from(document.images || []).map((image) => {
-    const source = image.getAttribute("src") || "";
-    const currentSrc = image.currentSrc || "";
-    const resolvedSource = currentSrc || source;
-    const remote = isRemoteAsset(resolvedSource);
-    return {
-      complete: !!image.complete,
-      naturalWidth: image.naturalWidth || 0,
-      currentSrc,
-      blocking: !remote
-    };
-  });
-  const imagesReady = images.every((image) => {
-    if (!image.blocking) return true;
-    if (!image.complete) return false;
-    if (!image.currentSrc) return true;
-    return image.naturalWidth > 0;
-  });
+  const imagesReady = Array.from(document.images || [])
+    .filter(i => i.getAttribute("loading") !== "lazy")
+    .every(i => i.complete && (i.naturalWidth > 0 || !i.currentSrc));
   const mermaids = Array.from(
     document.querySelectorAll(".mdv-mermaid-diagram")
   ).map((diagram) => {
@@ -176,12 +160,9 @@ fn render_html_to_png_inner(
     let html_path = workspace.join("document.html");
     fs::write(&html_path, html).context("failed to write html snapshot input")?;
 
-    let file_url = format!(
-        "file://{}",
-        html_path
-            .to_str()
-            .context("workspace path is not valid UTF-8")?
-    );
+    let file_url = url::Url::from_file_path(&html_path)
+        .map_err(|()| anyhow::anyhow!("failed to convert workspace path to file URL: {}", html_path.display()))?
+        .to_string();
 
     let chrome_path = find_chrome_binary()?;
     let initial_height: u32 = 900;
@@ -192,7 +173,6 @@ fn render_html_to_png_inner(
         .idle_browser_timeout(Duration::from_secs(60))
         .args(vec![
             std::ffi::OsStr::new("--allow-file-access-from-files"),
-            std::ffi::OsStr::new("--disable-web-security"),
             std::ffi::OsStr::new("--force-device-scale-factor=1"),
         ])
         .build()

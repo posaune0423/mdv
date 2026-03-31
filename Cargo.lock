@@ -1837,6 +1837,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ureq 2.12.1",
+ "url",
 ]
 
 [[package]]
