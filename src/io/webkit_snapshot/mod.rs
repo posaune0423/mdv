@@ -186,8 +186,8 @@ fn render_html_to_png_inner(
     tab.wait_until_navigated()
         .context("Chrome tab failed to finish navigation")?;
 
-    let content_height = await_visual_stability(&tab)?;
-    let snapshot_height = content_height.ceil().max(1.0);
+    let probe = await_visual_stability(&tab)?;
+    let snapshot_height = probe.height.ceil().max(1.0);
 
     tab.set_bounds(Bounds::Normal {
         left: None,
@@ -211,7 +211,12 @@ fn render_html_to_png_inner(
 
     Ok(SnapshotResult {
         png_bytes,
-        diagnostics: SnapshotDiagnostics::default(),
+        diagnostics: SnapshotDiagnostics {
+            fonts_ready: probe.fonts_ready,
+            images_ready: probe.images_ready,
+            mermaids_ready: probe.mermaids_ready,
+            ..SnapshotDiagnostics::default()
+        },
     })
 }
 
@@ -234,12 +239,19 @@ fn find_chrome_binary() -> Result<PathBuf> {
         .map_err(|e| anyhow::anyhow!("could not find Chrome/Chromium binary: {e}"))
 }
 
+/// Result of visual stability probing.
+#[cfg(target_os = "linux")]
+struct StabilityProbe {
+    height: f64,
+    fonts_ready: bool,
+    images_ready: bool,
+    mermaids_ready: bool,
+}
+
 /// Poll the page until fonts, images, and mermaid diagrams are ready **and**
 /// the measured content height has stabilised across consecutive probes.
-///
-/// Returns the final content height in CSS pixels.
 #[cfg(target_os = "linux")]
-fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<f64> {
+fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<StabilityProbe> {
     let mut last_height: f64 = -1.0;
     let mut stable_count: u32 = 0;
 
@@ -294,7 +306,12 @@ fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<f64> {
         last_height = height;
 
         if (visuals_ready && stable_count >= STABLE_COUNT_REQUIRED) || probe >= MAX_PROBES {
-            return Ok(height);
+            return Ok(StabilityProbe {
+                height,
+                fonts_ready,
+                images_ready,
+                mermaids_ready,
+            });
         }
 
         thread::sleep(PROBE_INTERVAL);
@@ -302,7 +319,12 @@ fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<f64> {
 
     // Unreachable due to the `probe >= MAX_PROBES` check above, but keep the
     // compiler happy.
-    Ok(last_height)
+    Ok(StabilityProbe {
+        height: last_height,
+        fonts_ready: false,
+        images_ready: false,
+        mermaids_ready: false,
+    })
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
