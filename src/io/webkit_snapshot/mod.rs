@@ -264,15 +264,15 @@ fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<f64> {
         let fonts_ready = payload
             .get("fontsReady")
             .and_then(|v| v.as_bool())
-            .unwrap_or(true);
+            .unwrap_or(false);
         let images_ready = payload
             .get("imagesReady")
             .and_then(|v| v.as_bool())
-            .unwrap_or(true);
+            .unwrap_or(false);
         let mermaids_ready = payload
             .get("mermaidsReady")
             .and_then(|v| v.as_bool())
-            .unwrap_or(true);
+            .unwrap_or(false);
 
         let visuals_ready = fonts_ready && images_ready && mermaids_ready;
 
