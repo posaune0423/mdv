@@ -244,18 +244,28 @@ fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<f64> {
     let mut stable_count: u32 = 0;
 
     for probe in 0..=MAX_PROBES {
-        let remote = tab
-            .evaluate(VISUAL_STABILITY_JS, false)
-            .context("visual-stability JS evaluation failed")?;
+        // If any step of the probe fails (JS evaluation, JSON parsing), treat
+        // the page as "not ready" and retry on the next iteration rather than
+        // aborting the entire render.
+        let probe_result: Result<serde_json::Value> = (|| {
+            let remote = tab
+                .evaluate(VISUAL_STABILITY_JS, false)
+                .context("JS evaluation failed")?;
+            let json_str = remote
+                .value
+                .as_ref()
+                .and_then(|v| v.as_str())
+                .context("probe returned no value")?;
+            Ok(serde_json::from_str(json_str).context("failed to parse JSON")?)
+        })();
 
-        let json_str = remote
-            .value
-            .as_ref()
-            .and_then(|v| v.as_str())
-            .context("visual-stability probe returned no value")?;
-
-        let payload: serde_json::Value =
-            serde_json::from_str(json_str).context("failed to parse visual-stability JSON")?;
+        let payload = match probe_result {
+            Ok(v) => v,
+            Err(_) => {
+                thread::sleep(PROBE_INTERVAL);
+                continue;
+            }
+        };
 
         let height = payload
             .get("height")
