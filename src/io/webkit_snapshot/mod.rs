@@ -187,7 +187,9 @@ fn render_html_to_png_inner(
         .context("Chrome tab failed to finish navigation")?;
 
     let probe = await_visual_stability(&tab)?;
-    let snapshot_height = probe.height.ceil().max(1.0);
+    // Cap height to prevent OOM from pathological HTML inputs.
+    const MAX_SNAPSHOT_HEIGHT: f64 = 32_000.0;
+    let snapshot_height = probe.height.ceil().clamp(1.0, MAX_SNAPSHOT_HEIGHT);
 
     tab.set_bounds(Bounds::Normal {
         left: None,
@@ -254,6 +256,7 @@ struct StabilityProbe {
 fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<StabilityProbe> {
     let mut last_height: f64 = -1.0;
     let mut stable_count: u32 = 0;
+    let mut any_probe_succeeded = false;
 
     for probe in 0..=MAX_PROBES {
         // If any step of the probe fails (JS evaluation, JSON parsing), treat
@@ -278,6 +281,8 @@ fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<StabilityPr
                 continue;
             }
         };
+
+        any_probe_succeeded = true;
 
         let height = payload
             .get("height")
@@ -317,8 +322,13 @@ fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<StabilityPr
         thread::sleep(PROBE_INTERVAL);
     }
 
-    // Unreachable due to the `probe >= MAX_PROBES` check above, but keep the
-    // compiler happy.
+    // If every single probe failed, we have no usable height measurement.
+    if !any_probe_succeeded {
+        bail!("all visual stability probes failed; Chrome may have crashed or the page is invalid");
+    }
+
+    // Unreachable when any probe succeeded (the loop returns Ok above), but
+    // keep the compiler happy.
     Ok(StabilityProbe {
         height: last_height,
         fonts_ready: false,
