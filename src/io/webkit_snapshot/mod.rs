@@ -28,13 +28,13 @@ mod tests;
 pub use self::diagnostics::{
     SnapshotAssetDiagnostics, SnapshotDiagnostics, SnapshotResult, SnapshotTypographyDiagnostics,
 };
+#[cfg(target_os = "linux")]
+use self::paths::{cleanup_workspace, create_workspace};
 #[cfg(target_os = "macos")]
 use self::{
     paths::{cleanup_workspace, common_read_access_root, create_workspace},
     script::SWIFT_SNAPSHOT_SCRIPT,
 };
-#[cfg(target_os = "linux")]
-use self::paths::{cleanup_workspace, create_workspace};
 
 #[cfg(target_os = "macos")]
 pub fn render_html_to_png(
@@ -161,7 +161,9 @@ fn render_html_to_png_inner(
     fs::write(&html_path, html).context("failed to write html snapshot input")?;
 
     let file_url = url::Url::from_file_path(&html_path)
-        .map_err(|()| anyhow::anyhow!("failed to convert workspace path to file URL: {}", html_path.display()))?
+        .map_err(|()| {
+            anyhow::anyhow!("failed to convert workspace path to file URL: {}", html_path.display())
+        })?
         .to_string();
 
     let chrome_path = find_chrome_binary()?;
@@ -181,10 +183,8 @@ fn render_html_to_png_inner(
     let browser = Browser::new(launch_options).context("failed to launch headless Chrome")?;
     let tab = browser.new_tab().context("failed to create Chrome tab")?;
 
-    tab.navigate_to(&file_url)
-        .context("failed to navigate to HTML file")?;
-    tab.wait_until_navigated()
-        .context("Chrome tab failed to finish navigation")?;
+    tab.navigate_to(&file_url).context("failed to navigate to HTML file")?;
+    tab.wait_until_navigated().context("Chrome tab failed to finish navigation")?;
 
     let probe = await_visual_stability(&tab)?;
     // Cap height to prevent OOM from pathological HTML inputs.
@@ -203,12 +203,7 @@ fn render_html_to_png_inner(
     thread::sleep(Duration::from_millis(20));
 
     let png_bytes = tab
-        .capture_screenshot(
-            Page::CaptureScreenshotFormatOption::Png,
-            None,
-            None,
-            true,
-        )
+        .capture_screenshot(Page::CaptureScreenshotFormatOption::Png, None, None, true)
         .context("failed to capture PNG screenshot")?;
 
     Ok(SnapshotResult {
@@ -233,9 +228,7 @@ fn find_chrome_binary() -> Result<PathBuf> {
         if p.exists() {
             return Ok(p);
         }
-        bail!(
-            "MDV_CHROME_PATH is set to {path:?} but the file does not exist"
-        );
+        bail!("MDV_CHROME_PATH is set to {path:?} but the file does not exist");
     }
     headless_chrome::browser::default_executable()
         .map_err(|e| anyhow::anyhow!("could not find Chrome/Chromium binary: {e}"))
@@ -263,15 +256,14 @@ fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<StabilityPr
         // the page as "not ready" and retry on the next iteration rather than
         // aborting the entire render.
         let probe_result: Result<serde_json::Value> = (|| {
-            let remote = tab
-                .evaluate(VISUAL_STABILITY_JS, false)
-                .context("JS evaluation failed")?;
+            let remote =
+                tab.evaluate(VISUAL_STABILITY_JS, false).context("JS evaluation failed")?;
             let json_str = remote
                 .value
                 .as_ref()
                 .and_then(|v| v.as_str())
                 .context("probe returned no value")?;
-            Ok(serde_json::from_str(json_str).context("failed to parse JSON")?)
+            serde_json::from_str(json_str).context("failed to parse JSON")
         })();
 
         let payload = match probe_result {
@@ -284,22 +276,11 @@ fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<StabilityPr
 
         any_probe_succeeded = true;
 
-        let height = payload
-            .get("height")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(900.0);
-        let fonts_ready = payload
-            .get("fontsReady")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        let images_ready = payload
-            .get("imagesReady")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        let mermaids_ready = payload
-            .get("mermaidsReady")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        let height = payload.get("height").and_then(|v| v.as_f64()).unwrap_or(900.0);
+        let fonts_ready = payload.get("fontsReady").and_then(|v| v.as_bool()).unwrap_or(false);
+        let images_ready = payload.get("imagesReady").and_then(|v| v.as_bool()).unwrap_or(false);
+        let mermaids_ready =
+            payload.get("mermaidsReady").and_then(|v| v.as_bool()).unwrap_or(false);
 
         let visuals_ready = fonts_ready && images_ready && mermaids_ready;
 
@@ -311,12 +292,7 @@ fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<StabilityPr
         last_height = height;
 
         if (visuals_ready && stable_count >= STABLE_COUNT_REQUIRED) || probe >= MAX_PROBES {
-            return Ok(StabilityProbe {
-                height,
-                fonts_ready,
-                images_ready,
-                mermaids_ready,
-            });
+            return Ok(StabilityProbe { height, fonts_ready, images_ready, mermaids_ready });
         }
 
         thread::sleep(PROBE_INTERVAL);
