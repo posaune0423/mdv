@@ -303,8 +303,8 @@ fn await_visual_stability(tab: &Arc<headless_chrome::Tab>) -> Result<StabilityPr
         bail!("all visual stability probes failed; Chrome may have crashed or the page is invalid");
     }
 
-    // Unreachable when any probe succeeded (the loop returns Ok above), but
-    // keep the compiler happy.
+    // Fallback: earlier probes succeeded but the final probe failed.
+    // Return the last known height with conservative readiness flags.
     Ok(StabilityProbe {
         height: last_height,
         fonts_ready: false,
