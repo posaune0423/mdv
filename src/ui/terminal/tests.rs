@@ -260,3 +260,28 @@ fn key_event(ch: char) -> Event {
     key.kind = KeyEventKind::Press;
     Event::Key(key)
 }
+
+#[test]
+fn bcon_is_supported_terminal() {
+    assert!(super::is_supported_terminal(Some("bcon"), None));
+    // Real bcon environment: TERM_PROGRAM=bcon, TERM=xterm-256color
+    assert!(super::is_supported_terminal(Some("bcon"), Some("xterm-256color")));
+}
+
+#[test]
+fn ghostty_is_supported_terminal() {
+    assert!(super::is_supported_terminal(Some("ghostty"), None));
+    assert!(super::is_supported_terminal(Some("Ghostty"), None));
+}
+
+#[test]
+fn kitty_is_supported_terminal() {
+    assert!(super::is_supported_terminal(None, Some("xterm-kitty")));
+}
+
+#[test]
+fn unknown_terminal_is_not_supported() {
+    assert!(!super::is_supported_terminal(Some("alacritty"), None));
+    assert!(!super::is_supported_terminal(None, Some("xterm-256color")));
+    assert!(!super::is_supported_terminal(None, None));
+}
