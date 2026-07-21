@@ -2,7 +2,8 @@ use std::collections::BTreeSet;
 
 use crate::{
     io::kitty_graphics::{
-        DeleteCommand, KittyImagePlacement, encode_delete, encode_place, encode_transmit_png,
+        DeleteCommand, KittyGraphicsTransport, KittyImagePlacement, encode_delete, encode_place,
+        encode_transmit_png,
     },
     render::text::{
         RenderedDocument, RenderedGraphic, RenderedGraphicContent, RenderedLine, RenderedLineKind,
@@ -17,6 +18,7 @@ const PAGE_IMAGE_ID: u32 = 1;
 type GraphicCommands = (Vec<String>, Vec<(u32, u32)>);
 
 pub(super) fn collect_page_viewport_commands(
+    transport: KittyGraphicsTransport,
     page: &GraphicPage,
     scroll: usize,
     content_height: usize,
@@ -34,11 +36,12 @@ pub(super) fn collect_page_viewport_commands(
         .copied()
         .filter(|placement| !visible_placements.contains(placement))
     {
-        commands.push(encode_delete(DeleteCommand::Placement { image_id, placement_id }));
+        commands
+            .push(encode_delete(transport, DeleteCommand::Placement { image_id, placement_id }));
     }
 
     if let Some(raster) = raster {
-        commands.push(encode_transmit_png(PAGE_IMAGE_ID, &raster.png_bytes));
+        commands.push(encode_transmit_png(transport, PAGE_IMAGE_ID, &raster.png_bytes));
 
         let placement = KittyImagePlacement {
             image_id: PAGE_IMAGE_ID,
@@ -53,13 +56,14 @@ pub(super) fn collect_page_viewport_commands(
             cursor_y: 0,
             z_index: -1,
         };
-        commands.push(format!("{}{}", ansi_cursor_move(0, 0), encode_place(&placement)));
+        commands.push(format!("{}{}", ansi_cursor_move(0, 0), encode_place(transport, &placement)));
     }
 
     Ok((commands, visible_placements))
 }
 
 pub(super) fn collect_graphics_commands(
+    transport: KittyGraphicsTransport,
     rendered: &RenderedDocument,
     viewport: GraphicViewport,
     previous_visible_placements: &[(u32, u32)],
@@ -74,7 +78,8 @@ pub(super) fn collect_graphics_commands(
         .copied()
         .filter(|placement| !visible_placements.contains(placement))
     {
-        commands.push(encode_delete(DeleteCommand::Placement { image_id, placement_id }));
+        commands
+            .push(encode_delete(transport, DeleteCommand::Placement { image_id, placement_id }));
     }
 
     for (index, graphic) in rendered.graphics.iter().enumerate() {
@@ -92,7 +97,7 @@ pub(super) fn collect_graphics_commands(
 
         let image_id = (index + 2) as u32;
         if transmitted_graphics.insert(image_id) {
-            commands.push(encode_transmit_png(image_id, png_bytes));
+            commands.push(encode_transmit_png(transport, image_id, png_bytes));
         }
 
         let (columns, rows, offset_x, offset_y) =
@@ -116,7 +121,7 @@ pub(super) fn collect_graphics_commands(
         commands.push(format!(
             "{}{}",
             ansi_cursor_move(graphic_x, relative_row as u16 + offset_y),
-            encode_place(&placement)
+            encode_place(transport, &placement)
         ));
     }
 

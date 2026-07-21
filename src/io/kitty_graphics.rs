@@ -1,5 +1,7 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
+const MAX_PAYLOAD_CHUNK_SIZE: usize = 4_096;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct KittyImagePlacement {
     pub image_id: u32,
@@ -21,15 +23,59 @@ pub enum DeleteCommand {
     Placement { image_id: u32, placement_id: u32 },
 }
 
-#[must_use]
-pub fn encode_transmit_png(image_id: u32, png_bytes: &[u8]) -> String {
-    let payload = STANDARD.encode(png_bytes);
-    format!("\u{1b}_Ga=t,t=d,f=100,i={},q=2;{}\u{1b}\\", image_id, payload)
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KittyGraphicsTransport {
+    Direct,
+    Tmux,
+}
+
+impl KittyGraphicsTransport {
+    #[must_use]
+    pub fn from_tmux_env(tmux: Option<&str>) -> Self {
+        if tmux.is_some_and(|value| !value.is_empty()) { Self::Tmux } else { Self::Direct }
+    }
+
+    fn encode(self, command: String) -> String {
+        match self {
+            Self::Direct => command,
+            Self::Tmux => {
+                let escaped = command.replace('\u{1b}', "\u{1b}\u{1b}");
+                format!("\u{1b}Ptmux;{escaped}\u{1b}\\")
+            }
+        }
+    }
 }
 
 #[must_use]
-pub fn encode_place(placement: &KittyImagePlacement) -> String {
-    format!(
+pub fn encode_transmit_png(
+    transport: KittyGraphicsTransport,
+    image_id: u32,
+    png_bytes: &[u8],
+) -> String {
+    let payload = STANDARD.encode(png_bytes);
+    let chunk_count = payload.len().div_ceil(MAX_PAYLOAD_CHUNK_SIZE).max(1);
+    let mut command = String::new();
+
+    for index in 0..chunk_count {
+        let start = index * MAX_PAYLOAD_CHUNK_SIZE;
+        let end = payload.len().min(start + MAX_PAYLOAD_CHUNK_SIZE);
+        let chunk = payload.get(start..end).unwrap_or_default();
+        let more = u8::from(index + 1 < chunk_count);
+
+        let chunk_command = if index == 0 {
+            format!("\u{1b}_Ga=t,t=d,f=100,i={image_id},q=2,m={more};{chunk}\u{1b}\\")
+        } else {
+            format!("\u{1b}_Gm={more},q=2;{chunk}\u{1b}\\")
+        };
+        command.push_str(&transport.encode(chunk_command));
+    }
+
+    command
+}
+
+#[must_use]
+pub fn encode_place(transport: KittyGraphicsTransport, placement: &KittyImagePlacement) -> String {
+    transport.encode(format!(
         "\u{1b}_Ga=p,i={},p={},c={},r={},x={},y={},w={},h={},X={},Y={},z={},q=2,C=1\u{1b}\\",
         placement.image_id,
         placement.placement_id,
@@ -42,15 +88,15 @@ pub fn encode_place(placement: &KittyImagePlacement) -> String {
         placement.cursor_x,
         placement.cursor_y,
         placement.z_index,
-    )
+    ))
 }
 
 #[must_use]
-pub fn encode_delete(command: DeleteCommand) -> String {
-    match command {
+pub fn encode_delete(transport: KittyGraphicsTransport, command: DeleteCommand) -> String {
+    transport.encode(match command {
         DeleteCommand::AllVisiblePlacements => "\u{1b}_Ga=d\u{1b}\\".to_string(),
         DeleteCommand::Placement { image_id, placement_id } => {
             format!("\u{1b}_Ga=d,d=i,i={image_id},p={placement_id}\u{1b}\\")
         }
-    }
+    })
 }

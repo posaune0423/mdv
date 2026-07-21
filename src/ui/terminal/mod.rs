@@ -34,7 +34,7 @@ use crate::render::text::render_document;
 use crate::{
     core::{config::AppConfig, document::Document, theme::ThemeTokens},
     io::fs::FileSystemDocumentSource,
-    io::kitty_graphics::{DeleteCommand, encode_delete},
+    io::kitty_graphics::{DeleteCommand, KittyGraphicsTransport, encode_delete},
     io::{browser, image_decoder::ImageDecoder, mermaid_cli::MermaidCliRenderer},
     render::{
         markdown::parse_document,
@@ -77,13 +77,19 @@ pub struct TerminalViewer {
     clear_all_graphics: bool,
     visible_placements: Vec<(u32, u32)>,
     transmitted_graphics: BTreeSet<u32>,
+    graphics_transport: KittyGraphicsTransport,
     mermaid_renderer: MermaidCliRenderer,
     cell_metrics: CellMetrics,
 }
 
 #[must_use]
-pub fn is_supported_terminal(term_program: Option<&str>, term: Option<&str>) -> bool {
+pub fn is_supported_terminal(
+    term_program: Option<&str>,
+    lc_terminal: Option<&str>,
+    term: Option<&str>,
+) -> bool {
     term_program.is_some_and(|value| value.eq_ignore_ascii_case("ghostty"))
+        || lc_terminal.is_some_and(|value| value.eq_ignore_ascii_case("ghostty"))
         || term.is_some_and(|value| value.contains("kitty"))
 }
 
@@ -96,6 +102,8 @@ impl TerminalViewer {
     ) -> Result<Self> {
         let cell_metrics = current_cell_metrics();
         let last_modified = source.modified_at().ok();
+        let graphics_transport =
+            KittyGraphicsTransport::from_tmux_env(std::env::var("TMUX").ok().as_deref());
         let (graphic_page, rendered, warning) =
             match render_graphic_page(&config, &document, &source_text, cell_metrics) {
                 Ok(page) => (Some(page), None, None),
@@ -127,6 +135,7 @@ impl TerminalViewer {
             clear_all_graphics: false,
             visible_placements: Vec::new(),
             transmitted_graphics: BTreeSet::new(),
+            graphics_transport,
             mermaid_renderer: MermaidCliRenderer::from_env(),
             cell_metrics,
         })
@@ -173,6 +182,7 @@ impl TerminalViewer {
             clear_all_graphics: false,
             visible_placements: Vec::new(),
             transmitted_graphics: BTreeSet::new(),
+            graphics_transport: KittyGraphicsTransport::Direct,
             mermaid_renderer: MermaidCliRenderer::from_env(),
             cell_metrics,
         }
@@ -189,7 +199,7 @@ impl TerminalViewer {
             io::stdout(),
             LeaveAlternateScreen,
             cursor::Show,
-            Print(encode_delete(DeleteCommand::AllVisiblePlacements))
+            Print(encode_delete(self.graphics_transport, DeleteCommand::AllVisiblePlacements))
         )?;
         run_result
     }
@@ -337,6 +347,7 @@ impl TerminalViewer {
 
         let (graphic_commands, visible_placement_ids) = if let Some(page) = &self.graphic_page {
             collect_page_viewport_commands(
+                self.graphics_transport,
                 page,
                 self.scroll,
                 content_height,
@@ -346,6 +357,7 @@ impl TerminalViewer {
             )?
         } else if let Some(rendered) = &self.rendered {
             collect_graphics_commands(
+                self.graphics_transport,
                 rendered,
                 GraphicViewport {
                     scroll: self.scroll,
@@ -363,7 +375,11 @@ impl TerminalViewer {
         };
 
         if self.clear_all_graphics {
-            write!(stdout, "{}", encode_delete(DeleteCommand::AllVisiblePlacements))?;
+            write!(
+                stdout,
+                "{}",
+                encode_delete(self.graphics_transport, DeleteCommand::AllVisiblePlacements)
+            )?;
             self.clear_all_graphics = false;
         }
 

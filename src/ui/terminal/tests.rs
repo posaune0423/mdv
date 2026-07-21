@@ -8,7 +8,7 @@ use tempfile::NamedTempFile;
 use crate::{
     cli::Theme,
     core::config::{AppConfig, MermaidMode},
-    io::fs::FileSystemDocumentSource,
+    io::{fs::FileSystemDocumentSource, kitty_graphics::KittyGraphicsTransport},
     render::text::{
         RenderedDocument, RenderedGraphic, RenderedGraphicContent, RenderedLine, RenderedLineKind,
     },
@@ -85,13 +85,69 @@ fn graphics_commands_only_transmit_png_payload_once() {
         viewport_width: 80,
         cell_metrics: CellMetrics { width_px: 8.0, height_px: 16.0 },
     };
-    let (first_commands, _) = collect_graphics_commands(&rendered, viewport, &[], &mut transmitted);
-    let (second_commands, _) =
-        collect_graphics_commands(&rendered, viewport, &[], &mut transmitted);
+    let (first_commands, _) = collect_graphics_commands(
+        KittyGraphicsTransport::Direct,
+        &rendered,
+        viewport,
+        &[],
+        &mut transmitted,
+    );
+    let (second_commands, _) = collect_graphics_commands(
+        KittyGraphicsTransport::Direct,
+        &rendered,
+        viewport,
+        &[],
+        &mut transmitted,
+    );
 
     assert_eq!(first_commands.iter().filter(|command| command.contains("a=t")).count(), 1);
     assert_eq!(second_commands.iter().filter(|command| command.contains("a=t")).count(), 0);
     assert!(second_commands.iter().any(|command| command.contains("a=p")));
+}
+
+#[test]
+fn tmux_graphics_commands_keep_cursor_moves_outside_passthrough() {
+    let rendered = RenderedDocument {
+        lines: vec![RenderedLine {
+            plain_text: String::new(),
+            display_text: String::new(),
+            spans: Vec::new(),
+            kind: RenderedLineKind::Blank,
+        }],
+        graphics: vec![RenderedGraphic {
+            line_index: 0,
+            width_cells: 10,
+            height_cells: 4,
+            natural_width_px: 100,
+            natural_height_px: 50,
+            content: RenderedGraphicContent::Png(vec![1, 2, 3]),
+        }],
+    };
+    let viewport = GraphicViewport {
+        scroll: 0,
+        content_height: 10,
+        article_x: 0,
+        article_width: 20,
+        viewport_width: 80,
+        cell_metrics: CellMetrics { width_px: 8.0, height_px: 16.0 },
+    };
+    let mut transmitted = std::collections::BTreeSet::new();
+
+    let (commands, _) = collect_graphics_commands(
+        KittyGraphicsTransport::Tmux,
+        &rendered,
+        viewport,
+        &[],
+        &mut transmitted,
+    );
+    let placement = commands
+        .iter()
+        .find(|command| command.contains("a=p"))
+        .unwrap_or_else(|| panic!("placement command should be emitted"));
+
+    assert!(placement.starts_with("\u{1b}["));
+    assert!(placement.contains("\u{1b}Ptmux;"));
+    assert!(!placement.starts_with("\u{1b}Ptmux;"));
 }
 
 #[test]
@@ -106,6 +162,7 @@ fn page_viewport_commands_retransmit_cropped_png_for_each_scroll_position() {
     let mut transmitted = std::collections::BTreeSet::new();
 
     let (first_commands, _) = collect_page_viewport_commands(
+        KittyGraphicsTransport::Direct,
         &page,
         0,
         4,
@@ -115,6 +172,7 @@ fn page_viewport_commands_retransmit_cropped_png_for_each_scroll_position() {
     )
     .unwrap_or_else(|error| panic!("viewport commands should build: {error}"));
     let (second_commands, _) = collect_page_viewport_commands(
+        KittyGraphicsTransport::Direct,
         &page,
         4,
         4,
