@@ -1,3 +1,6 @@
+use std::process::Command;
+
+use anyhow::{Context, Result, bail};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 const MAX_PAYLOAD_CHUNK_SIZE: usize = 4_096;
@@ -26,24 +29,53 @@ pub enum DeleteCommand {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum KittyGraphicsTransport {
     Direct,
-    Tmux,
+    Tmux { pane_column: u16, pane_row: u16 },
 }
 
 impl KittyGraphicsTransport {
     #[must_use]
+    pub const fn tmux_at(pane_column: u16, pane_row: u16) -> Self {
+        Self::Tmux { pane_column, pane_row }
+    }
+
+    #[must_use]
     pub fn from_tmux_env(tmux: Option<&str>) -> Self {
-        if tmux.is_some_and(|value| !value.is_empty()) { Self::Tmux } else { Self::Direct }
+        if tmux.is_some_and(|value| !value.is_empty()) { Self::tmux_at(0, 0) } else { Self::Direct }
     }
 
     fn encode(self, command: String) -> String {
         match self {
             Self::Direct => command,
-            Self::Tmux => {
+            Self::Tmux { .. } => {
                 let escaped = command.replace('\u{1b}', "\u{1b}\u{1b}");
                 format!("\u{1b}Ptmux;{escaped}\u{1b}\\")
             }
         }
     }
+}
+
+pub fn tmux_pane_origin(pane_id: &str) -> Result<(u16, u16)> {
+    let output = Command::new("tmux")
+        .args(["display-message", "-p", "-t", pane_id, "#{pane_left},#{pane_top}"])
+        .output()
+        .context("failed to query tmux pane origin")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("tmux pane origin query failed: {}", stderr.trim());
+    }
+
+    let origin =
+        String::from_utf8(output.stdout).context("tmux returned a non-UTF-8 pane origin")?;
+    parse_tmux_pane_origin(&origin)
+}
+
+pub fn parse_tmux_pane_origin(origin: &str) -> Result<(u16, u16)> {
+    let (column, row) =
+        origin.trim().split_once(',').context("tmux pane origin must contain a column and row")?;
+    Ok((
+        column.parse().context("invalid tmux pane column")?,
+        row.parse().context("invalid tmux pane row")?,
+    ))
 }
 
 #[must_use]
@@ -75,7 +107,34 @@ pub fn encode_transmit_png(
 
 #[must_use]
 pub fn encode_place(transport: KittyGraphicsTransport, placement: &KittyImagePlacement) -> String {
-    transport.encode(format!(
+    transport.encode(placement_command(placement))
+}
+
+#[must_use]
+pub fn encode_place_at(
+    transport: KittyGraphicsTransport,
+    placement: &KittyImagePlacement,
+    column: u16,
+    row: u16,
+) -> String {
+    let local_cursor = ansi_cursor_move(column, row);
+    match transport {
+        KittyGraphicsTransport::Direct => {
+            format!("{local_cursor}{}", placement_command(placement))
+        }
+        KittyGraphicsTransport::Tmux { pane_column, pane_row } => {
+            let outer_cursor =
+                ansi_cursor_move(pane_column.saturating_add(column), pane_row.saturating_add(row));
+            format!(
+                "{local_cursor}{}",
+                transport.encode(format!("{outer_cursor}{}", placement_command(placement)))
+            )
+        }
+    }
+}
+
+fn placement_command(placement: &KittyImagePlacement) -> String {
+    format!(
         "\u{1b}_Ga=p,i={},p={},c={},r={},x={},y={},w={},h={},X={},Y={},z={},q=2,C=1\u{1b}\\",
         placement.image_id,
         placement.placement_id,
@@ -88,7 +147,11 @@ pub fn encode_place(transport: KittyGraphicsTransport, placement: &KittyImagePla
         placement.cursor_x,
         placement.cursor_y,
         placement.z_index,
-    ))
+    )
+}
+
+fn ansi_cursor_move(column: u16, row: u16) -> String {
+    format!("\u{1b}[{};{}H", row.saturating_add(1), column.saturating_add(1))
 }
 
 #[must_use]

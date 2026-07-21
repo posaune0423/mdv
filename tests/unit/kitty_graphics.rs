@@ -1,6 +1,6 @@
 use mdv::io::kitty_graphics::{
     DeleteCommand, KittyGraphicsTransport, KittyImagePlacement, encode_delete, encode_place,
-    encode_transmit_png,
+    encode_transmit_png, parse_tmux_pane_origin,
 };
 
 #[test]
@@ -29,7 +29,7 @@ fn chunks_png_payloads_at_4096_base64_bytes() {
 
 #[test]
 fn wraps_each_png_chunk_in_its_own_tmux_passthrough() {
-    let escape = encode_transmit_png(KittyGraphicsTransport::Tmux, 7, &vec![0; 3_073]);
+    let escape = encode_transmit_png(KittyGraphicsTransport::tmux_at(0, 0), 7, &vec![0; 3_073]);
 
     assert_eq!(escape.matches("\u{1b}Ptmux;").count(), 2);
     assert!(escape.contains("_Ga=t,t=d,f=100,i=7,q=2,m=1;"));
@@ -84,7 +84,8 @@ fn encodes_delete_specific_placement_command() {
 
 #[test]
 fn wraps_kitty_commands_in_tmux_dcs_passthrough() {
-    let escape = encode_delete(KittyGraphicsTransport::Tmux, DeleteCommand::AllVisiblePlacements);
+    let escape =
+        encode_delete(KittyGraphicsTransport::tmux_at(0, 0), DeleteCommand::AllVisiblePlacements);
 
     assert_eq!(escape, "\u{1b}Ptmux;\u{1b}\u{1b}_Ga=d\u{1b}\u{1b}\\\u{1b}\\");
 }
@@ -93,8 +94,14 @@ fn wraps_kitty_commands_in_tmux_dcs_passthrough() {
 fn detects_tmux_transport_from_environment_value() {
     assert_eq!(
         KittyGraphicsTransport::from_tmux_env(Some("/private/tmp/tmux/default,1,0")),
-        KittyGraphicsTransport::Tmux,
+        KittyGraphicsTransport::tmux_at(0, 0),
     );
     assert_eq!(KittyGraphicsTransport::from_tmux_env(None), KittyGraphicsTransport::Direct);
     assert_eq!(KittyGraphicsTransport::from_tmux_env(Some("")), KittyGraphicsTransport::Direct);
+}
+
+#[test]
+fn parses_tmux_pane_origin_coordinates() {
+    assert_eq!(parse_tmux_pane_origin("128,3\n").ok(), Some((128, 3)));
+    assert!(parse_tmux_pane_origin("128").is_err());
 }

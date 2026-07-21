@@ -5,7 +5,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEventKind},
@@ -34,7 +34,7 @@ use crate::render::text::render_document;
 use crate::{
     core::{config::AppConfig, document::Document, theme::ThemeTokens},
     io::fs::FileSystemDocumentSource,
-    io::kitty_graphics::{DeleteCommand, KittyGraphicsTransport, encode_delete},
+    io::kitty_graphics::{DeleteCommand, KittyGraphicsTransport, encode_delete, tmux_pane_origin},
     io::{browser, image_decoder::ImageDecoder, mermaid_cli::MermaidCliRenderer},
     render::{
         markdown::parse_document,
@@ -102,8 +102,7 @@ impl TerminalViewer {
     ) -> Result<Self> {
         let cell_metrics = current_cell_metrics();
         let last_modified = source.modified_at().ok();
-        let graphics_transport =
-            KittyGraphicsTransport::from_tmux_env(std::env::var("TMUX").ok().as_deref());
+        let graphics_transport = current_graphics_transport()?;
         let (graphic_page, rendered, warning) =
             match render_graphic_page(&config, &document, &source_text, cell_metrics) {
                 Ok(page) => (Some(page), None, None),
@@ -319,6 +318,7 @@ impl TerminalViewer {
 
     fn draw(&mut self) -> Result<()> {
         if self.pending_layout_refresh {
+            self.graphics_transport = current_graphics_transport()?;
             self.rerender();
             let _ = self.set_scroll(cmp::min(self.scroll, self.max_scroll()));
             self.pending_layout_refresh = false;
@@ -716,4 +716,15 @@ impl TerminalViewer {
         );
         fit_to_width(&status, width)
     }
+}
+
+fn current_graphics_transport() -> Result<KittyGraphicsTransport> {
+    let transport = KittyGraphicsTransport::from_tmux_env(std::env::var("TMUX").ok().as_deref());
+    if transport == KittyGraphicsTransport::Direct {
+        return Ok(transport);
+    }
+
+    let pane_id = std::env::var("TMUX_PANE").context("TMUX_PANE is missing inside tmux")?;
+    let (pane_column, pane_row) = tmux_pane_origin(&pane_id)?;
+    Ok(KittyGraphicsTransport::tmux_at(pane_column, pane_row))
 }

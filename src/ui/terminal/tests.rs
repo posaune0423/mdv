@@ -106,7 +106,7 @@ fn graphics_commands_only_transmit_png_payload_once() {
 }
 
 #[test]
-fn tmux_graphics_commands_keep_cursor_moves_outside_passthrough() {
+fn tmux_graphics_commands_position_outer_cursor_inside_passthrough() {
     let rendered = RenderedDocument {
         lines: vec![RenderedLine {
             plain_text: String::new(),
@@ -134,7 +134,7 @@ fn tmux_graphics_commands_keep_cursor_moves_outside_passthrough() {
     let mut transmitted = std::collections::BTreeSet::new();
 
     let (commands, _) = collect_graphics_commands(
-        KittyGraphicsTransport::Tmux,
+        KittyGraphicsTransport::tmux_at(80, 3),
         &rendered,
         viewport,
         &[],
@@ -145,9 +145,9 @@ fn tmux_graphics_commands_keep_cursor_moves_outside_passthrough() {
         .find(|command| command.contains("a=p"))
         .unwrap_or_else(|| panic!("placement command should be emitted"));
 
-    assert!(placement.starts_with("\u{1b}["));
-    assert!(placement.contains("\u{1b}Ptmux;"));
-    assert!(!placement.starts_with("\u{1b}Ptmux;"));
+    assert!(placement.starts_with("\u{1b}[2;6H"));
+    assert!(placement.contains("\u{1b}Ptmux;\u{1b}\u{1b}[5;86H\u{1b}\u{1b}_Ga=p"));
+    assert_eq!(placement.matches('\u{10eeee}').count(), 0);
 }
 
 #[test]

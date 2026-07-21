@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::{
     io::kitty_graphics::{
-        DeleteCommand, KittyGraphicsTransport, KittyImagePlacement, encode_delete, encode_place,
+        DeleteCommand, KittyGraphicsTransport, KittyImagePlacement, encode_delete, encode_place_at,
         encode_transmit_png,
     },
     render::text::{
@@ -56,7 +56,7 @@ pub(super) fn collect_page_viewport_commands(
             cursor_y: 0,
             z_index: -1,
         };
-        commands.push(format!("{}{}", ansi_cursor_move(0, 0), encode_place(transport, &placement)));
+        commands.push(encode_place_at(transport, &placement, 0, 0));
     }
 
     Ok((commands, visible_placements))
@@ -118,11 +118,8 @@ pub(super) fn collect_graphics_commands(
         let graphic_x = viewport.article_x
             + viewport.article_width.saturating_sub(graphic.width_cells) / 2
             + offset_x;
-        commands.push(format!(
-            "{}{}",
-            ansi_cursor_move(graphic_x, relative_row as u16 + offset_y),
-            encode_place(transport, &placement)
-        ));
+        let graphic_y = relative_row as u16 + offset_y;
+        commands.push(encode_place_at(transport, &placement, graphic_x, graphic_y));
     }
 
     (commands, visible_placements)
@@ -218,8 +215,4 @@ fn graphic_png_bytes(graphic: &RenderedGraphic) -> Option<&[u8]> {
         RenderedGraphicContent::Mermaid { png_bytes: Some(png_bytes), .. } => Some(png_bytes),
         RenderedGraphicContent::Mermaid { png_bytes: None, .. } => None,
     }
-}
-
-fn ansi_cursor_move(x: u16, y: u16) -> String {
-    format!("\u{1b}[{};{}H", y + 1, x + 1)
 }
