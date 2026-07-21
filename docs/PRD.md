@@ -93,7 +93,7 @@ terminal 常用者が Markdown を読むとき、次の摩擦が発生しやす�
 
 ### 5.4 対話モードの体験
 
-対話モードは `stdout` と `stdin` の両方が TTY で、かつ terminal 判定が Ghostty または Kitty のときにだけ起動する。
+対話モードは `stdout` と `stdin` の両方が TTY で、かつ terminal 判定が Ghostty または Kitty のときにだけ起動する。Ghostty 上の tmux では、tmux が設定する `TERM_PROGRAM` よりも内側の terminal を示す `LC_TERMINAL=ghostty` へ fallback して判定し、Kitty graphics command を tmux DCS passthrough で送信する。
 
 現行実装から確認できる操作は以下。
 
@@ -145,7 +145,7 @@ terminal 常用者が Markdown を読むとき、次の摩擦が発生しやす�
 - 検索 UI
 - TOC パネル
 - 複数リンクのフォーカス移動
-- tmux / zellij の正式サポート
+- Ghostty の環境情報を保持しない multiplexer と zellij の正式サポート
 - remote image fetch
 - arbitrary HTML 実行
 - Windows 対応

@@ -41,6 +41,7 @@ pub fn run(args: MdvArgs) -> Result<()> {
     if io::stdout().is_terminal() && io::stdin().is_terminal() {
         if !crate::ui::terminal::is_supported_terminal(
             std::env::var("TERM_PROGRAM").ok().as_deref(),
+            std::env::var("LC_TERMINAL").ok().as_deref(),
             std::env::var("TERM").ok().as_deref(),
         ) {
             bail!("interactive mode requires Ghostty or Kitty");

@@ -51,18 +51,20 @@
 条件:
 
 - `stdout` と `stdin` がともに TTY
-- terminal 判定が Ghostty または Kitty
+- `TERM_PROGRAM`、fallback の `LC_TERMINAL`、または `TERM` から Ghostty / Kitty と判定できる
 
 挙動:
 
 - `TerminalViewer::try_new()` を生成
 - raw mode と alternate screen に入る
 - graphic page を描画し、キー入力ループで scroll / reload / open link を処理する
+- tmux 内では各 Kitty APC を個別の DCS passthrough で包み、PNG payload を最大 4096 文字に分割して送る
 
 制約:
 
 - 現行実装では graphic page 生成が前提で、失敗時の runtime fallback はない
 - `webkit_snapshot` は非 macOS で未対応のため、interactive rich path は実質 macOS 前提
+- tmux は `allow-passthrough=on` または `all` が必要で、nested tmux は対象外
 
 ## 4. データフロー
 
@@ -205,7 +207,7 @@ repo の `bin/mdv` は install / update の実体であり、`main` への push 
 1. interactive rich rendering が macOS WebKit に依存している
 2. `TerminalViewer::try_new()` に graphic page failure 時の fallback がない
 3. link open は first link 固定で、link focus state を持たない
-4. terminal 判定は Ghostty / Kitty に限定される
+4. terminal 判定は Ghostty / Kitty に限定される。Ghostty 上の tmux は `LC_TERMINAL=ghostty` で検出する
 5. README の platform statement と現実装の runtime contract に差がある
 
 ## 11. 改善候補
