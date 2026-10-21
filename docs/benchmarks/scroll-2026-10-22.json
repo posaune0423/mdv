@@ -20579,7 +20579,7 @@
       "failed": 0
     },
     "release_build": "passed",
-    "installed_binary": "/Users/asumayamada/.local/bin/mdv",
+    "installed_binary": "$HOME/.local/bin/mdv",
     "signature": "ad hoc signed and codesign --verify --strict passed",
     "pixel_comparison": "40 actual CLI viewports, before/after RGBA and placement geometry identical; README and TECH, light/dark, top/middle/bottom, cache boundary, reversal, jump and resize",
     "reload": "changed source exactly matches reference and differs from old content",
