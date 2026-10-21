@@ -1,7 +1,7 @@
-use std::io::Cursor;
+use std::{io::Cursor, sync::Arc};
 
 use anyhow::{Context, Result};
-use image::{DynamicImage, ImageDecoder, ImageFormat, codecs::png::PngDecoder};
+use image::{DynamicImage, ImageFormat, RgbaImage};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphicPage {
@@ -10,7 +10,7 @@ pub struct GraphicPage {
     pub display_height_px: u32,
     pub image_width_px: u32,
     pub image_height_px: u32,
-    pub png_bytes: Vec<u8>,
+    pub image: Arc<RgbaImage>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -29,13 +29,35 @@ pub struct ViewportRaster {
 }
 
 pub fn build_graphic_page(
-    png_bytes: &[u8],
+    raster_bytes: &[u8],
     width_cells: u16,
     display_width_px: u32,
 ) -> Result<GraphicPage> {
-    let decoder = PngDecoder::new(Cursor::new(png_bytes))
-        .context("failed to decode page snapshot png header")?;
-    let (image_width_px, image_height_px) = decoder.dimensions();
+    let format = image::guess_format(raster_bytes).context("unknown snapshot raster format")?;
+    let mut image = image::load_from_memory_with_format(raster_bytes, format)
+        .context("failed to decode page snapshot raster")?
+        .to_rgba8();
+    if format == ImageFormat::Tiff {
+        let mut decoder = tiff::decoder::Decoder::new(Cursor::new(raster_bytes))
+            .context("failed to read snapshot alpha convention")?;
+        if decoder
+            .get_tag_u16_vec(tiff::tags::Tag::ExtraSamples)
+            .is_ok_and(|samples| samples == [1])
+        {
+            // TIFF may contain associated (premultiplied) alpha; PNG/Kitty expects straight RGBA.
+            for pixel in image.pixels_mut() {
+                let alpha = u32::from(pixel[3]);
+                if alpha == 0 {
+                    pixel.0 = [0, 0, 0, 0];
+                } else if alpha < 255 {
+                    for channel in &mut pixel.0[..3] {
+                        *channel = ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
+                    }
+                }
+            }
+        }
+    }
+    let (image_width_px, image_height_px) = image.dimensions();
     let display_width_px = display_width_px.max(1);
     let raster_scale = image_width_px as f32 / display_width_px as f32;
     let display_height_px = ((image_height_px as f32) / raster_scale).round().max(1.0) as u32;
@@ -46,7 +68,7 @@ pub fn build_graphic_page(
         display_height_px,
         image_width_px,
         image_height_px,
-        png_bytes: png_bytes.to_vec(),
+        image: Arc::new(image),
     })
 }
 
@@ -83,16 +105,22 @@ pub fn viewport_raster(
     content_rows: usize,
     cell_height_px: f32,
 ) -> Result<Option<ViewportRaster>> {
+    let _span = tracing::info_span!("graphics.viewport_raster").entered();
     let slice = viewport_slice(page, scroll_rows, content_rows, cell_height_px);
     if slice.rows == 0 || slice.source_height_px == 0 {
         return Ok(None);
     }
 
-    let image = image::load_from_memory_with_format(&page.png_bytes, ImageFormat::Png)
-        .context("failed to decode page snapshot png for viewport crop")?;
-    let cropped = image.crop_imm(0, slice.source_y_px, page.image_width_px, slice.source_height_px);
+    let cropped = image::imageops::crop_imm(
+        page.image.as_ref(),
+        0,
+        slice.source_y_px,
+        page.image_width_px,
+        slice.source_height_px,
+    )
+    .to_image();
     let mut png_bytes = Cursor::new(Vec::new());
-    DynamicImage::ImageRgba8(cropped.to_rgba8())
+    DynamicImage::ImageRgba8(cropped)
         .write_to(&mut png_bytes, ImageFormat::Png)
         .context("failed to encode cropped viewport png")?;
 

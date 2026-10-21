@@ -1,0 +1,134 @@
+{
+  "measured_at": "2026-10-21T17:14:02.284062+00:00",
+  "source_before_commit": "60d60747ea04084a278212fd0554f1b062515dd1",
+  "platform": "macOS-27.2-arm64-arm-64bit",
+  "terminal": {
+    "columns": 120,
+    "rows": 40,
+    "cell_px": [
+      8,
+      16
+    ]
+  },
+  "metric": "spawn to complete Kitty page placement received on PTY; terminal compositor excluded",
+  "order": "7 pairs per document, alternating before-after and after-before; no concurrent build/test",
+  "binary_sha256": {
+    "before": "9470e10384a8a52441fb5496f068d42a4b05fd87256b4f6e32e22da138f49a60",
+    "after": "ac0e5cf375fefbe93f7f587f3bcbdf3c73ef87adaf26a1fdb68ebc177b656372"
+  },
+  "documents": {
+    "docs/TECH.md": {
+      "sha256": "74121b491742a2bb60ab4459ddd5e20aa48b76d94881f19be8585748f4dcfa86",
+      "samples_ms": {
+        "before": [
+          1211.068541975692,
+          999.0269999834709,
+          941.3555000210181,
+          1044.307166012004,
+          980.6025420548394,
+          1038.2682500057854,
+          965.5508330324665
+        ],
+        "after": [
+          1182.6012920355424,
+          669.6708340314217,
+          715.9127910272218,
+          672.9213329963386,
+          754.9156250315718,
+          692.7743749693036,
+          722.868415992707
+        ]
+      },
+      "median_ms": {
+        "before": 999.0269999834709,
+        "after": 715.9127910272218
+      },
+      "reduction_percent": 28.338994737973376,
+      "first_viewport_png_sha256": {
+        "before": [
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b",
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b",
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b",
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b",
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b",
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b",
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b"
+        ],
+        "after": [
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b",
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b",
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b",
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b",
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b",
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b",
+          "ea49acfbd0d16989d3f740a85f7169cbe70647dfaa552465df936766b616727b"
+        ]
+      }
+    },
+    "README.md": {
+      "sha256": "79be4ab7d2d778983aa453be4583d0ac367745b5f102b452b4f31a7df4173b01",
+      "samples_ms": {
+        "before": [
+          1842.6506249816157,
+          1407.979624986183,
+          1327.8643329977058,
+          1392.9492919705808,
+          1303.623542014975,
+          1413.522999966517,
+          1357.8635000158101
+        ],
+        "after": [
+          1108.5627080174163,
+          1040.0113340001553,
+          1114.1784160281532,
+          1056.5319579909556,
+          1090.4969590483233,
+          1025.0567499897443,
+          1080.7701249723323
+        ]
+      },
+      "median_ms": {
+        "before": 1392.9492919705808,
+        "after": 1080.7701249723323
+      },
+      "reduction_percent": 22.4113805719815,
+      "first_viewport_png_sha256": {
+        "before": [
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944",
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944",
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944",
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944",
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944",
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944",
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944"
+        ],
+        "after": [
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944",
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944",
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944",
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944",
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944",
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944",
+          "b77618a2f0cb94d03c3de428b63deda512c8f718a7d7ab43f3f5718ec0e1d944"
+        ]
+      }
+    }
+  },
+  "commands": {
+    "before": [
+      "/tmp/mdv-startup/mdv-before",
+      "<document>"
+    ],
+    "after": [
+      "/Users/asumayamada/.local/bin/mdv",
+      "<document>"
+    ]
+  },
+  "notes": [
+    "Both binaries are optimized release builds on the same Mac; the after binary is installed on PATH.",
+    "Each pair renders identical document bytes, default system theme, and PTY dimensions.",
+    "First sample per binary is retained; this is not a controlled empty-OS-cache comparison.",
+    "All 14 viewport PNGs per document have identical SHA-256; source rendering logic is unchanged.",
+    "Ghostty UI capture was denied by the computer-use tool safety restriction; compositor paint time is unmeasured."
+  ]
+}

@@ -137,7 +137,8 @@ src/
 | `src/io/webkit_snapshot/mod.rs` | HTML snapshot 実行の公開 API |
 | `src/io/webkit_snapshot/diagnostics.rs` | snapshot report の型 |
 | `src/io/webkit_snapshot/paths.rs` | read-access root と temp workspace 計算 |
-| `src/io/webkit_snapshot/script.rs` | Swift helper script の埋め込み |
+| `src/io/webkit_snapshot/snapshot.swift` | ビルド時にコンパイルする WebKit snapshot helper |
+| `src/io/webkit_snapshot/worker.rs` | private Unix socket と共有 helper の起動・再接続・期限の管理 |
 | `src/io/webkit_snapshot/tests.rs` | path / diagnostics 周辺テスト |
 
 ### 3.7 `src/ui/`
@@ -236,6 +237,7 @@ tests/
 | --- | --- |
 | `README.md` | エンドユーザー向け紹介と使い方 |
 | `Cargo.toml` | crate metadata、依存、lint policy |
+| `build.rs` | macOS 用 Swift helper の事前コンパイルと target architecture の指定 |
 | `Cargo.lock` | 依存 lock |
 | `rust-toolchain.toml` | Rust version 固定 |
 | `.cargo/config.toml` | cargo alias |

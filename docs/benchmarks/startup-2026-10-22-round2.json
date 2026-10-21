@@ -1,0 +1,387 @@
+{
+  "measured_at": "2026-10-21T17:54:18.506145+00:00",
+  "platform": "macOS-27.2-arm64-arm-64bit",
+  "terminal": {
+    "columns": 120,
+    "rows": 40,
+    "cell_px": [
+      8,
+      16
+    ]
+  },
+  "metric": "spawn to complete Kitty placement on PTY, linear receive parser; compositor excluded",
+  "baseline": "previously installed precompiled per-invocation renderer",
+  "after": "installed persistent renderer + uncompressed TIFF transport + associated alpha conversion",
+  "binary_sha256": {
+    "before": "ac0e5cf375fefbe93f7f587f3bcbdf3c73ef87adaf26a1fdb68ebc177b656372",
+    "after": "2a93152dae7c1bf3b78edd0fd5805ea3525d9feeb2bec30a6bc5ddd0b6e30de4"
+  },
+  "documents": {
+    "docs/TECH.md": {
+      "document_sha256": "7de2e505d354f7d269e58703a5d0da522439ac0148c426513d03dae296c04e2f",
+      "warmup_ms": {
+        "before": 935.0296669872478,
+        "after": 586.4228749996983
+      },
+      "warm_samples_ms": {
+        "before": [
+          676.7205419600941,
+          669.9357079924084,
+          719.1795000107959,
+          679.0987090207636,
+          677.9442919651046,
+          689.5077080116607,
+          695.9654579986818
+        ],
+        "after": [
+          234.23879104666412,
+          261.29016594495624,
+          256.0534160002135,
+          198.7917089718394,
+          192.4407919868827,
+          200.94399998197332,
+          193.93362500704825
+        ]
+      },
+      "warm_median_ms": {
+        "before": 679.0987090207636,
+        "after": 200.94399998197332
+      },
+      "warm_reduction_percent": 70.41019261077267,
+      "rgba_sha256_per_pair": [
+        "1b7fddb1b8f976532b134ae3fa38a0c2e161cf40bba3c9ff27a5001ebc749969",
+        "1b7fddb1b8f976532b134ae3fa38a0c2e161cf40bba3c9ff27a5001ebc749969",
+        "1b7fddb1b8f976532b134ae3fa38a0c2e161cf40bba3c9ff27a5001ebc749969",
+        "1b7fddb1b8f976532b134ae3fa38a0c2e161cf40bba3c9ff27a5001ebc749969",
+        "1b7fddb1b8f976532b134ae3fa38a0c2e161cf40bba3c9ff27a5001ebc749969",
+        "1b7fddb1b8f976532b134ae3fa38a0c2e161cf40bba3c9ff27a5001ebc749969",
+        "1b7fddb1b8f976532b134ae3fa38a0c2e161cf40bba3c9ff27a5001ebc749969"
+      ],
+      "cold_worker_after_samples_ms": [
+        558.8778749806806,
+        613.443374983035,
+        577.2672499879263,
+        552.0873329951428,
+        584.8309169523418
+      ],
+      "cold_before_samples_ms": [
+        693.6661660438403,
+        679.5457919943146,
+        713.3583340328187,
+        680.3778749890625,
+        694.3752919905819
+      ],
+      "cold_before_median_ms": 693.6661660438403,
+      "cold_worker_after_median_ms": 577.2672499879263
+    },
+    "README.md": {
+      "document_sha256": "79be4ab7d2d778983aa453be4583d0ac367745b5f102b452b4f31a7df4173b01",
+      "warmup_ms": {
+        "before": 1014.2034169984981,
+        "after": 331.8367500323802
+      },
+      "warm_samples_ms": {
+        "before": [
+          651.9084579776973,
+          654.272541985847,
+          676.2489590328187,
+          644.9780410039239,
+          664.5939580048434,
+          665.9696670249104,
+          661.632958042901
+        ],
+        "after": [
+          282.4134160182439,
+          285.0842080079019,
+          288.5271250270307,
+          318.64645797759295,
+          324.106624990236,
+          298.7469169893302,
+          313.84749995777383
+        ]
+      },
+      "warm_median_ms": {
+        "before": 661.632958042901,
+        "after": 298.7469169893302
+      },
+      "warm_reduction_percent": 54.84703212593603,
+      "rgba_sha256_per_pair": [
+        "9e161bf724cbad2352d8d36479162309c79b4ef49ea53ff6f53dabf22cd9c159",
+        "9e161bf724cbad2352d8d36479162309c79b4ef49ea53ff6f53dabf22cd9c159",
+        "9e161bf724cbad2352d8d36479162309c79b4ef49ea53ff6f53dabf22cd9c159",
+        "9e161bf724cbad2352d8d36479162309c79b4ef49ea53ff6f53dabf22cd9c159",
+        "9e161bf724cbad2352d8d36479162309c79b4ef49ea53ff6f53dabf22cd9c159",
+        "9e161bf724cbad2352d8d36479162309c79b4ef49ea53ff6f53dabf22cd9c159",
+        "9e161bf724cbad2352d8d36479162309c79b4ef49ea53ff6f53dabf22cd9c159"
+      ],
+      "cold_worker_after_samples_ms": [
+        606.4923329977319,
+        643.8948340364732,
+        563.3284170180559,
+        565.9132500295527,
+        559.6377499750815
+      ],
+      "cold_before_samples_ms": [
+        672.9219160042703,
+        674.1768339998089,
+        672.7998330025002,
+        661.8012079852633,
+        680.1766249700449
+      ],
+      "cold_before_median_ms": 672.9219160042703,
+      "cold_worker_after_median_ms": 565.9132500295527
+    }
+  },
+  "unseen_documents": [
+    {
+      "trial": 0,
+      "source_sha256": "43ed9a6276c458b4850a905aaa9faaf195d49cd4c2686029adcdbd12b525a4c7",
+      "before_ms": 464.7966669872403,
+      "after_ms": 139.08766699023545,
+      "rgba_sha256": "a20c2bba54455dcd9f73e4a7e9740f8865e6ded682a7e37a86427ba83b8f4e79"
+    },
+    {
+      "trial": 1,
+      "source_sha256": "8973bdb274402e9f22a88f5ec631361c36c6203945b9b0e1e63b31bd0e56c06b",
+      "before_ms": 469.9837919906713,
+      "after_ms": 140.55349997943267,
+      "rgba_sha256": "ec99abf007a423d961576bb4c5608da5fd3d08073dd6a4ad38ac0ef586e305c4"
+    },
+    {
+      "trial": 2,
+      "source_sha256": "ee20249dd95983b66b2e8c0af9094ff9547852f7c2185e664ec100eb7f771f9c",
+      "before_ms": 490.5895839910954,
+      "after_ms": 145.58729203417897,
+      "rgba_sha256": "715b6e4d77dc802711cdb5d56a6552ac7cd31d5db1661ae14eae1bbb34b9ba2e"
+    },
+    {
+      "trial": 3,
+      "source_sha256": "e5f0348f8622a2071a2b09d148124c6b2ea0d639a6840bb084496e17e152d857",
+      "before_ms": 507.0715000038035,
+      "after_ms": 135.75108296936378,
+      "rgba_sha256": "ed5ffdebb932bf6d3577a8cd4ac186d39bef145cf6b6e60d39423277cd29166e"
+    },
+    {
+      "trial": 4,
+      "source_sha256": "00bfc2f7174cb430a2d330fd4f493264750fddc7a72fed225f69e71c1d013344",
+      "before_ms": 471.00541699910536,
+      "after_ms": 136.28754200180992,
+      "rgba_sha256": "dcb9def31ed5a0ec8bd8bda8a5f5ae2c2a7cdbcbfce2da200f62e3326b2294a3"
+    },
+    {
+      "trial": 5,
+      "source_sha256": "ec1389d2d15269d5cf063ef682af1175a433019c5d3a277b792cbb790b0b3d87",
+      "before_ms": 497.1953750355169,
+      "after_ms": 144.86162504181266,
+      "rgba_sha256": "dd5ad9c410eb17ff74bd6aaf08680d8b4596980df84ca253195b2941f6cb9c5a"
+    },
+    {
+      "trial": 6,
+      "source_sha256": "acffae53725e1e3e3135f00c40b03c544ec4051961bb5d7006ec14eec9a9a665",
+      "before_ms": 474.7238749987446,
+      "after_ms": 150.9315840085037,
+      "rgba_sha256": "91a516df65a71f68b918e618ab16ad1cb315749c298d3f0ce595f25e77d0fd1a"
+    }
+  ],
+  "notes": [
+    "No build/tests run concurrently. Each paired document has identical bytes/default system theme.",
+    "The fixed linear receiver is used for both binaries; historical round1 timings included receiver overhead.",
+    "Warm means worker alive, not a saved rendered image; data is reread/re-rendered on every request.",
+    "Cold means no worker running; OS/library/HTTP caches are not flushed."
+  ],
+  "viewport_quality_checks": [
+    {
+      "document": "README.md",
+      "theme": "dark",
+      "viewport_index": 0,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "9e161bf724cbad2352d8d36479162309c79b4ef49ea53ff6f53dabf22cd9c159",
+      "png_identical": true
+    },
+    {
+      "document": "README.md",
+      "theme": "dark",
+      "viewport_index": 1,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "b624a33e76f57e0cab4e5c9b164088e9d029060ef40286d5af1ad61df231e336",
+      "png_identical": true
+    },
+    {
+      "document": "README.md",
+      "theme": "dark",
+      "viewport_index": 2,
+      "size": [
+        1238,
+        798
+      ],
+      "rgba_sha256": "dfc9450fbb31d949da8958a51103f2011d66d9402b4e5924777feecdd7d7b62b",
+      "png_identical": true
+    },
+    {
+      "document": "README.md",
+      "theme": "light",
+      "viewport_index": 0,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "90a7e5cfe1b8e6fedd125d213ae4c7902d452ca15c74b53e6424b761d9f667c7",
+      "png_identical": true
+    },
+    {
+      "document": "README.md",
+      "theme": "light",
+      "viewport_index": 1,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "d3fd6311b518045e51d7f42d791b78c53d6d7e5bbe5334960467f43860fde2b6",
+      "png_identical": true
+    },
+    {
+      "document": "README.md",
+      "theme": "light",
+      "viewport_index": 2,
+      "size": [
+        1238,
+        798
+      ],
+      "rgba_sha256": "3889a66e1b08beeed3cd8c963a484031a1caf0bb8dbb4db28fcd7eb217591a82",
+      "png_identical": true
+    },
+    {
+      "document": "docs/TECH.md",
+      "theme": "dark",
+      "viewport_index": 0,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "1b7fddb1b8f976532b134ae3fa38a0c2e161cf40bba3c9ff27a5001ebc749969",
+      "png_identical": true
+    },
+    {
+      "document": "docs/TECH.md",
+      "theme": "dark",
+      "viewport_index": 1,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "5e25f92e6e7540c585030ffe9e350a3eabb0a848a439c7c543ac3d7a260952a1",
+      "png_identical": true
+    },
+    {
+      "document": "docs/TECH.md",
+      "theme": "dark",
+      "viewport_index": 2,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "60387cdc1e9ba43bebf0ff4c9205351efbdb6a2d8dfaaaefb07d9b12dfec614d",
+      "png_identical": true
+    },
+    {
+      "document": "docs/TECH.md",
+      "theme": "light",
+      "viewport_index": 0,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "31a7d1dcd5352710afe2dbacfc977018cb75f425710f46314fe2e88254b424d3",
+      "png_identical": true
+    },
+    {
+      "document": "docs/TECH.md",
+      "theme": "light",
+      "viewport_index": 1,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "0e0df1a94f5593735c4eab2bbeafda7fb00a289e5feee58a4c7672445b53768d",
+      "png_identical": true
+    },
+    {
+      "document": "docs/TECH.md",
+      "theme": "light",
+      "viewport_index": 2,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "cf7af1c7c29e71476188c3ae6fe51ed70286710b0fa35287e12d1d6cb2f07056",
+      "png_identical": true
+    },
+    {
+      "document": "tests/fixtures/gfm/html-centered-blocks/input.md",
+      "theme": "dark",
+      "viewport_index": 0,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "36dd665a6db0a8a89465a74cf87a91a5eed82ff93fc59628aa5a6cf83a221390",
+      "png_identical": true
+    },
+    {
+      "document": "tests/fixtures/gfm/html-centered-blocks/input.md",
+      "theme": "light",
+      "viewport_index": 0,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "554f8245074ce346c28af022a3e41d8019bf289f61ef3dafc5c9fd4c6fd86417",
+      "png_identical": true
+    },
+    {
+      "document": "tests/fixtures/gfm/math/input.md",
+      "theme": "dark",
+      "viewport_index": 0,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "aca6cb8930aff29086daa488b61203e4b0bb65e027fb5c0c7b9803d942fbcf56",
+      "png_identical": true
+    },
+    {
+      "document": "tests/fixtures/gfm/math/input.md",
+      "theme": "light",
+      "viewport_index": 0,
+      "size": [
+        1238,
+        805
+      ],
+      "rgba_sha256": "74daccc9a410b184e29364b022edbe9b65a2a735e296e80252cbaeb1340b8f2c",
+      "png_identical": true
+    }
+  ],
+  "verification": {
+    "tests_passed": 136,
+    "clippy": "passed -D warnings",
+    "format": "passed",
+    "idle_lifecycle": "isolated worker remained live at100s, exited successfully and unlinked socket by140s observation; idle timeout120s",
+    "stalled_external_image": "real HTTP stall with500ms request deadline returned error at508ms; immediate subsequent local document132ms, then74ms",
+    "review": "CodeRabbit findings addressed; subsequent review returned0 findings; independent watchdog recheck passed",
+    "native_compositor": "not measured; Ghostty computer-use access denied in prior round"
+  },
+  "source_files_sha256": {
+    "src/io/webkit_snapshot/worker.rs": "86317c1283d3ccf0e7e9568f4a7be31d0921ba0b965ebb3ad577f1d01b3ef434",
+    "src/io/webkit_snapshot/snapshot.swift": "9566a474574c8a65fd1ce369e4f23166d94a8c488f3d87f9c67034c9409ec04a",
+    "src/io/webkit_snapshot/mod.rs": "8de0216657ea3284b73ff9c2835cce644331e9083c4cd86988a5c1acdf240fce",
+    "src/ui/page_graphics.rs": "f5e6ef83e9da550a057c162f00adecb50bf8321793bae6a1f60c89aabe8c2501",
+    "src/ui/terminal/layout.rs": "2276f25f9ab31d0c949b138d5861ebf0ea4d269f0bacd60cb0f5c1a3ff0cfa26",
+    "scripts/benchmark-startup.py": "0fd76f4f7280f27c1afdf0bfb75101d62c53255f05ecb072609ebfe4b7ec9648"
+  }
+}
