@@ -19,6 +19,17 @@ uv run scripts/benchmark-startup.py --runs 7 --output /tmp/mdv-startup.json --ca
 
 `docs/benchmarks/startup-2026-10-22.json` は最初の改善時の記録です。当時の計測器は大きな PNG を受信するたびに全バッファを再走査していたため、特に README の測定値に計測器の負荷を含みます。以降の比較では末尾だけを検査する修正版を使い、修正前バイナリも同じ計測器で測り直します。
 
+## スクロールの計測
+
+```bash
+uv run scripts/benchmark-scroll.py --output /tmp/mdv-scroll.json -- ./target/release/mdv README.md
+uv run scripts/benchmark-scroll.py --input-kind wheel --duration 1 --output /tmp/mdv-wheel.json -- ./target/release/mdv docs/TECH.md
+```
+
+固定 PTY で単発入力の最初の位置変更、連続入力中のフレーム間隔、画像の転送回数・バイト数を記録します。`first_changed_frame_latency_ms` は画像が変わらない最初の frame を除外します。ホイール計測は terminal が送る SGR wheel event の検証で、実際の trackpad と compositor の感触・描画時間は対象外です。比較時はビルド・テストや別の計測を同時実行しないでください。
+
+画像は最大2枚、各画像はおよそ3 viewport 高までを保持します。最初は可視領域だけを転送し、周辺領域はバックグラウンドで準備して先読み転送します。全ページを端末の texture にしません。PNG の chunk は4096 base64 bytes以下で、転送途中に別の graphics command を挟みません。reload・resize・終了で画像データを解放し、古い先読み結果は破棄します。
+
 ## Local helper script
 
 The repository root includes a small `./mdv` shell helper that rebuilds the debug binary when sources change, then runs `target/debug/mdv`.

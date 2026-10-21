@@ -31,6 +31,7 @@ The [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/
 | **Quick update**             | `mdv update` replaces the current executable when `main`'s CI-generated `bin/mdv` changes      |
 | **Pipe-friendly**            | Plain-text fallback when stdout is not a TTY — works in CI and scripts                         |
 | **Vim navigation**           | `j`/`k`/`g`/`G`/PageUp/PageDown                                                                |
+| **Smooth scrolling**        | Mouse wheel, trackpad, and keys with smooth motion and responsive input                        |
 
 ## Quick start
 
@@ -69,6 +70,7 @@ mdv ./README.md | head -n 50            # plain-text output (pipe/CI)
 | `g`                   | Jump to top          |
 | `G`                   | Jump to bottom       |
 | `PageUp` / `PageDown` | Page scroll          |
+| Mouse wheel / trackpad | Smooth scroll      |
 | `r`                   | Reload file          |
 | `o`                   | Open link in browser |
 | `q`                   | Quit                 |

@@ -81,7 +81,8 @@
 2. Mermaid code fence は事前に `replace_mermaid_code_blocks()` で SVG か fallback HTML に差し替える
 3. WebKit worker が HTML を TIFF と diagnostics report に変換する
 4. `ui::page_graphics::build_graphic_page()` が RGBA と display size を作る
-5. `ui::terminal` が可視 viewport を lossless PNG に変換し、Kitty graphics command で terminal に置く
+5. `ui::terminal::graphics::resident` が可視領域を含む連続画像を最大2枚保持し、通常フレームでは source crop だけを更新する
+6. `ui::terminal` は約60Hzの期限で入力をまとめ、短いピクセル補間と synchronized output で画面を更新する。次の画像は background で lossless PNG 化し、全 chunk を続けて転送する
 
 ### 4.3 Headless Render Pipeline
 

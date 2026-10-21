@@ -1,7 +1,9 @@
 use std::fs;
 use std::io::Cursor;
 
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent, MouseEventKind,
+};
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
 use tempfile::NamedTempFile;
 
@@ -18,8 +20,7 @@ use crate::{
 use super::{
     CellMetrics, GraphicViewport, TerminalViewer,
     graphics::{
-        collect_graphics_commands, collect_page_viewport_commands, fit_graphic_placement,
-        visible_graphic_placements,
+        PageGraphics, collect_graphics_commands, fit_graphic_placement, visible_graphic_placements,
     },
     layout::article_wrap_width,
 };
@@ -95,7 +96,7 @@ fn graphics_commands_only_transmit_png_payload_once() {
 }
 
 #[test]
-fn page_viewport_commands_retransmit_cropped_png_for_each_scroll_position() {
+fn page_scroll_reuses_resident_image_and_changes_source_crop() {
     let image = ImageBuffer::from_pixel(8, 40, Rgba([255, 0, 0, 255]));
     let mut png_bytes = Vec::new();
     DynamicImage::ImageRgba8(image)
@@ -103,32 +104,28 @@ fn page_viewport_commands_retransmit_cropped_png_for_each_scroll_position() {
         .unwrap_or_else(|error| panic!("fixture image should encode: {error}"));
     let page = build_graphic_page(&png_bytes, 16, 8)
         .unwrap_or_else(|error| panic!("graphic page should decode: {error}"));
-    let mut transmitted = std::collections::BTreeSet::new();
+    let mut graphics = PageGraphics::default();
 
-    let (first_commands, _) = collect_page_viewport_commands(
-        &page,
-        0,
-        4,
-        CellMetrics { width_px: 8.0, height_px: 2.0 },
-        &[],
-        &mut transmitted,
-    )
-    .unwrap_or_else(|error| panic!("viewport commands should build: {error}"));
-    let (second_commands, _) = collect_page_viewport_commands(
-        &page,
-        4,
-        4,
-        CellMetrics { width_px: 8.0, height_px: 2.0 },
-        &[],
-        &mut transmitted,
-    )
-    .unwrap_or_else(|error| panic!("viewport commands should rebuild after scroll: {error}"));
+    let (first_commands, first_placements) = graphics
+        .commands(&page, 0.0, 4, CellMetrics { width_px: 8.0, height_px: 2.0 }, &[])
+        .unwrap_or_else(|error| panic!("viewport commands should build: {error}"));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while graphics.has_pending_work() {
+        assert!(std::time::Instant::now() < deadline, "resident preparation did not finish");
+        graphics
+            .maintenance()
+            .unwrap_or_else(|error| panic!("resident preparation should upload: {error}"));
+        std::thread::yield_now();
+    }
+    let (second_commands, _) = graphics
+        .commands(&page, 1.0, 4, CellMetrics { width_px: 8.0, height_px: 2.0 }, &first_placements)
+        .unwrap_or_else(|error| panic!("viewport commands should rebuild after scroll: {error}"));
 
     assert_eq!(first_commands.iter().filter(|command| command.contains("a=t")).count(), 1);
-    assert_eq!(second_commands.iter().filter(|command| command.contains("a=t")).count(), 1);
+    assert_eq!(second_commands.iter().filter(|command| command.contains("a=t")).count(), 0);
     assert!(first_commands.iter().any(|command| command.contains("h=8")));
     assert!(second_commands.iter().any(|command| command.contains("h=8")));
-    assert!(second_commands.iter().any(|command| command.contains("x=0,y=0")));
+    assert!(second_commands.iter().any(|command| command.contains("x=0,y=2")));
 }
 
 #[test]
@@ -165,6 +162,37 @@ fn batched_scroll_events_apply_accumulated_offset() {
 }
 
 #[test]
+fn wheel_scroll_moves_the_document_and_coalesces_direction_changes() {
+    let mut viewer = sample_viewer(&long_document(64));
+    viewer.needs_redraw = false;
+    let wheel = |kind| {
+        Event::Mouse(MouseEvent { kind, column: 10, row: 10, modifiers: KeyModifiers::NONE })
+    };
+    assert!(!viewer.apply_event_batch([
+        wheel(MouseEventKind::ScrollDown),
+        wheel(MouseEventKind::ScrollDown),
+        wheel(MouseEventKind::ScrollUp)
+    ]));
+    assert_eq!(viewer.scroll, 3);
+    assert!(viewer.needs_redraw);
+}
+
+#[test]
+fn held_navigation_keys_continue_scrolling_but_releases_do_not() {
+    let mut viewer = sample_viewer(&long_document(64));
+    let mut repeat = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+    repeat.kind = KeyEventKind::Repeat;
+    let mut release = repeat;
+    release.kind = KeyEventKind::Release;
+    assert!(!viewer.apply_event_batch([
+        Event::Key(repeat),
+        Event::Key(repeat),
+        Event::Key(release)
+    ]));
+    assert_eq!(viewer.scroll, 2);
+}
+
+#[test]
 fn quit_in_batched_input_short_circuits_pending_scroll() {
     let mut viewer = sample_viewer(&long_document(64));
     viewer.needs_redraw = false;
@@ -175,6 +203,22 @@ fn quit_in_batched_input_short_circuits_pending_scroll() {
     assert!(should_quit);
     assert_eq!(viewer.scroll, 0);
     assert!(!viewer.needs_redraw);
+}
+
+#[test]
+fn quit_short_circuits_reload_and_releases_queued_image_deletes() {
+    let mut viewer = sample_viewer(&long_document(64));
+    let warning = viewer.warning.clone();
+    fs::remove_file(viewer.source.path())
+        .unwrap_or_else(|error| panic!("remove source for reload check: {error}"));
+    viewer.pending_image_deletes.push(crate::io::kitty_graphics::encode_delete(
+        crate::io::kitty_graphics::DeleteCommand::Image { image_id: 1 },
+    ));
+    assert!(viewer.apply_event_batch([key_event('r'), key_event('q')]));
+    assert_eq!(viewer.warning, warning, "quit should bypass the queued reload");
+    let deletes = viewer.release_page_images();
+    assert!(deletes.iter().any(|command| command.contains("a=d,d=I,i=1")));
+    assert!(viewer.release_page_images().is_empty());
 }
 
 #[test]
