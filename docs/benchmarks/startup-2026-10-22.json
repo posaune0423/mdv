@@ -120,7 +120,7 @@
       "<document>"
     ],
     "after": [
-      "/Users/asumayamada/.local/bin/mdv",
+      "$HOME/.local/bin/mdv",
       "<document>"
     ]
   },

@@ -36,7 +36,7 @@ pub fn build_graphic_page(
     let format = image::guess_format(raster_bytes).context("unknown snapshot raster format")?;
     let mut image = image::load_from_memory_with_format(raster_bytes, format)
         .context("failed to decode page snapshot raster")?
-        .to_rgba8();
+        .into_rgba8();
     if format == ImageFormat::Tiff {
         let mut decoder = tiff::decoder::Decoder::new(Cursor::new(raster_bytes))
             .context("failed to read snapshot alpha convention")?;

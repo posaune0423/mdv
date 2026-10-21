@@ -131,7 +131,7 @@ HTML snapshot は Swift helper 経由で `WKWebView` を使っている。`build
 
 生成物:
 
-- `snapshot.png`
+- `snapshot.png`（`render_html_to_png`）または `snapshot.tiff`（対話表示）
 - `snapshot-report.json`
 
 diagnostics には以下が含まれる。
