@@ -695,5 +695,14 @@ Historical first-round record; superseded by the further improvement below. Its 
 
 - [x] Preserve all combined work in a backup ref and archive, inspect current origin/main and ownership boundaries.
 - [x] Split startup rendering foundation and dependent smooth-scrolling commits without discarding work.
-- [ ] Verify the standalone startup branch and the complete scrolling branch.
-- [ ] Push both branches, open two reviewable PRs, attach both to this chat, and verify CI/review state.
+- [x] Verify the standalone startup branch and the complete scrolling branch.
+- [x] Push both branches, open two reviewable PRs, attach both to this chat, and verify CI/review state.
+
+### Publication review
+
+- Startup PR: https://github.com/posaune0423/mdv/pull/10 (`main` <- `fix/startup-latency`), standalone startup branch: format/clippy and136 local macOS tests passed.
+- Smooth-scroll PR: https://github.com/posaune0423/mdv/pull/11 (`fix/startup-latency` <- `feature/smooth-scrolling`), only the dependent scrolling diff is included.
+- A shared Cargo target produced startup-shaped test counts while checking the scroll branch; an independent fresh target at `/tmp/mdv-pr-scroll-isolated-target` confirmed42 lib +4 e2e +14 integration +93 unit =153 passing tests and clean clippy on the actual scrolling source.
+- Both initial PR heads passed remote Ubuntu `checks`; scrolling CI ran41 lib +4 e2e +14 integration +79 unit =138 tests (macOS-specific tests omitted). The tracked-binary refresh job is correctly skipped for pull requests.
+- Both PRs are attached to this chat and mergeable; no merge was requested or performed. CodeRabbit skips stacked non-default-base PRs, so its skipped status on #11 is not a completed remote review.
+- Original work remains recoverable under `refs/backup/pre-split-20261022-053532` and `/tmp/mdv-pr-split-20261022-053532/`; all original source/artifact bytes were checked after splitting. The startup worktree remains under `.worktrees/fix/startup-latency` for review.
