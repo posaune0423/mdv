@@ -40,6 +40,7 @@ pub fn render_html_to_png(
     Ok(SnapshotResult { png_bytes, diagnostics })
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) fn render_html_to_tiff(html: &str, base_dir: &Path, width: u32) -> Result<Vec<u8>> {
     render_image(html, base_dir, width, "tiff").map(|(bytes, _)| bytes)
 }

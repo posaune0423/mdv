@@ -150,20 +150,30 @@ jobs:
               $listener.Stop()
             }
           } -ArgumentList (Join-Path $env:GITHUB_WORKSPACE 'bin\mdv.exe'), $ready
-          for ($attempt = 0; $attempt -lt 50 -and -not (Test-Path -LiteralPath $ready); $attempt += 1) {
-            Start-Sleep -Milliseconds 100
-          }
-          if (-not (Test-Path -LiteralPath $ready)) {
-            throw 'The localhost installer fixture did not start.'
-          }
-          $env:MDV_BINARY_URL = 'http://127.0.0.1:18765/mdv.exe'
-          $env:MDV_INSTALL_DIR = $installDir
-          & .\scripts\install.ps1
-          & .\scripts\install.ps1
-          Receive-Job -Job $job -Wait -AutoRemoveJob
-          & (Join-Path $installDir 'mdv.exe') --version
-          if ($LASTEXITCODE -ne 0) {
-            throw 'The installed executable did not report its version.'
+          try {
+            for ($attempt = 0; $attempt -lt 50 -and -not (Test-Path -LiteralPath $ready); $attempt += 1) {
+              Start-Sleep -Milliseconds 100
+            }
+            if (-not (Test-Path -LiteralPath $ready)) {
+              throw 'The localhost installer fixture did not start.'
+            }
+            $env:MDV_BINARY_URL = 'http://127.0.0.1:18765/mdv.exe'
+            $env:MDV_INSTALL_DIR = $installDir
+            & .\scripts\install.ps1
+            if ($LASTEXITCODE -ne 0) { throw 'First installer run failed.' }
+            & .\scripts\install.ps1
+            if ($LASTEXITCODE -ne 0) { throw 'Second installer run failed.' }
+            if (-not (Wait-Job -Job $job -Timeout 60)) {
+              throw 'The localhost installer fixture did not receive both requests.'
+            }
+            Receive-Job -Job $job -ErrorAction Stop
+            & (Join-Path $installDir 'mdv.exe') --version
+            if ($LASTEXITCODE -ne 0) {
+              throw 'The installed executable did not report its version.'
+            }
+          } finally {
+            Stop-Job -Job $job -ErrorAction SilentlyContinue
+            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
           }
 
       - name: Upload Windows distribution artifact
