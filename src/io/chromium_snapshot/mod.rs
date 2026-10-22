@@ -288,10 +288,10 @@ fn render_file_url(page_url: &str, viewport_width_px: u32) -> Result<SnapshotRes
         device_posture: None,
     })
     .context("failed to set Chromium device scale factor")?;
-    tab.navigate_to(page_url)
-        .context("failed to navigate Chromium snapshot tab")?
-        .wait_until_navigated()
-        .context("Chromium snapshot navigation timed out")?;
+    tab.call_method(Emulation::SetScrollbarsHidden { hidden: true })
+        .context("failed to hide Chromium scrollbars for fixed-width rasterization")?;
+    tab.navigate_to(page_url).context("failed to navigate Chromium snapshot tab")?;
+    wait_for_document_navigation(&tab, page_url, render_deadline)?;
 
     let diagnostics = wait_for_readiness(&tab, viewport_width_px, render_deadline)?;
     remaining_until(render_deadline, "Chromium snapshot rendering timed out before capture")?;
@@ -391,30 +391,8 @@ fn wait_for_readiness(
 
     for attempt in 0..=MAX_READINESS_ATTEMPTS {
         ensure!(Instant::now() < deadline, "Chromium snapshot rendering timed out");
-        let evaluation = tab
-            .call_method(Runtime::Evaluate {
-                expression: READINESS_PROBE.to_string(),
-                return_by_value: Some(true),
-                generate_preview: Some(false),
-                silent: Some(false),
-                await_promise: Some(false),
-                include_command_line_api: Some(false),
-                user_gesture: Some(false),
-                object_group: None,
-                context_id: None,
-                throw_on_side_effect: None,
-                timeout: None,
-                disable_breaks: None,
-                repl_mode: None,
-                allow_unsafe_eval_blocked_by_csp: None,
-                unique_context_id: None,
-                serialization_options: None,
-            })
+        let value = evaluate_value(tab, READINESS_PROBE)
             .context("failed to evaluate Chromium snapshot readiness")?;
-        let evaluation_debug = format!("{evaluation:?}");
-        let value = evaluation.result.value.context(format!(
-            "Chromium snapshot readiness did not return a value: {evaluation_debug}"
-        ))?;
         let probe = serde_json::from_value::<ReadinessProbe>(value)
             .context("Chromium snapshot readiness returned invalid diagnostics")?;
         let visuals_ready = probe.fonts_ready
@@ -450,6 +428,53 @@ fn wait_for_readiness(
     }
 
     Ok(latest.unwrap_or_default())
+}
+
+fn wait_for_document_navigation(
+    tab: &headless_chrome::Tab,
+    expected_url: &str,
+    deadline: Instant,
+) -> Result<()> {
+    let expected_url =
+        serde_json::to_string(expected_url).context("failed to encode Chromium navigation URL")?;
+    let expression = format!(
+        "(() => window.location.href === {expected_url} && document.readyState !== 'loading')()"
+    );
+    loop {
+        let ready = serde_json::from_value::<bool>(evaluate_value(tab, &expression)?)
+            .context("Chromium navigation readiness returned a non-boolean value")?;
+        if ready {
+            return Ok(());
+        }
+        ensure!(Instant::now() < deadline, "Chromium snapshot navigation timed out");
+        thread::sleep(READINESS_INTERVAL);
+    }
+}
+
+fn evaluate_value(tab: &headless_chrome::Tab, expression: &str) -> Result<serde_json::Value> {
+    let evaluation = tab.call_method(Runtime::Evaluate {
+        expression: expression.to_string(),
+        return_by_value: Some(true),
+        generate_preview: Some(false),
+        silent: Some(false),
+        await_promise: Some(false),
+        include_command_line_api: Some(false),
+        user_gesture: Some(false),
+        object_group: None,
+        context_id: None,
+        throw_on_side_effect: None,
+        timeout: None,
+        disable_breaks: None,
+        repl_mode: None,
+        allow_unsafe_eval_blocked_by_csp: None,
+        unique_context_id: None,
+        serialization_options: None,
+    })?;
+    let evaluation_debug = format!("{evaluation:?}");
+    evaluation
+        .result
+        .value
+        .context(format!("Chromium evaluation did not return a value: {evaluation_debug}"))
 }
 
 fn remaining_until(deadline: Instant, timeout_message: &str) -> Result<Duration> {

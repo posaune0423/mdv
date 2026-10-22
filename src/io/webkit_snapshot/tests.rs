@@ -33,19 +33,29 @@ fn diagnostics_default_to_empty_assets() {
 #[test]
 fn snapshot_asset_root_expands_to_cover_relative_parent_assets() {
     let html = r#"<html><body><img src="../../../../examples/pixel.png" /></body></html>"#;
-    let base_dir = Path::new("/Users/example/project/tests/fixtures/gfm/image");
+    let project = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("project fixture should be created: {error}"));
+    let base_dir = project.path().join("tests/fixtures/gfm/image");
+    std::fs::create_dir_all(&base_dir)
+        .unwrap_or_else(|error| panic!("fixture base directory should be created: {error}"));
 
-    let root = snapshot_asset_root(html, base_dir);
+    let root = snapshot_asset_root(html, &base_dir);
 
-    assert_eq!(root, Path::new("/Users/example/project"));
+    assert_eq!(root, project.path());
 }
 
 #[test]
 fn snapshot_workspace_uses_temp_dir() {
-    let workspace = create_workspace(Path::new("/tmp"), Path::new("/"))
+    let temp_dir = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("temporary workspace root should be created: {error}"));
+    let workspace = create_workspace(temp_dir.path(), temp_dir.path())
         .unwrap_or_else(|error| panic!("workspace should be created: {error}"));
 
-    assert!(workspace.starts_with(Path::new("/tmp")));
+    assert!(workspace.starts_with(temp_dir.path()));
+    assert_eq!(
+        workspace.parent().and_then(Path::file_name),
+        Some(std::ffi::OsStr::new(".mdv-webkit"))
+    );
     let _ = std::fs::remove_dir_all(workspace);
 }
 

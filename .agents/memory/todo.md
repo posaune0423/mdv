@@ -738,7 +738,7 @@ Historical first-round record; superseded by the further improvement below. Its 
 - [x] Implement host artifact selection and safe Windows self-replacement while retaining the macOS path and update-version policy.
 - [x] Add a PowerShell installer that validates an MDV executable before atomically replacing the user-local install.
 - [x] Make CI validate Ubuntu and Windows, publish both per-SHA artifacts, and use one guarded publisher for both tracked binaries.
-- [ ] Update Windows install/update documentation and run focused Rust plus workflow/script validation.
+- [x] Update Windows install/update documentation and run focused Rust plus workflow/script validation.
 
 ### Windows local review
 
@@ -749,3 +749,4 @@ Historical first-round record; superseded by the further improvement below. Its 
 - Existing root checkout renderer experiments were preserved; this task is isolated under `.worktrees/feature/windows-support` from main `d216aa9`.
 
 - CodeRabbit review fixes verified: PATHEXT executables take precedence over npm POSIX shims, and Windows shell link opening permits only http/https/mailto.
+- Native Windows CI follow-up: static-CRT executable build/import inspection and new/overwrite PowerShell installation passed at `84999e4`. Windows lib tests exposed POSIX-only fixture paths, a classic-scrollbar width loss (610 instead of 640 raster pixels), and an intermittent Edge `networkAlmostIdle` wait. Fixtures now use real temporary roots; Chromium hides its scrollbar through CDP and waits for the requested document URL/readiness under the existing deadline. Full local gates and explicit Chrome tests pass after these fixes; native rerun remains pending.

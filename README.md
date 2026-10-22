@@ -12,7 +12,7 @@
 
 </div>
 
-`mdv` is a blazing-fast Markdown viewer built in Rust. With the [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/), it renders rich, beautiful Markdown natively in your terminal, including typography, images, diagrams, syntax highlighting, and GFM features like callouts.
+`mdv` is a blazing-fast Markdown viewer built in Rust. It renders rich Markdown images in your terminal using the [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) or WezTerm's lossless inline-image transport, including typography, images, diagrams, syntax highlighting, and GFM features like callouts.
 
 If you live in [Ghostty](https://ghostty.org/) or [Kitty](https://sw.kovidgoyal.net/kitty/), you no longer need to leave the terminal to read a README.
 
@@ -28,7 +28,7 @@ The [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/
 | **Syntax highlighting**      | 100+ languages via [syntect](https://github.com/trishume/syntect)                              |
 | **System/light/dark themes** | `system` by default, with explicit `light` / `dark` overrides                                  |
 | **Watch mode**               | `--watch` auto-reloads on file change                                                          |
-| **Quick update**             | `mdv update` replaces the current executable when `main`'s CI-generated `bin/mdv` changes      |
+| **Quick update**             | `mdv update` selects the CI-generated macOS `bin/mdv` or Windows `bin/mdv.exe` from `main`      |
 | **Pipe-friendly**            | Plain-text fallback when stdout is not a TTY — works in CI and scripts                         |
 | **Vim navigation**           | `j`/`k`/`g`/`G`/PageUp/PageDown                                                                |
 | **Smooth scrolling**        | Mouse wheel, trackpad, and keys with smooth motion and responsive input                        |
