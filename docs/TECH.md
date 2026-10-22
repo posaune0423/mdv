@@ -79,9 +79,9 @@
 
 1. `render::github_html::build_github_html()` が GitHub 風 HTML を生成する
 2. Mermaid code fence は事前に `replace_mermaid_code_blocks()` で SVG か fallback HTML に差し替える
-3. `io::webkit_snapshot::render_html_to_png()` が HTML を PNG と diagnostics report に変換する
-4. `ui::page_graphics::build_graphic_page()` が PNG の display size と viewport slice 情報を作る
-5. `ui::terminal` が Kitty graphics command を発行して terminal に置く
+3. WebKit worker が HTML を TIFF と diagnostics report に変換する
+4. `ui::page_graphics::build_graphic_page()` が RGBA と display size を作る
+5. `ui::terminal` が可視 viewport を lossless PNG に変換し、Kitty graphics command で terminal に置く
 
 ### 4.3 Headless Render Pipeline
 
@@ -124,11 +124,13 @@ Mermaid は `MermaidCliRenderer::from_env()` で次の順に探索する。
 
 ### 6.2 WebKit Snapshot
 
-HTML snapshot は Swift helper 経由で `WKWebView` を使っている。これは `src/io/webkit_snapshot/mod.rs` と同配下の script / diagnostics / paths モジュールで構成される。
+HTML snapshot は Swift helper 経由で `WKWebView` を使っている。`build.rs` が macOS 向けに `snapshot.swift` をコンパイルし、実行ファイルを Rust バイナリへ埋め込む。`worker.rs` はユーザーと helper のバージョンごとに private な Unix socket を管理し、WebKit のプロセスと view を再利用する。worker は最後のリクエストから120秒で終了する。文書と assets は毎回読み直し、document ごとの read-access root、画像・フォントの readiness 判定と diagnostics を維持する。描画期限は25秒で、失敗後は view を破棄して次の文書を描画できる。
+
+対話表示の内部転送には非圧縮 TIFF を使い、Rust 側では一度だけ RGBA に変換して保持する。端末へは可視 viewport の lossless PNG だけを送る。ページ全体の PNG 圧縮・再展開とスクロールごとの全ページ decode を省くことで、解像度・色・透明度・crop geometry を変更せず起動とスクロールのコストを減らす。既存の `render_html_to_png` API は PNG と diagnostics を返す。
 
 生成物:
 
-- `snapshot.png`
+- `snapshot.png`（`render_html_to_png`）または `snapshot.tiff`（対話表示）
 - `snapshot-report.json`
 
 diagnostics には以下が含まれる。

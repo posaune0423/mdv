@@ -626,3 +626,54 @@
 - `Local mdv version: v0.1.1`
 - `Latest install required: no`
 - `Already on v0.1.1`
+
+## Startup latency improvement (2026-10-22)
+
+Historical first-round record; superseded by the further improvement below. Its original measurements include receiver overhead from rescanning large PNG payloads; do not compare them directly against later linear-receiver measurements.
+
+- [x] Measure the release CLI from process spawn to first complete Kitty graphics placement in a fixed PTY; retain individual samples and command/environment details.
+- [x] Separate WebKit helper startup/snapshot from the rest of startup; identify the measured bottleneck.
+- [x] Add a meaningful regression check before changing the owning layer, preserving rendering fidelity and asset diagnostics.
+- [x] Implement the smallest effective improvement and compare repeated before/after measurements under identical conditions (first launch and subsequent launches).
+- [x] Run format, clippy, full tests and inspect the rich raster actually transmitted by the viewer; document evidence and any unverified boundaries.
+
+### Review
+
+- Root cause: every interactive open invoked `swift snapshot.swift`, compiling the same helper before WebKit could render. An exploratory timing was 0.92s in the Swift/WebKit subprocess out of 1.28s total; a separately compiled helper took 0.55s on a subsequent invocation. The first installed-binary observation was 10.52s, then 1.15s and 0.99s; this is an observation, not a controlled cold-cache comparison.
+- Fix: `build.rs` compiles the existing Swift helper for the Rust target and embeds its executable in the single distributed binary. Each snapshot extracts the signed executable into its own workspace, preserving document-specific read-access roots and readiness/diagnostics logic. Workspace cleanup now also runs on errors. No persistent helper, shared executable cache, or image-quality change was introduced.
+- Red: the new subprocess-isolated `webkit_snapshot_runs_without_a_runtime_swift_toolchain` test failed with `failed to execute swift snapshot helper` when PATH was empty. Green: the same test passes with complete PNG, loaded fonts, and heading/strong weight assertions. It does not mutate the parallel test process's environment.
+- Final measurement: 7 alternating before/after pairs per document, 120x40 PTY with 8x16px cells, release builds, default system theme, no concurrent builds/tests. `docs/TECH.md`: median 999.0ms -> 715.9ms (28.3% reduction). `README.md`: 1392.9ms -> 1080.8ms (22.4% reduction). Individual samples, hashes, and conditions are retained in `docs/benchmarks/startup-2026-10-22.json`.
+- Fidelity: all 14 transmitted viewport PNGs per document have identical SHA-256 before/after. Opened the actual captured README and technical-document rasters for visual inspection. Swift helper source was verified byte-identical after removal of the Rust string wrapper.
+- Runtime: installed the verified signed release at `$HOME/.local/bin/mdv` using atomic replacement, checked `command -v mdv`, signature verification and `mdv --version`, then measured that actual installed binary. Previous installed binary is preserved at `/tmp/mdv-startup/mdv-installed-before`. The tracked CI-owned `bin/mdv` is unchanged.
+- Verification: `cargo test --workspace --all-targets --all-features` passed (132 tests); `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all -- --check`, `cargo build --release`, and `git diff --check` passed. The benchmark correctly rejects plain-text-only output (`/bin/echo`).
+- Review: CodeRabbit reviewed the complete code diff including new files. Its only finding asked whether the PNG encoder chunks Kitty payloads; `encode_transmit_png` currently emits one unchunked sequence exactly matching the benchmark. No speculative chunk-support code was added.
+- Boundary: timing ends when the complete image placement reaches the PTY, not when the terminal compositor paints it. The computer-use tool refused Ghostty access for safety reasons, so native Ghostty screen capture/paint timing is unverified. No remote CI, merge, push, or deployment was performed. macOS arm64 was tested; other platforms were not run locally.
+
+## Further startup latency improvement (2026-10-22)
+
+- [x] Profile remaining work through first complete Kitty placement, including worker-not-running renders.
+- [x] Establish meaningful regression coverage for the measured bottleneck before implementation.
+- [x] Reduce the actual rendering cost without lowering resolution, omitting assets, or replacing rich content with placeholders.
+- [x] Compare repeated release runs against the installed first optimization and verify decoded pixel equality plus graphics behavior.
+- [x] Run required checks, update the local command, and retain reproducible measurements.
+
+### Further improvement review
+
+- Measurement correction: the previous benchmark searched the entire received multi-MB PNG for every PTY chunk, adding about400ms to the README observation. The receiver now scans only the possible split placement tail. All new before/after measurements use this same linear receiver; the first-round numbers are retained as historical data rather than presented as the comparison baseline.
+- Measured costs before this round: HTML building about3.5ms, native AppKit/WebView initialization about84ms, navigation about260ms, stable readiness about55ms, snapshot about34ms, full-page PNG about70–90ms, and Rust full-page decode/viewport encode about28ms. Each old CLI invocation started a new helper and repeated that work.
+- Implementation: a versioned native worker uses an owner-only Unix socket and exclusive startup lock, is detached from the CLI's foreground process group, and reuses WebKit for120s after its last request. It rereads each document/assets and clears WebKit site data before navigation; there is no rendered-image cache. A dead or idle worker is restarted on demand. UID ownership is derived through safe rustix rather than HOME, and the no-toolchain subprocess test now also removes HOME.
+- Lossless transport: terminal rendering requests uncompressed TIFF, decodes the whole page once into RGBA, and still sends only contiguous viewport PNGs to Kitty. This removes whole-page PNG compression and repeated decode on scroll. Associated TIFF alpha is explicitly converted to straight RGBA with nearest rounding; a full real viewport comparison caught a1-channel-value mismatch on badge transparency before this fix. The public PNG snapshot API is preserved.
+- Red/Green: the new real-worker test first failed because --serve exited, then the TIFF request test failed because PNG was returned, and the1ms deadline test failed because the render completed successfully instead of cancelling. Each now passes, including direct-vs-worker pixel equality, source updates, broken asset recovery and cancellation recovery. A truncated PNG test failed before eager raster decode; top/middle/bottom fractional-scale crops and associated-alpha pixels now have regression coverage.
+- Review/reliability: fixed the independent review's reproduced shared-worker wedge from a never-responding HTTP image. A per-request watchdog (25s maximum), WebContent crash callback, completion/navigation guards, and failure-time view replacement allow later documents to render. Independent recheck:500ms deadline returned at508ms, following local renders132ms and74ms. Accepted sockets suppress SIGPIPE. Isolated idle lifecycle ended successfully and removed its socket after the120s idle limit (observed between120–140s).
+- Final performance: installed signed release,120x40 PTY,8x16px cells, default system theme, no concurrent builds/tests. Seven alternating warm pairs: TECH679.1ms ->200.9ms; README661.6ms ->298.7ms. Five worker-not-running comparisons: TECH693.7ms ->577.3ms; README672.9ms ->565.9ms. Seven unique document paths and distinct contents with local image/table/code: median474.7ms ->140.6ms. Cold means no worker process, not empty OS caches; warm means an existing worker, not cached rendered output.
+- Quality: actual CLI first/PageDown/bottom images for README and TECH in both themes, plus centered local-image and math fixtures in both themes:16 viewports matched the old renderer exactly in decoded RGBA, including badges and fonts. Final paired first-frame measurements also assert pixel equality on every pair and new-document case.
+- Checks:136 tests passed; clippy with -D warnings, format, release build, signature verification and git diff --check passed. CodeRabbit's follow-up review returned zero findings before the final focused alpha correction; that correction has an observed Red/Green regression plus the16-view actual CLI comparison.
+- Artifacts: `docs/benchmarks/startup-2026-10-22-round2.json` contains raw warm/cold/unique-document samples, pixel checks, binary/source hashes, and verification boundaries. `$HOME/.local/bin/mdv` is updated atomically; its previous version is backed up at `/tmp/mdv-startup/mdv-round2-before`. The CI-owned tracked `bin/mdv` is unchanged.
+- Limits: native compositor timing and live Ghostty capture remain unavailable because the tool denied app access; timing ends at complete Kitty placement received on PTY. Worker reuse consumes background memory for up to two minutes; decoded page memory scales with raster area. No remote CI, commit, push, merge or deployment was performed.
+
+## Publish startup and scroll PRs (2026-10-22)
+
+- [x] Preserve all combined work in a backup ref and archive, inspect current origin/main and ownership boundaries.
+- [ ] Split startup rendering foundation and dependent smooth-scrolling commits without discarding work.
+- [ ] Verify the standalone startup branch and the complete scrolling branch.
+- [ ] Push both branches, open two reviewable PRs, attach both to this chat, and verify CI/review state.

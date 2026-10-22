@@ -19,7 +19,7 @@ fn builds_graphic_page_from_full_snapshot_png() {
     assert_eq!(page.display_height_px, 5);
     assert_eq!(page.image_width_px, 4);
     assert_eq!(page.image_height_px, 5);
-    assert_eq!(page.png_bytes, png_bytes);
+    assert_eq!(page.image.as_ref(), &ImageBuffer::from_pixel(4, 5, Rgba([255, 0, 0, 255])));
 }
 
 #[test]
@@ -81,4 +81,71 @@ fn viewport_raster_encodes_only_the_visible_crop() {
     assert_eq!(raster.image_height_px, 4);
     assert_eq!(decoded.width(), 8);
     assert_eq!(decoded.height(), 4);
+    assert!(decoded.to_rgba8().pixels().all(|pixel| *pixel == Rgba([0, 0, 255, 255])));
+}
+
+#[test]
+fn graphic_page_rejects_a_truncated_snapshot_before_display() {
+    let image = ImageBuffer::from_fn(64, 128, |x, y| Rgba([x as u8, y as u8, 40, 255]));
+    let mut png = Vec::new();
+    DynamicImage::ImageRgba8(image)
+        .write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
+        .unwrap_or_else(|error| panic!("fixture should encode: {error}"));
+    png.truncate(png.len() / 2);
+    assert!(
+        build_graphic_page(&png, 32, 64).is_err(),
+        "a partial page raster must fail before display"
+    );
+}
+
+#[test]
+fn viewport_rasters_preserve_pixels_at_top_middle_and_bottom() {
+    let original = ImageBuffer::from_fn(16, 46, |x, y| {
+        Rgba([x as u8, y as u8, 80, if x < 8 { 128 } else { 255 }])
+    });
+    let mut png = Vec::new();
+    DynamicImage::ImageRgba8(original.clone())
+        .write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
+        .unwrap_or_else(|error| panic!("fixture should encode: {error}"));
+    let page = build_graphic_page(&png, 16, 8)
+        .unwrap_or_else(|error| panic!("page should decode: {error}"));
+    for scroll in [0, 1, 3] {
+        let slice = viewport_slice(&page, scroll, 2, 5.5);
+        let raster = viewport_raster(&page, scroll, 2, 5.5)
+            .unwrap_or_else(|error| panic!("viewport should encode: {error}"))
+            .unwrap_or_else(|| panic!("viewport should exist"));
+        let actual = image::load_from_memory(&raster.png_bytes)
+            .unwrap_or_else(|error| panic!("viewport should decode: {error}"))
+            .to_rgba8();
+        let expected =
+            image::imageops::crop_imm(&original, 0, slice.source_y_px, 16, slice.source_height_px)
+                .to_image();
+        assert_eq!(
+            actual, expected,
+            "RGBA and orientation must survive viewport crop at row {scroll}"
+        );
+    }
+}
+
+#[test]
+fn associated_tiff_alpha_is_converted_to_straight_rgba() {
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = tiff::encoder::TiffEncoder::new(Cursor::new(&mut bytes))
+            .unwrap_or_else(|error| panic!("TIFF encoder: {error}"));
+        let mut image = encoder
+            .new_image::<tiff::encoder::colortype::RGBA8>(2, 1)
+            .unwrap_or_else(|error| panic!("TIFF image: {error}"));
+        image
+            .encoder()
+            .write_tag(tiff::tags::Tag::ExtraSamples, 1_u16)
+            .unwrap_or_else(|error| panic!("associated alpha: {error}"));
+        image
+            .write_data(&[64, 32, 16, 128, 15, 128, 193, 254])
+            .unwrap_or_else(|error| panic!("TIFF pixels: {error}"));
+    }
+    let page = build_graphic_page(&bytes, 2, 2)
+        .unwrap_or_else(|error| panic!("TIFF should decode: {error}"));
+    assert_eq!(*page.image.as_ref().get_pixel(0, 0), Rgba([128, 64, 32, 128]));
+    assert_eq!(*page.image.as_ref().get_pixel(1, 0), Rgba([15, 129, 194, 254]));
 }

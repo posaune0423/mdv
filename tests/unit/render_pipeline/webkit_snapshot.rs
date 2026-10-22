@@ -59,6 +59,52 @@ fn webkit_snapshot_renders_html_to_png() {
 
 #[cfg(target_os = "macos")]
 #[test]
+fn webkit_snapshot_runs_without_a_runtime_swift_toolchain() {
+    // Isolate PATH in a child process: changing process-wide env is unsafe in parallel tests.
+    const CHILD: &str = "MDV_TEST_SNAPSHOT_WITHOUT_TOOLCHAIN";
+    if std::env::var_os(CHILD).is_none() {
+        let executable = std::env::current_exe()
+            .unwrap_or_else(|error| panic!("test executable should exist: {error}"));
+        let output = std::process::Command::new(executable)
+            .args([
+                "--exact",
+                "unit::render_pipeline::webkit_snapshot::webkit_snapshot_runs_without_a_runtime_swift_toolchain",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .env("PATH", "")
+            .env_remove("HOME")
+            .output()
+            .unwrap_or_else(|error| panic!("isolated snapshot test should run: {error}"));
+        assert!(
+            output.status.success(),
+            "snapshot must work without launching swift: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+        return;
+    }
+
+    let html = build_github_html(
+        "# Ready without Swift\n\n**A complete rich page.**\n",
+        std::path::Path::new("."),
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("html should render: {error}"));
+    let snapshot = render_html_to_png(&html, std::path::Path::new("."), 960)
+        .unwrap_or_else(|error| panic!("snapshot should need no runtime compiler: {error}"));
+    let image = image::load_from_memory(&snapshot.png_bytes)
+        .unwrap_or_else(|error| panic!("snapshot should decode: {error}"));
+    assert!(image.width() >= 960);
+    assert!(snapshot.diagnostics.fonts_ready);
+    assert_eq!(snapshot.diagnostics.heading_font_weight, "600");
+    assert_eq!(snapshot.diagnostics.strong_font_weight, "600");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
 fn webkit_snapshot_preserves_code_block_backgrounds() {
     let html = build_github_html(
         "```rust\nfn main() {\n    println!(\"hello\");\n}\n```\n",

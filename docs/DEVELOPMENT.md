@@ -1,5 +1,24 @@
 # Development
 
+macOS のソースビルドには Swift コンパイラを含む Xcode Command Line Tools が必要です。Cargo のビルド時に WebKit helper をコンパイルして `mdv` に同梱するため、配布バイナリの実行時には Swift コンパイラは不要です。Linux ビルドでは helper をコンパイルしません。
+
+## 起動時間の計測
+
+release バイナリをビルドして、実際の対話モードを固定サイズの PTY で計測できます。
+
+```bash
+cargo build --release
+uv run scripts/benchmark-startup.py --runs 7 --output /tmp/mdv-startup.json --capture /tmp/mdv-first-frame.png -- ./target/release/mdv README.md
+```
+
+計測範囲はプロセス生成直前から、最初のページ画像の送信と配置命令を PTY で受信するまでです。既定は 120 列 × 40 行、セルは 8 × 16 px。PNG の送信を検証するため、plain-text fallback は成功として数えません。初回、各回の値、中央値、バイナリの SHA-256 を JSON に保存し、`--capture` で最初に送信した viewport の PNG を保存します。Ghostty/Kitty の compositor が画面に描画する時間は含みません。比較時は同じ文書・テーマ・サイズを使用し、ビルドやテストを同時に走らせず、初回を OS キャッシュが空の状態と同一視しないでください。
+
+描画 worker は120秒間再利用されます。worker が存在しない起動と、起動済み worker で別の文書を開くケースを分けて記録してください。画像の完成結果はキャッシュせず、ローカル画像・文書・テーマ・サイズの変更を毎回描画へ反映します。worker の helper とログは `/tmp/mdv-render-<effective-uid>-<helper-hash>/` に置き、親ディレクトリは所有者だけがアクセス可能です。headless 表示では worker を起動しません。worker と展開済み RGBA の保持には追加のメモリを使用します。
+
+`MDV_PROFILE_STARTUP=1 RUST_LOG=mdv=info` を付けると Rust の段階別時間を出力できます。`--transcript /tmp/mdv-startup.pty` で PTY の生出力を保存できます。helper の段階別ログを有効にするには、その環境変数を設定したコマンドから worker を初めて起動します。
+
+`docs/benchmarks/startup-2026-10-22.json` は最初の改善時の記録です。当時の計測器は大きな PNG を受信するたびに全バッファを再走査していたため、特に README の測定値に計測器の負荷を含みます。以降の比較では末尾だけを検査する修正版を使い、修正前バイナリも同じ計測器で測り直します。
+
 ## Local helper script
 
 The repository root includes a small `./mdv` shell helper that rebuilds the debug binary when sources change, then runs `target/debug/mdv`.

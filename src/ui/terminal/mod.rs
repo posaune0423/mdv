@@ -308,6 +308,7 @@ impl TerminalViewer {
     }
 
     fn draw(&mut self) -> Result<()> {
+        let _span = tracing::info_span!("terminal.draw").entered();
         if self.pending_layout_refresh {
             self.rerender();
             let _ = self.set_scroll(cmp::min(self.scroll, self.max_scroll()));

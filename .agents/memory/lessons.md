@@ -38,3 +38,4 @@
 - When the user wants a simpler main-only distribution model, remove release automation end-to-end instead of preserving release/update machinery out of habit.
 - If the user further simplifies distribution to a tracked repo binary, stop redesigning around source builds and align install/update around that exact artifact.
 - When the user asks for install/update UX parity, carry the output contract through every terminal state, including the final success line with the resolved target version.
+- When the user says startup around one second is still too slow, a relative speedup alone does not meet the intended experience. Profile the remaining first-render critical path and keep optimizing without relying only on warm snapshot caches or sacrificing rendering quality.
