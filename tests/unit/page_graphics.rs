@@ -1,7 +1,9 @@
 use std::io::Cursor;
 
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
-use mdv::ui::page_graphics::{build_graphic_page, viewport_raster, viewport_slice};
+use mdv::ui::page_graphics::{
+    build_graphic_page, viewport_raster, viewport_slice, viewport_slice_at,
+};
 
 #[test]
 fn builds_graphic_page_from_full_snapshot_png() {
@@ -125,6 +127,24 @@ fn viewport_rasters_preserve_pixels_at_top_middle_and_bottom() {
             "RGBA and orientation must survive viewport crop at row {scroll}"
         );
     }
+}
+
+#[test]
+fn fractional_viewport_slice_uses_the_exact_rounded_raster_offset() {
+    let image = ImageBuffer::from_fn(16, 64, |x, y| Rgba([x as u8, y as u8, 40, 255]));
+    let mut png = Vec::new();
+    DynamicImage::ImageRgba8(image)
+        .write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
+        .unwrap_or_else(|error| panic!("fixture should encode: {error}"));
+    let page = build_graphic_page(&png, 16, 8)
+        .unwrap_or_else(|error| panic!("page should decode: {error}"));
+
+    let fractional = viewport_slice_at(&page, 1.25, 3, 2.5);
+    let settled = viewport_slice(&page, 1, 3, 2.5);
+
+    assert_eq!(fractional.source_y_px, 6);
+    assert_eq!(fractional.source_height_px, settled.source_height_px);
+    assert_eq!(fractional.rows, settled.rows);
 }
 
 #[test]

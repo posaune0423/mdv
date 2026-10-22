@@ -79,8 +79,19 @@ pub fn viewport_slice(
     content_rows: usize,
     cell_height_px: f32,
 ) -> ViewportSlice {
+    viewport_slice_at(page, scroll_rows as f64, content_rows, cell_height_px)
+}
+
+#[must_use]
+pub fn viewport_slice_at(
+    page: &GraphicPage,
+    scroll_rows: f64,
+    content_rows: usize,
+    cell_height_px: f32,
+) -> ViewportSlice {
+    let scroll_rows = scroll_rows.max(0.0);
     let total_rows = total_rows(page, cell_height_px);
-    let rows = total_rows.saturating_sub(scroll_rows).min(content_rows) as u16;
+    let rows = total_rows.saturating_sub(scroll_rows.floor() as usize).min(content_rows) as u16;
     if rows == 0 {
         return ViewportSlice { source_y_px: 0, source_height_px: 0, rows: 0 };
     }

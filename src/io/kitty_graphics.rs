@@ -19,12 +19,29 @@ pub struct KittyImagePlacement {
 pub enum DeleteCommand {
     AllVisiblePlacements,
     Placement { image_id: u32, placement_id: u32 },
+    Image { image_id: u32 },
 }
 
 #[must_use]
 pub fn encode_transmit_png(image_id: u32, png_bytes: &[u8]) -> String {
     let payload = STANDARD.encode(png_bytes);
-    format!("\u{1b}_Ga=t,t=d,f=100,i={},q=2;{}\u{1b}\\", image_id, payload)
+    const MAX_PAYLOAD_BYTES: usize = 4096;
+    let mut chunks = payload.as_bytes().chunks(MAX_PAYLOAD_BYTES).peekable();
+    let mut command = String::new();
+
+    while let Some(chunk) = chunks.next() {
+        let more = u8::from(chunks.peek().is_some());
+        let payload = std::str::from_utf8(chunk).unwrap_or_default();
+        if command.is_empty() {
+            command.push_str(&format!(
+                "\u{1b}_Ga=t,t=d,f=100,i={image_id},q=2,m={more};{payload}\u{1b}\\"
+            ));
+        } else {
+            command.push_str(&format!("\u{1b}_Gm={more},q=2;{payload}\u{1b}\\"));
+        }
+    }
+
+    command
 }
 
 #[must_use]
@@ -51,6 +68,9 @@ pub fn encode_delete(command: DeleteCommand) -> String {
         DeleteCommand::AllVisiblePlacements => "\u{1b}_Ga=d\u{1b}\\".to_string(),
         DeleteCommand::Placement { image_id, placement_id } => {
             format!("\u{1b}_Ga=d,d=i,i={image_id},p={placement_id}\u{1b}\\")
+        }
+        DeleteCommand::Image { image_id } => {
+            format!("\u{1b}_Ga=d,d=I,i={image_id}\u{1b}\\")
         }
     }
 }

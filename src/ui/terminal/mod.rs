@@ -2,33 +2,37 @@ use std::{
     cmp,
     collections::BTreeSet,
     io::{self, Write},
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 
 use anyhow::Result;
 use crossterm::{
     cursor,
-    event::{self, Event, KeyCode, KeyEventKind},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, MouseEventKind,
+    },
     execute, queue,
     style::{Attribute, Print, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor},
     terminal::{
-        self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
-        enable_raw_mode,
+        self, BeginSynchronizedUpdate, Clear, ClearType, EndSynchronizedUpdate,
+        EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
     },
 };
 mod graphics;
 mod highlight;
 mod layout;
+mod scroll;
 #[cfg(test)]
 mod tests;
 
 use self::{
-    graphics::{collect_graphics_commands, collect_page_viewport_commands, resize_graphic_space},
+    graphics::{PageGraphics, collect_graphics_commands, resize_graphic_space},
     highlight::highlight_code_terminal,
     layout::{
         article_origin, article_wrap_width, current_cell_metrics, fit_to_width,
         render_graphic_page, truncate_visible,
     },
+    scroll::ScrollMotion,
 };
 use crate::render::text::render_document;
 use crate::{
@@ -70,6 +74,11 @@ pub struct TerminalViewer {
     rendered: Option<RenderedDocument>,
     graphic_page: Option<GraphicPage>,
     scroll: usize,
+    scroll_motion: ScrollMotion,
+    page_graphics: PageGraphics,
+    pending_image_deletes: Vec<String>,
+    clear_text: bool,
+    last_status: Option<String>,
     last_modified: Option<SystemTime>,
     warning: Option<String>,
     needs_redraw: bool,
@@ -120,6 +129,11 @@ impl TerminalViewer {
             rendered,
             graphic_page,
             scroll: 0,
+            scroll_motion: ScrollMotion::default(),
+            page_graphics: PageGraphics::default(),
+            pending_image_deletes: Vec::new(),
+            clear_text: true,
+            last_status: None,
             last_modified,
             warning,
             needs_redraw: true,
@@ -166,6 +180,11 @@ impl TerminalViewer {
             rendered,
             graphic_page,
             scroll: 0,
+            scroll_motion: ScrollMotion::default(),
+            page_graphics: PageGraphics::default(),
+            pending_image_deletes: Vec::new(),
+            clear_text: true,
+            last_status: None,
             last_modified,
             warning,
             needs_redraw: true,
@@ -180,13 +199,24 @@ impl TerminalViewer {
 
     pub fn run(&mut self) -> Result<()> {
         enable_raw_mode()?;
-        execute!(io::stdout(), EnterAlternateScreen, cursor::Hide, Clear(ClearType::All))?;
+        execute!(
+            io::stdout(),
+            EnterAlternateScreen,
+            cursor::Hide,
+            EnableMouseCapture,
+            Clear(ClearType::All)
+        )?;
 
         let run_result = self.event_loop();
 
         disable_raw_mode()?;
+        for command in self.release_page_images() {
+            write!(io::stdout(), "{command}")?;
+        }
         execute!(
             io::stdout(),
+            EndSynchronizedUpdate,
+            DisableMouseCapture,
             LeaveAlternateScreen,
             cursor::Show,
             Print(encode_delete(DeleteCommand::AllVisiblePlacements))
@@ -194,33 +224,69 @@ impl TerminalViewer {
         run_result
     }
 
+    fn release_page_images(&mut self) -> Vec<String> {
+        let mut deletes = std::mem::take(&mut self.pending_image_deletes);
+        deletes.extend(self.page_graphics.reset());
+        deletes
+    }
+
     fn event_loop(&mut self) -> Result<()> {
+        const FRAME_INTERVAL: Duration = Duration::from_micros(16_667);
+        let following_frame = |previous: Instant, now: Instant| {
+            let scheduled = previous + FRAME_INTERVAL;
+            if scheduled > now { scheduled } else { now + FRAME_INTERVAL }
+        };
+        let mut next_frame = Instant::now();
+        let mut last_motion_tick = Instant::now();
         loop {
-            if self.needs_redraw && !event::poll(Duration::ZERO)? {
+            if event::poll(Duration::ZERO)? {
+                let events = self.read_pending_events()?;
+                if self.apply_event_batch(events) {
+                    return Ok(());
+                }
+            }
+            let now = Instant::now();
+            self.needs_redraw |= self.scroll_motion.advance(now.duration_since(last_motion_tick));
+            last_motion_tick = now;
+            if self.needs_redraw && now >= next_frame {
                 self.draw()?;
                 self.needs_redraw = false;
+                next_frame = following_frame(next_frame, now);
+            } else if now >= next_frame && self.page_graphics.has_pending_work() {
+                let commands = self.page_graphics.maintenance()?;
+                if !commands.is_empty() {
+                    let mut stdout = io::stdout().lock();
+                    for command in commands {
+                        stdout.write_all(command.as_bytes())?;
+                    }
+                    stdout.flush()?;
+                }
+                next_frame = following_frame(next_frame, now);
             }
             if self.config.watch && self.maybe_reload() {
                 continue;
             }
 
-            if !event::poll(Duration::from_millis(16))? {
+            let wait = if self.needs_redraw
+                || self.scroll_motion.active()
+                || self.page_graphics.has_pending_work()
+            {
+                next_frame.saturating_duration_since(Instant::now()).min(FRAME_INTERVAL)
+            } else {
+                FRAME_INTERVAL
+            };
+            if !event::poll(wait)? {
                 if self.render_next_visible_graphic() {
                     self.needs_redraw = true;
                 }
                 continue;
-            }
-
-            let pending_events = self.read_pending_events()?;
-            if self.apply_event_batch(pending_events) {
-                return Ok(());
             }
         }
     }
 
     fn read_pending_events(&mut self) -> Result<Vec<Event>> {
         let mut events = vec![event::read()?];
-        while event::poll(Duration::ZERO)? {
+        while events.len() < 256 && event::poll(Duration::ZERO)? {
             events.push(event::read()?);
         }
         Ok(events)
@@ -230,6 +296,10 @@ impl TerminalViewer {
     where
         I: IntoIterator<Item = Event>,
     {
+        let events = events.into_iter().collect::<Vec<_>>();
+        if events.iter().any(|event| matches!(event, Event::Key(key) if key.kind != KeyEventKind::Release && key.code == KeyCode::Char('q'))) {
+            return true;
+        }
         let mut next_scroll = self.scroll;
         let mut scroll_dirty = false;
 
@@ -251,12 +321,11 @@ impl TerminalViewer {
                     self.needs_redraw = true;
                 }
                 Event::Key(key) => {
-                    if key.kind != KeyEventKind::Press {
+                    if key.kind == KeyEventKind::Release {
                         continue;
                     }
 
                     match key.code {
-                        KeyCode::Char('q') => return true,
                         KeyCode::Char('j') | KeyCode::Down => {
                             next_scroll =
                                 cmp::min(next_scroll.saturating_add(1), self.max_scroll());
@@ -299,6 +368,17 @@ impl TerminalViewer {
                         _ => {}
                     }
                 }
+                Event::Mouse(mouse) => match mouse.kind {
+                    MouseEventKind::ScrollDown => {
+                        next_scroll = cmp::min(next_scroll.saturating_add(3), self.max_scroll());
+                        scroll_dirty = true;
+                    }
+                    MouseEventKind::ScrollUp => {
+                        next_scroll = next_scroll.saturating_sub(3);
+                        scroll_dirty = true;
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -315,35 +395,39 @@ impl TerminalViewer {
             self.pending_layout_refresh = false;
         }
 
-        let mut stdout = io::stdout().lock();
+        let mut frame = Vec::new();
+        queue!(frame, BeginSynchronizedUpdate)?;
         let (width, height) = terminal::size()?;
         let content_height = usize::from(height.saturating_sub(1));
         let tokens = ThemeTokens::for_theme(self.config.theme);
         let article_width = article_wrap_width(width);
         let article_x = article_origin(width);
 
-        for row in 0..content_height {
-            queue!(stdout, cursor::MoveTo(0, row as u16), Clear(ClearType::CurrentLine))?;
-            if let Some(rendered) = &self.rendered {
-                let visible_end =
-                    rendered.lines.len().min(self.scroll.saturating_add(content_height));
-                let visible_lines = &rendered.lines[self.scroll..visible_end];
-                let Some(line) = visible_lines.get(row) else {
-                    continue;
-                };
-                queue!(stdout, cursor::MoveTo(article_x, row as u16))?;
-                self.draw_line(&mut stdout, line, usize::from(article_width), tokens)?;
+        if self.clear_text || self.rendered.is_some() {
+            for row in 0..content_height {
+                queue!(frame, cursor::MoveTo(0, row as u16), Clear(ClearType::CurrentLine))?;
+                if let Some(rendered) = &self.rendered {
+                    let visible_end =
+                        rendered.lines.len().min(self.scroll.saturating_add(content_height));
+                    let visible_lines = &rendered.lines[self.scroll..visible_end];
+                    let Some(line) = visible_lines.get(row) else {
+                        continue;
+                    };
+                    queue!(frame, cursor::MoveTo(article_x, row as u16))?;
+                    self.draw_line(&mut frame, line, usize::from(article_width), tokens)?;
+                }
             }
+            self.clear_text = false;
+            self.last_status = None;
         }
 
         let (graphic_commands, visible_placement_ids) = if let Some(page) = &self.graphic_page {
-            collect_page_viewport_commands(
+            self.page_graphics.commands(
                 page,
-                self.scroll,
+                self.scroll_motion.position(),
                 content_height,
                 self.cell_metrics,
                 &self.visible_placements,
-                &mut self.transmitted_graphics,
             )?
         } else if let Some(rendered) = &self.rendered {
             collect_graphics_commands(
@@ -364,24 +448,33 @@ impl TerminalViewer {
         };
 
         if self.clear_all_graphics {
-            write!(stdout, "{}", encode_delete(DeleteCommand::AllVisiblePlacements))?;
+            write!(frame, "{}", encode_delete(DeleteCommand::AllVisiblePlacements))?;
             self.clear_all_graphics = false;
         }
 
+        for command in self.pending_image_deletes.drain(..) {
+            write!(frame, "{command}")?;
+        }
         for command in graphic_commands {
-            write!(stdout, "{command}")?;
+            write!(frame, "{command}")?;
         }
         self.visible_placements = visible_placement_ids;
 
         let status = self.status_line(usize::from(width));
-        queue!(
-            stdout,
-            cursor::MoveTo(0, height.saturating_sub(1)),
-            SetForegroundColor(tokens.foreground),
-            SetBackgroundColor(tokens.status_background),
-            Print(status),
-            ResetColor
-        )?;
+        if self.last_status.as_ref() != Some(&status) {
+            queue!(
+                frame,
+                cursor::MoveTo(0, height.saturating_sub(1)),
+                SetForegroundColor(tokens.foreground),
+                SetBackgroundColor(tokens.status_background),
+                Print(&status),
+                ResetColor
+            )?;
+            self.last_status = Some(status);
+        }
+        queue!(frame, EndSynchronizedUpdate)?;
+        let mut stdout = io::stdout().lock();
+        stdout.write_all(&frame)?;
         stdout.flush()?;
         Ok(())
     }
@@ -451,6 +544,9 @@ impl TerminalViewer {
     }
 
     fn rerender(&mut self) {
+        self.pending_image_deletes.extend(self.page_graphics.reset());
+        self.clear_text = true;
+        self.last_status = None;
         match render_graphic_page(
             &self.config,
             &self.document,
@@ -477,6 +573,8 @@ impl TerminalViewer {
         self.transmitted_graphics.clear();
         self.visible_placements.clear();
         self.clear_all_graphics = true;
+        self.scroll = cmp::min(self.scroll, self.max_scroll());
+        self.scroll_motion.jump(self.scroll);
     }
 
     fn set_scroll(&mut self, next_scroll: usize) -> bool {
@@ -484,6 +582,11 @@ impl TerminalViewer {
             return false;
         }
         self.scroll = next_scroll;
+        if self.graphic_page.is_some() {
+            self.scroll_motion.retarget(next_scroll, self.page_height() / 2);
+        } else {
+            self.scroll_motion.jump(next_scroll);
+        }
         true
     }
 

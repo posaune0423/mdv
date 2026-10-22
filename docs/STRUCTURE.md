@@ -155,6 +155,8 @@ src/
 | `src/ui/terminal/mod.rs` | `TerminalViewer`、event loop、draw、reload、status line |
 | `src/ui/terminal/layout.rs` | article width、cell metrics、graphic page 構築 |
 | `src/ui/terminal/graphics.rs` | graphics placement と visible command 収集 |
+| `src/ui/terminal/graphics/resident.rs` | 最大2枚の画像常駐・先読み・source crop 更新 |
+| `src/ui/terminal/scroll.rs` | 論理スクロール位置と時間ベースの視覚位置の補間 |
 | `src/ui/terminal/highlight.rs` | code highlight の terminal 表現 |
 | `src/ui/terminal/tests.rs` | viewer と placement 周辺テスト |
 

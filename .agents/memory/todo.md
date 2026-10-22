@@ -671,9 +671,38 @@ Historical first-round record; superseded by the further improvement below. Its 
 - Artifacts: `docs/benchmarks/startup-2026-10-22-round2.json` contains raw warm/cold/unique-document samples, pixel checks, binary/source hashes, and verification boundaries. `$HOME/.local/bin/mdv` is updated atomically; its previous version is backed up at `/tmp/mdv-startup/mdv-round2-before`. The CI-owned tracked `bin/mdv` is unchanged.
 - Limits: native compositor timing and live Ghostty capture remain unavailable because the tool denied app access; timing ends at complete Kitty placement received on PTY. Worker reuse consumes background memory for up to two minutes; decoded page memory scales with raster area. No remote CI, commit, push, merge or deployment was performed.
 
+## Smooth scrolling (2026-10-22)
+
+- [x] Measure current key/wheel-to-frame latency, sustained frame intervals, and per-frame image traffic in the real PTY graphics path.
+- [x] Define and cover resident texture reuse, pixel/geometry correctness, bounded memory, input coalescing and fractional motion with meaningful regression tests.
+- [x] Replace viewport recompression/reupload on every step with bounded graphics residency and smooth pixel motion; retain rendering fidelity.
+- [x] Compare identical scripted input before/after and verify top/middle/bottom, reversals, jumps, resize/reload and rapid quit.
+- [x] Run quality gates/review, install verified local command, retain evidence and state the native compositor boundary.
+
+### Smooth scrolling review
+
+- Root cause: each scroll step cropped, PNG-encoded and retransmitted the full viewport. Key events were row jumps; wheel input was not handled. Rendering was coupled to event draining.
+- Implementation: time-based fractional ease-out at60Hz, bounded/coalesced key-repeat and SGR wheel input, synchronized frames, unchanged status/text retained between frames. Two overlapping lossless resident windows reuse terminal image data; one asynchronous preparation job performs lookahead. First frame transmits only the visible viewport so wider preparation stays off the startup path. No resolution, font, image or asset quality was reduced.
+- Regression coverage: fractional source crops, monotonic/convergent/reversible motion, frame-rate independence, large jumps, bounded residency and data eviction, hidden prefetch, stale-result discard, reverse-direction protection, key repeat/wheel handling, quit priority and queued image-data cleanup. The actual PTY reload+quit check first left both resident images allocated; after the cleanup fix no images remain (7.4ms quit).
+- Final release measurement:3 alternating before/after pairs with24 isolated inputs/version,120x40 PTY,8x16px cells. Input to first changed graphics output median30.89ms ->0.73ms. Sustained120 key inputs over2s: wire median98,145,648 ->1,457,186 bytes (98.5% reduction). Output cadence remains about60Hz in both; median p95 interval18.77 ->17.22ms, max gap27.85 ->28.20ms. Physical display FPS is not measured. SGR wheel input also passed.
+- Startup check:3 alternating warm pairs, first complete graphics placement median265.95 ->278.24ms; raw samples retained. The initial broad-window prototype added about37ms; limiting the first upload to the exact viewport reduced this overhead. Worker/OS-cache conditions are documented, not claimed as cold boot.
+- Quality:40 actual CLI viewports (README/TECH x light/dark x10 states) have exactly equal decoded RGBA and source/destination geometry, including resident-window boundaries, reverse direction, jumps, bottom and resize. Reloaded source matches the reference exactly and differs from old content. Lossless PNG/chunk transport is preserved.
+- Checks:153 tests passed; workspace/all-targets/all-features clippy with -D warnings, format, release build and diff whitespace checks passed. Independent review and CodeRabbit findings were fixed: batched reload/quit cleanup and quiet continuation chunks. Final initial-viewport preparation adjustment passed the complete gates and actual CLI comparisons.
+- Installed the final signed release atomically at `$HOME/.local/bin/mdv`; SHA-256 `3ef8b6ed4eacf741da966aa9af88323c48b112f4a874451016f492d3501854bd`. Scroll baseline preserved at `/tmp/mdv-startup/mdv-scroll-before`; tracked `bin/mdv` remains unchanged. Raw runs, quality checks, source/binary hashes and limits: `docs/benchmarks/scroll-2026-10-22.json`.
+- Boundary: timing ends at PTY output, not native compositor paint. Computer-use app access was denied, so physical trackpad feel, acceleration/inertia and native Ghostty appearance remain unverified. No commit, remote CI, push, merge or deployment was performed.
+
 ## Publish startup and scroll PRs (2026-10-22)
 
 - [x] Preserve all combined work in a backup ref and archive, inspect current origin/main and ownership boundaries.
-- [ ] Split startup rendering foundation and dependent smooth-scrolling commits without discarding work.
-- [ ] Verify the standalone startup branch and the complete scrolling branch.
-- [ ] Push both branches, open two reviewable PRs, attach both to this chat, and verify CI/review state.
+- [x] Split startup rendering foundation and dependent smooth-scrolling commits without discarding work.
+- [x] Verify the standalone startup branch and the complete scrolling branch.
+- [x] Push both branches, open two reviewable PRs, attach both to this chat, and verify CI/review state.
+
+### Publication review
+
+- Startup PR: https://github.com/posaune0423/mdv/pull/10 (`main` <- `fix/startup-latency`), standalone startup branch: format/clippy and136 local macOS tests passed.
+- Smooth-scroll PR: https://github.com/posaune0423/mdv/pull/11 (`fix/startup-latency` <- `feature/smooth-scrolling`), only the dependent scrolling diff is included.
+- A shared Cargo target produced startup-shaped test counts while checking the scroll branch; an independent fresh target at `/tmp/mdv-pr-scroll-isolated-target` confirmed42 lib +4 e2e +14 integration +93 unit =153 passing tests and clean clippy on the actual scrolling source.
+- Both initial PR heads passed remote Ubuntu `checks`; scrolling CI ran41 lib +4 e2e +14 integration +79 unit =138 tests (macOS-specific tests omitted). The tracked-binary refresh job is correctly skipped for pull requests.
+- Both PRs are attached to this chat and mergeable; no merge was requested or performed. CodeRabbit skips stacked non-default-base PRs, so its skipped status on #11 is not a completed remote review.
+- Original work remains recoverable under `refs/backup/pre-split-20261022-053532` and `/tmp/mdv-pr-split-20261022-053532/`; all original source/artifact bytes were checked after splitting. The startup worktree remains under `.worktrees/fix/startup-latency` for review.
