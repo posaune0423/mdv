@@ -10,7 +10,8 @@ use std::{
 
 use anyhow::{Context, Result, bail, ensure};
 use headless_chrome::{
-    Browser,
+    Tab,
+    browser::transport::Transport,
     protocol::cdp::{Emulation, Page, Runtime},
 };
 use serde::Deserialize;
@@ -22,7 +23,6 @@ use crate::io::webkit_snapshot::{
 };
 
 const BROWSER_START_TIMEOUT: Duration = Duration::from_secs(10);
-const CDP_TIMEOUT: Duration = Duration::from_secs(5);
 const RENDER_TIMEOUT: Duration = Duration::from_secs(25);
 const VIEWPORT_HEIGHT_PX: u32 = 900;
 const DEVICE_SCALE_FACTOR: f64 = 2.0;
@@ -206,6 +206,25 @@ struct ProcessWatchdog {
     join: Option<thread::JoinHandle<()>>,
 }
 
+struct CdpTransport {
+    inner: Arc<Transport>,
+}
+
+impl CdpTransport {
+    fn connect(debug_ws_url: &str, idle_timeout: Duration) -> Result<Self> {
+        let url = Url::parse(debug_ws_url).context("failed to parse Chromium CDP URL")?;
+        let inner = Transport::new(url, None, idle_timeout, None)
+            .context("failed to connect to Chromium snapshot CDP")?;
+        Ok(Self { inner: Arc::new(inner) })
+    }
+}
+
+impl Drop for CdpTransport {
+    fn drop(&mut self) {
+        self.inner.shutdown();
+    }
+}
+
 impl ProcessWatchdog {
     fn arm(process: &ChromiumProcess, timeout: Duration) -> Self {
         let (cancel, receiver) = mpsc::channel();
@@ -253,19 +272,20 @@ pub(crate) fn render_html_to_png(
 
 fn render_file_url(page_url: &str, viewport_width_px: u32) -> Result<SnapshotResult> {
     let browser_path = browser_executable()?;
+    let process_deadline = Instant::now() + BROWSER_START_TIMEOUT + RENDER_TIMEOUT;
     let startup_deadline = Instant::now() + BROWSER_START_TIMEOUT;
     let mut process = launch_browser(&browser_path, viewport_width_px)?;
     let _watchdog = ProcessWatchdog::arm(&process, BROWSER_START_TIMEOUT + RENDER_TIMEOUT);
     let debug_ws_url = wait_for_debug_websocket(&mut process, startup_deadline)?;
-    let remaining_startup = startup_deadline.saturating_duration_since(Instant::now());
-    ensure!(
-        !remaining_startup.is_zero(),
-        "Chromium snapshot browser startup timed out before CDP connection"
-    );
-    let browser = Browser::connect_with_timeout(debug_ws_url, remaining_startup.min(CDP_TIMEOUT))
-        .context("failed to connect to Chromium snapshot CDP")?;
-    let render_deadline = Instant::now() + RENDER_TIMEOUT;
-    let tab = initial_browser_tab(&browser, render_deadline)?;
+    let transport = CdpTransport::connect(
+        &debug_ws_url,
+        remaining_until(
+            process_deadline,
+            "Chromium snapshot rendering timed out before CDP connection",
+        )?,
+    )?;
+    let render_deadline = (Instant::now() + RENDER_TIMEOUT).min(process_deadline);
+    let tab = attach_initial_page(&transport.inner, render_deadline)?;
     tab.set_default_timeout(remaining_until(
         render_deadline,
         "Chromium snapshot rendering timed out",
@@ -315,17 +335,25 @@ fn render_file_url(page_url: &str, viewport_width_px: u32) -> Result<SnapshotRes
     Ok(SnapshotResult { png_bytes, diagnostics })
 }
 
-fn initial_browser_tab(browser: &Browser, deadline: Instant) -> Result<Arc<headless_chrome::Tab>> {
+fn attach_initial_page(transport: &Arc<Transport>, deadline: Instant) -> Result<Arc<Tab>> {
     loop {
-        browser.register_missing_tabs();
-        if let Some(tab) = browser
-            .get_tabs()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("Chromium snapshot browser tab registry lock poisoned"))?
-            .first()
-            .cloned()
+        let targets = transport
+            .call_method_on_browser(headless_chrome::protocol::cdp::Target::GetTargets {
+                filter: None,
+            })
+            .context("failed to list Chromium page targets")?;
+        if let Some(target) = targets
+            .target_infos
+            .into_iter()
+            .find(|target| target.Type == "page" && !target.url.starts_with("devtools://"))
         {
-            return Ok(tab);
+            match Tab::new(target, Arc::clone(transport)) {
+                Ok(tab) => return Ok(Arc::new(tab)),
+                Err(error) if Instant::now() < deadline => {
+                    tracing::debug!(error = ?error, "retrying Chromium initial page attachment");
+                }
+                Err(error) => return Err(error).context("failed to attach Chromium initial page"),
+            }
         }
         ensure!(
             Instant::now() < deadline,
@@ -400,7 +428,7 @@ fn parse_debug_websocket(contents: &str) -> Result<String> {
 }
 
 fn wait_for_readiness(
-    tab: &headless_chrome::Tab,
+    tab: &Tab,
     viewport_width_px: u32,
     deadline: Instant,
 ) -> Result<SnapshotDiagnostics> {
@@ -449,11 +477,7 @@ fn wait_for_readiness(
     Ok(latest.unwrap_or_default())
 }
 
-fn wait_for_document_navigation(
-    tab: &headless_chrome::Tab,
-    expected_url: &str,
-    deadline: Instant,
-) -> Result<()> {
+fn wait_for_document_navigation(tab: &Tab, expected_url: &str, deadline: Instant) -> Result<()> {
     let expected_url =
         serde_json::to_string(expected_url).context("failed to encode Chromium navigation URL")?;
     let expression = format!(
@@ -470,7 +494,7 @@ fn wait_for_document_navigation(
     }
 }
 
-fn evaluate_value(tab: &headless_chrome::Tab, expression: &str) -> Result<serde_json::Value> {
+fn evaluate_value(tab: &Tab, expression: &str) -> Result<serde_json::Value> {
     let evaluation = tab.call_method(Runtime::Evaluate {
         expression: expression.to_string(),
         return_by_value: Some(true),

@@ -41,3 +41,4 @@
 - When the user says startup around one second is still too slow, a relative speedup alone does not meet the intended experience. Profile the remaining first-render critical path and keep optimizing without relying only on warm snapshot caches or sacrificing rendering quality.
 
 - Windows image support must validate the renderer and the console transport separately: Kitty keyboard support does not imply Kitty graphics, and ConPTY can filter image APCs. Keep lossless image tests, native Windows process tests, and terminal compositor proof distinct.
+- In pinned `headless_chrome`, `connect_with_timeout` configures idle event-loop lifetime, not a connection deadline. Inspect the actual API before using it for a timeout guarantee; keep an owned-process watchdog and use direct CDP target discovery when Edge lifecycle/target events are unreliable.
