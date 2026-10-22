@@ -134,6 +134,8 @@ src/
 
 | File | Role |
 | --- | --- |
+| `src/io/snapshot.rs` | OSごとのHTML raster backend選択 |
+| `src/io/chromium_snapshot/mod.rs` | Windows Edge/ChromeのCDP描画・readiness・PNG取得 |
 | `src/io/webkit_snapshot/mod.rs` | HTML snapshot 実行の公開 API |
 | `src/io/webkit_snapshot/diagnostics.rs` | snapshot report の型 |
 | `src/io/webkit_snapshot/paths.rs` | read-access root と temp workspace 計算 |

@@ -16,13 +16,13 @@
 
 If you live in [Ghostty](https://ghostty.org/) or [Kitty](https://sw.kovidgoyal.net/kitty/), you no longer need to leave the terminal to read a README.
 
-The [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) is also implemented by terminals including Ghostty, Konsole, st (with a patch), Warp, wayst, WezTerm, iTerm2, and xterm.js. `mdv` currently enables interactive mode in Ghostty and Kitty.
+The [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) is also implemented by terminals including Ghostty, Konsole, st (with a patch), Warp, wayst, WezTerm, iTerm2, and xterm.js. `mdv` enables interactive mode in Ghostty, Kitty, and WezTerm. On Windows, use WezTerm: its lossless inline-image transport works through the Windows console, while Windows Terminal does not currently support this viewer’s image path.
 
 ## Features
 
 |                              |                                                                                                |
 | ---------------------------- | ---------------------------------------------------------------------------------------------- |
-| **GitHub CSS rendering**     | WebKit snapshots with GitHub's actual stylesheets — what you see on github.com is what you get |
+| **GitHub CSS rendering**     | GitHub styles rendered by WebKit on macOS or installed Edge/Chrome on Windows |
 | **Inline images**            | PNG, JPEG, GIF, WebP rendered directly in the terminal                                         |
 | **Mermaid diagrams**         | Flowcharts, sequence diagrams, and more — rendered inline                                      |
 | **Syntax highlighting**      | 100+ languages via [syntect](https://github.com/trishume/syntect)                              |
@@ -41,7 +41,24 @@ The [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/
 curl -fsSL https://raw.githubusercontent.com/posaune0423/mdv/main/scripts/install.sh | sh
 ```
 
-This installs the CI-generated [`bin/mdv`](bin/mdv) artifact from `main`. If that binary does not match your host platform, build from source instead.
+This installs the CI-generated macOS Apple Silicon [`bin/mdv`](bin/mdv) artifact from `main`.
+
+On **Windows x64**, install [WezTerm](https://wezterm.org/install/windows.html) and Microsoft Edge (or Chrome), then run in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/posaune0423/mdv/main/scripts/install.ps1 | iex
+```
+
+The Windows installer downloads [`bin/mdv.exe`](bin/mdv.exe) to `$env:LOCALAPPDATA\mdv\bin`, adds that directory to your user PATH, and requires no administrator access. Open a new WezTerm window and run `mdv README.md`. Set `MDV_INSTALL_DIR` to choose another directory. `mdv update` selects the correct binary for macOS Apple Silicon or Windows x64.
+
+Edge/Chrome must be installed; no browser is downloaded by `mdv`. To choose an executable explicitly:
+
+```powershell
+$env:MDV_BROWSER = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+mdv README.md
+```
+
+Windows Terminal and the legacy console can still use the plain-text pipeline (`Get-Content README.md | mdv -`); image viewing requires WezTerm. Windows ARM64 native binaries are not distributed.
 
 **Run** (in Ghostty or Kitty):
 
@@ -77,9 +94,9 @@ mdv ./README.md | head -n 50            # plain-text output (pipe/CI)
 
 ## Requirements
 
-- **Terminal**: [Ghostty](https://ghostty.org/) or [Kitty](https://sw.kovidgoyal.net/kitty/) ([Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) required)
+- **Terminal**: macOS: [Ghostty](https://ghostty.org/), [Kitty](https://sw.kovidgoyal.net/kitty/), or [WezTerm](https://wezterm.org/); Windows: WezTerm
 - **Protocol ecosystem**: The [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) is also implemented by Ghostty, Konsole, st (with a patch), Warp, wayst, WezTerm, iTerm2, and xterm.js
-- **Rich rendering**: macOS (uses WebKit for HTML→PNG snapshots). Linux runs in headless/plain-text mode.
+- **Rich rendering**: macOS uses its system WebKit; Windows x64 uses installed Microsoft Edge or Chrome. Both produce lossless page images. Linux remains a plain-text/headless target.
 - **Mermaid** (optional): `mmdc` or `npx @mermaid-js/mermaid-cli`, or set `MDV_MERMAID_CMD`
 
 ## Installation
@@ -97,7 +114,7 @@ mdv ./README.md | head -n 50            # plain-text output (pipe/CI)
 | `mdv update` fails                 | Confirm the current `mdv` location is writable and GitHub `main` exposes the expected [`bin/mdv`](bin/mdv) artifact. |
 | Plain text instead of rich viewer  | Requires a TTY in Ghostty or Kitty. Pipes and redirects trigger headless mode by design.                             |
 | Mermaid diagrams show placeholders | Install `mmdc` or use `npx @mermaid-js/mermaid-cli`. Use `--no-mermaid` to skip entirely.                            |
-| Graphic / snapshot issues          | Rich rendering uses WebKit (macOS only). See [docs/TECH.md](docs/TECH.md).                                           |
+| Graphic / snapshot issues          | macOS uses WebKit; Windows requires installed Edge/Chrome and WezTerm. See [docs/TECH.md](docs/TECH.md).                                           |
 
 ## Documentation
 

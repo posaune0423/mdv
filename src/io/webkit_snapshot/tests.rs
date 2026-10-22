@@ -5,6 +5,23 @@ use super::{
     paths::{cleanup_workspace, create_workspace, snapshot_asset_root},
 };
 
+#[cfg(target_os = "macos")]
+#[test]
+fn platform_raster_facade_preserves_lossless_graphics_input() {
+    let workspace = tempfile::tempdir().unwrap_or_else(|error| panic!("workspace: {error}"));
+    let raster = crate::io::snapshot::render_html_to_raster(
+        "<body style='margin:0;background:#243b53'><h1>Raster</h1></body>",
+        workspace.path(),
+        320,
+    )
+    .unwrap_or_else(|error| panic!("platform raster facade should render: {error:#}"));
+
+    assert!(
+        image::load_from_memory(&raster).is_ok(),
+        "the graphics pipeline must receive a decodable lossless raster"
+    );
+}
+
 #[test]
 fn diagnostics_default_to_empty_assets() {
     let diagnostics = SnapshotDiagnostics::default();

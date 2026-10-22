@@ -43,7 +43,7 @@ pub fn run(args: MdvArgs) -> Result<()> {
             std::env::var("TERM_PROGRAM").ok().as_deref(),
             std::env::var("TERM").ok().as_deref(),
         ) {
-            bail!("interactive mode requires Ghostty or Kitty");
+            bail!("interactive mode requires Ghostty, Kitty, or WezTerm (Windows: WezTerm)");
         }
         let mut viewer = {
             let _span = info_span!("startup.create_viewer").entered();

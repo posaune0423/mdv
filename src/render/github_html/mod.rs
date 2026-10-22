@@ -52,6 +52,7 @@ pub fn build_github_html(
         theme,
     )));
     let styles = theme_styles(theme);
+    let base_href = escape_attribute(&directory_url(base_dir)?);
 
     Ok(format!(
         r#"<!DOCTYPE html>
@@ -71,7 +72,16 @@ pub fn build_github_html(
 </body>
 </html>"#,
         color_mode = theme.as_str(),
-        base_href = directory_url(base_dir),
+        base_href = base_href,
         styles = styles,
     ))
+}
+
+fn escape_attribute(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }

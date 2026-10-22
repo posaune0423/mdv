@@ -85,3 +85,26 @@ This repository currently has no release automation and no changelog workflow. D
 ### Contributors
 
 Everyone who lands a change shows up automatically on the [GitHub contributors graph](https://github.com/posaune0423/mdv/graphs/contributors).
+
+## Windows の開発・検証
+
+Windows x64 はインストール済み Edge/Chrome を専用の一時 profile で起動し、HTML/CSS・埋め込みフォント・画像・SVGを PNG として描画します。`MDV_BROWSER` はブラウザ実行ファイルの明示パスです。macOS は既存の WebKit/TIFF を維持します。
+
+Windows の画像表示は WezTerm の OSC1337 を使用します。Windows Terminal の Kitty keyboard/input 対応は画像表示とは別であり、この viewer の画像モードには利用できません。macOS Ghostty/Kitty の常駐画像・source crop 更新はそのままです。WezTerm では毎フレームの可視領域を可逆 PNG で送るため、Mac の常駐画像方式と同じ転送量・フレームレートは保証しません。
+
+```powershell
+cargo test --workspace --all-targets --all-features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo build --release
+.\target\release\mdv.exe README.md
+```
+
+Windows CI は Edge の存在を必須にし、フォント/画像/SVG・長文末尾の画素・ローカル画像更新・欠損画像診断、ConPTYを通した実CLIのPNG転送・スクロール・resize・終了、実行中exeの置換、PowerShellインストーラの新規/上書きインストールを検証します。ConPTY受信の検証と実際のWezTerm compositorの描画・入力の感触は別の境界です。
+
+macOS 上で Windows backend の Chromium 回帰テストを実行する場合のみ Chrome が必要です。
+
+```bash
+MDV_TEST_BROWSER='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' cargo test --lib chromium_snapshot -- --include-ignored
+```
+
+配布は同一ソースSHAの macOS/Windows成果物をCIで生成し、単一publisherが `bin/mdv` と `bin/mdv.exe` をまとめて更新します。mainが進んだ場合は古い成果物を新しいソースへ載せず、次のrunへ委ねます。PRではダウンロード用artifactまで生成し、mainのバイナリは変更しません。

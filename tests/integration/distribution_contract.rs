@@ -48,8 +48,8 @@ fn ci_workflow_refreshes_the_tracked_binary_on_main_pushes() {
         "ci workflow should fetch the latest main branch before pushing refreshed bin/mdv"
     );
     assert!(
-        workflow.contains("git rebase origin/main"),
-        "ci workflow should rebase onto the latest main branch before pushing refreshed bin/mdv"
+        workflow.contains("git rev-parse origin/main"),
+        "ci workflow should leave both artifacts uncommitted when main advanced after their build"
     );
     assert!(
         branches.iter().any(|branch| branch.as_str() == Some("main")),

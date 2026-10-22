@@ -62,7 +62,7 @@
 制約:
 
 - 現行実装では graphic page 生成が前提で、失敗時の runtime fallback はない
-- `webkit_snapshot` は非 macOS で未対応のため、interactive rich path は実質 macOS 前提
+- `io::snapshot` が macOS の WebKit/TIFF と Windows の Chromium/PNG を選択する。Windows の画像表示は WezTerm を使用する
 
 ## 4. データフロー
 
@@ -205,8 +205,8 @@ repo の `bin/mdv` は install / update の実体であり、`main` への push 
 
 ## 10. 既知の技術的制約
 
-1. interactive rich rendering が macOS WebKit に依存している
-2. `TerminalViewer::try_new()` に graphic page failure 時の fallback がない
+1. Windows の画像表示には対応端末（WezTerm）とインストール済み Edge/Chrome が必要
+2. native compositor の描画・入力の感触は各端末・OSで別途確認が必要
 3. link open は first link 固定で、link focus state を持たない
 4. terminal 判定は Ghostty / Kitty に限定される
 5. README の platform statement と現実装の runtime contract に差がある
@@ -217,3 +217,11 @@ repo の `bin/mdv` は install / update の実体であり、`main` への push 
 - `Document` の `revision` や `SourceSpan` を reload diff に活用する
 - interactive path の fallback を `render::text::render_document()` に戻す
 - 複数リンクナビゲーションや検索 UI を足す場合は `DocumentMeta` と UI state を拡張する
+
+## Windows backend
+
+`io::snapshot::render_html_to_raster` はOSに応じて既存WebKitか `io::chromium_snapshot` を選択します。Windowsはインストール済みEdge/Chromeを専用profile・sandbox有効で利用し、CSS viewportとdeviceScaleFactor=2を固定してlossless PNGを取得します。通常のブラウザprofileへ接続せず、画像完成結果のキャッシュもしません。
+
+WindowsのWezTermにはOSC1337で可視領域のPNGを送り、小数位置のスクロール補間を維持します。ConPTYがKitty画像命令を透過するかに依存しない構成です。Windows Terminalはこの画像転送方式の対象外です。macOS Ghostty/Kittyの常駐画像方式は変更しません。
+
+Windowsの更新には `bin/mdv.exe` と実行中exeを置換できるAPIを使用します。非対応OS/architectureでmacOSバイナリをダウンロードすることはありません。

@@ -6,7 +6,7 @@ use tracing::info_span;
 
 use crate::{
     core::{config::AppConfig, document::Document},
-    io::webkit_snapshot::render_html_to_tiff,
+    io::snapshot::render_html_to_raster,
     render::github_html::build_github_html,
     ui::{
         page_graphics::{GraphicPage, build_graphic_page},
@@ -42,7 +42,7 @@ pub(super) fn render_graphic_page(
     };
     let snapshot = {
         let _span = info_span!("startup.render_html_to_raster").entered();
-        render_html_to_tiff(&html, base_dir, snapshot_width_px)?
+        render_html_to_raster(&html, base_dir, snapshot_width_px)?
     };
 
     {

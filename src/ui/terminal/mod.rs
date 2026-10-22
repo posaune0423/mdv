@@ -26,7 +26,7 @@ mod scroll;
 mod tests;
 
 use self::{
-    graphics::{PageGraphics, collect_graphics_commands, resize_graphic_space},
+    graphics::{GraphicsProtocol, PageGraphics, collect_graphics_commands, resize_graphic_space},
     highlight::highlight_code_terminal,
     layout::{
         article_origin, article_wrap_width, current_cell_metrics, fit_to_width,
@@ -92,8 +92,27 @@ pub struct TerminalViewer {
 
 #[must_use]
 pub fn is_supported_terminal(term_program: Option<&str>, term: Option<&str>) -> bool {
-    term_program.is_some_and(|value| value.eq_ignore_ascii_case("ghostty"))
+    graphics_protocol(term_program, term).is_some()
+}
+
+fn graphics_protocol(term_program: Option<&str>, term: Option<&str>) -> Option<GraphicsProtocol> {
+    if term_program.is_some_and(|value| value.eq_ignore_ascii_case("wezterm")) {
+        Some(GraphicsProtocol::Inline)
+    } else if term_program.is_some_and(|value| value.eq_ignore_ascii_case("ghostty"))
         || term.is_some_and(|value| value.contains("kitty"))
+    {
+        Some(GraphicsProtocol::Kitty)
+    } else {
+        None
+    }
+}
+
+fn current_graphics_protocol() -> GraphicsProtocol {
+    graphics_protocol(
+        std::env::var("TERM_PROGRAM").ok().as_deref(),
+        std::env::var("TERM").ok().as_deref(),
+    )
+    .unwrap_or_default()
 }
 
 impl TerminalViewer {
@@ -130,7 +149,7 @@ impl TerminalViewer {
             graphic_page,
             scroll: 0,
             scroll_motion: ScrollMotion::default(),
-            page_graphics: PageGraphics::default(),
+            page_graphics: PageGraphics::new(current_graphics_protocol()),
             pending_image_deletes: Vec::new(),
             clear_text: true,
             last_status: None,
@@ -181,7 +200,7 @@ impl TerminalViewer {
             graphic_page,
             scroll: 0,
             scroll_motion: ScrollMotion::default(),
-            page_graphics: PageGraphics::default(),
+            page_graphics: PageGraphics::new(current_graphics_protocol()),
             pending_image_deletes: Vec::new(),
             clear_text: true,
             last_status: None,
@@ -213,13 +232,18 @@ impl TerminalViewer {
         for command in self.release_page_images() {
             write!(io::stdout(), "{command}")?;
         }
+        let clear_graphics = if self.page_graphics.is_inline() {
+            String::new()
+        } else {
+            encode_delete(DeleteCommand::AllVisiblePlacements)
+        };
         execute!(
             io::stdout(),
             EndSynchronizedUpdate,
             DisableMouseCapture,
             LeaveAlternateScreen,
             cursor::Show,
-            Print(encode_delete(DeleteCommand::AllVisiblePlacements))
+            Print(clear_graphics)
         )?;
         run_result
     }
@@ -448,7 +472,9 @@ impl TerminalViewer {
         };
 
         if self.clear_all_graphics {
-            write!(frame, "{}", encode_delete(DeleteCommand::AllVisiblePlacements))?;
+            if !self.page_graphics.is_inline() {
+                write!(frame, "{}", encode_delete(DeleteCommand::AllVisiblePlacements))?;
+            }
             self.clear_all_graphics = false;
         }
 
@@ -460,6 +486,9 @@ impl TerminalViewer {
         }
         self.visible_placements = visible_placement_ids;
 
+        if self.graphic_page.is_some() && self.page_graphics.is_inline() {
+            self.last_status = None;
+        }
         let status = self.status_line(usize::from(width));
         if self.last_status.as_ref() != Some(&status) {
             queue!(

@@ -7,11 +7,16 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    name: checks (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-2022]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,6 +30,17 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Require Microsoft Edge for Windows raster tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $edge = Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'
+          if (-not (Test-Path -LiteralPath $edge)) {
+            throw "Microsoft Edge is required for Windows Chromium raster tests: $edge"
+          }
+          "MDV_TEST_BROWSER=$edge" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MDV_TEST_ARTIFACTS=$env:RUNNER_TEMP\mdv-render-evidence" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Format check
         run: cargo fmt --all -- --check
 
@@ -34,15 +50,20 @@ jobs:
       - name: Test
         run: cargo test --workspace --all-targets --all-features
 
-  refresh_tracked_binary:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
-    needs: checks
+      - name: Upload Windows native-render evidence
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-render-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/mdv-render-evidence
+          if-no-files-found: warn
+
+  build_macos_distribution:
+    name: build macOS distribution artifact
     runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -52,25 +73,168 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Build tracked binary
+      - name: Build tracked macOS binary
         run: make build-tracked-bin
+
+      - name: Package source identity
+        run: git rev-parse HEAD > source-sha
+
+      - name: Upload macOS distribution artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdv-macos-aarch64-${{ github.sha }}
+          path: |
+            bin/mdv
+            source-sha
+          if-no-files-found: error
+
+  build_windows_distribution:
+    name: build Windows distribution artifact
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build tracked Windows binary
+        shell: pwsh
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: |
+          cargo build --release --target x86_64-pc-windows-msvc
+          Copy-Item target\x86_64-pc-windows-msvc\release\mdv.exe bin\mdv.exe
+          git rev-parse HEAD | Out-File -FilePath source-sha -Encoding ascii
+
+      - name: Verify Windows runtime dependencies
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $dumpbin = & $vswhere -latest -products '*' -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
+          if (-not $dumpbin) { throw 'MSVC import inspector was not found.' }
+          $imports = & $dumpbin /nologo /dependents bin\mdv.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect the Windows executable imports.' }
+          $imports | Write-Output
+          if ($imports -match '(?i)(VCRUNTIME|MSVCP)[0-9_]*.*\.dll') {
+            throw 'The distributed executable unexpectedly requires a Visual C++ runtime DLL.'
+          }
+
+      - name: Install from a localhost artifact and verify the executable
+        shell: pwsh
+        run: |
+          $ready = Join-Path $env:RUNNER_TEMP 'mdv-installer-server-ready'
+          $installDir = Join-Path $env:RUNNER_TEMP 'mdv installer output'
+          Remove-Item -LiteralPath $ready, $installDir -Force -Recurse -ErrorAction SilentlyContinue
+          $job = Start-Job -ScriptBlock {
+            param($binary, $readyPath)
+            $listener = New-Object System.Net.HttpListener
+            $listener.Prefixes.Add('http://127.0.0.1:18765/')
+            $listener.Start()
+            Set-Content -LiteralPath $readyPath -Value 'ready'
+            try {
+              for ($request = 0; $request -lt 2; $request += 1) {
+                $context = $listener.GetContext()
+                $bytes = [System.IO.File]::ReadAllBytes($binary)
+                $context.Response.ContentType = 'application/vnd.microsoft.portable-executable'
+                $context.Response.ContentLength64 = $bytes.Length
+                $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+                $context.Response.Close()
+              }
+            } finally {
+              $listener.Stop()
+            }
+          } -ArgumentList (Join-Path $env:GITHUB_WORKSPACE 'bin\mdv.exe'), $ready
+          for ($attempt = 0; $attempt -lt 50 -and -not (Test-Path -LiteralPath $ready); $attempt += 1) {
+            Start-Sleep -Milliseconds 100
+          }
+          if (-not (Test-Path -LiteralPath $ready)) {
+            throw 'The localhost installer fixture did not start.'
+          }
+          $env:MDV_BINARY_URL = 'http://127.0.0.1:18765/mdv.exe'
+          $env:MDV_INSTALL_DIR = $installDir
+          & .\scripts\install.ps1
+          & .\scripts\install.ps1
+          Receive-Job -Job $job -Wait -AutoRemoveJob
+          & (Join-Path $installDir 'mdv.exe') --version
+          if ($LASTEXITCODE -ne 0) {
+            throw 'The installed executable did not report its version.'
+          }
+
+      - name: Upload Windows distribution artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdv-windows-x86_64-${{ github.sha }}
+          path: |
+            bin/mdv.exe
+            source-sha
+          if-no-files-found: error
+
+  refresh_tracked_binary:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
+    needs: [checks, build_macos_distribution, build_windows_distribution]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download macOS distribution artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mdv-macos-aarch64-${{ github.sha }}
+          path: distribution/macos
+
+      - name: Download Windows distribution artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mdv-windows-x86_64-${{ github.sha }}
+          path: distribution/windows
+
+      - name: Verify artifacts came from this source commit
+        run: |
+          expected_sha="$GITHUB_SHA"
+          for source_sha in distribution/macos/source-sha distribution/windows/source-sha; do
+            actual_sha="$(tr -d '\r\n' < "$source_sha")"
+            if [ "$actual_sha" != "$expected_sha" ]; then
+              echo "Artifact $source_sha was built from $actual_sha, expected $expected_sha" >&2
+              exit 1
+            fi
+          done
+
+      - name: Stage both tracked binaries
+        run: |
+          cp distribution/macos/bin/mdv bin/mdv
+          cp distribution/windows/bin/mdv.exe bin/mdv.exe
+          chmod +x bin/mdv
 
       - name: Detect tracked binary changes
         id: tracked_binary
         run: |
-          if git diff --quiet -- bin/mdv; then
+          git add bin/mdv bin/mdv.exe
+          if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Commit refreshed tracked binary
+      - name: Commit refreshed tracked binaries
         if: steps.tracked_binary.outputs.changed == 'true'
         run: |
+          git fetch origin main --quiet
+          if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+            echo "origin/main advanced after the binaries were built; leaving both artifacts for the next run."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add bin/mdv
-          git commit -m "ci: refresh tracked binary"
-          git fetch origin main
-          git rebase origin/main
+          git commit -m "ci: refresh tracked binaries"
           git push origin HEAD:main
