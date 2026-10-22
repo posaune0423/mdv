@@ -34,7 +34,8 @@ impl ViewerSession {
             .master
             .take_writer()
             .unwrap_or_else(|error| panic!("PTY input should open: {error}"));
-        let (sender, output) = mpsc::sync_channel(8);
+        // ConPTY must keep draining even while the host is inside synchronous resize or close.
+        let (sender, output) = mpsc::channel();
         std::thread::spawn(move || {
             let mut buffer = [0_u8; 65536];
             loop {
