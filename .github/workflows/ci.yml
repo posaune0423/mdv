@@ -29,6 +29,8 @@ jobs:
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Require Microsoft Edge for Windows raster tests
         if: runner.os == 'Windows'
@@ -49,7 +51,7 @@ jobs:
 
       - name: Test
         timeout-minutes: 10
-        run: cargo test --workspace --all-targets --all-features --no-fail-fast
+        run: cargo test --workspace --all-targets --all-features --no-fail-fast -- --nocapture
 
       - name: Upload Windows native-render evidence
         if: always() && runner.os == 'Windows'

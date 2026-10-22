@@ -285,7 +285,7 @@ fn render_file_url(page_url: &str, viewport_width_px: u32) -> Result<SnapshotRes
         )?,
     )?;
     let render_deadline = (Instant::now() + RENDER_TIMEOUT).min(process_deadline);
-    let tab = attach_initial_page(&transport.inner, render_deadline)?;
+    let tab = create_render_page(&transport.inner, render_deadline)?;
     tab.set_default_timeout(remaining_until(
         render_deadline,
         "Chromium snapshot rendering timed out",
@@ -335,29 +335,44 @@ fn render_file_url(page_url: &str, viewport_width_px: u32) -> Result<SnapshotRes
     Ok(SnapshotResult { png_bytes, diagnostics })
 }
 
-fn attach_initial_page(transport: &Arc<Transport>, deadline: Instant) -> Result<Arc<Tab>> {
+fn create_render_page(transport: &Arc<Transport>, deadline: Instant) -> Result<Arc<Tab>> {
+    let target_id = transport
+        .call_method_on_browser(headless_chrome::protocol::cdp::Target::CreateTarget {
+            url: "about:blank".to_string(),
+            left: None,
+            top: None,
+            width: None,
+            height: None,
+            window_state: None,
+            browser_context_id: None,
+            enable_begin_frame_control: None,
+            new_window: None,
+            background: None,
+            for_tab: None,
+            hidden: None,
+        })
+        .context("failed to create Chromium render page")?
+        .target_id;
     loop {
         let targets = transport
             .call_method_on_browser(headless_chrome::protocol::cdp::Target::GetTargets {
                 filter: None,
             })
             .context("failed to list Chromium page targets")?;
-        if let Some(target) = targets
-            .target_infos
-            .into_iter()
-            .find(|target| target.Type == "page" && !target.url.starts_with("devtools://"))
+        if let Some(target) =
+            targets.target_infos.into_iter().find(|target| target.target_id == target_id)
         {
             match Tab::new(target, Arc::clone(transport)) {
                 Ok(tab) => return Ok(Arc::new(tab)),
                 Err(error) if Instant::now() < deadline => {
-                    tracing::debug!(error = ?error, "retrying Chromium initial page attachment");
+                    tracing::debug!(error = ?error, "retrying Chromium render page attachment");
                 }
-                Err(error) => return Err(error).context("failed to attach Chromium initial page"),
+                Err(error) => return Err(error).context("failed to attach Chromium render page"),
             }
         }
         ensure!(
             Instant::now() < deadline,
-            "Chromium did not expose an initial page target before the render deadline"
+            "Chromium did not expose its render page target before the render deadline"
         );
         thread::sleep(READINESS_INTERVAL);
     }

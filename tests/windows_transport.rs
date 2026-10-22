@@ -12,11 +12,13 @@ use portable_pty::{Child, CommandBuilder, MasterPty, NativePtySystem, PtySize, P
 
 struct ViewerSession {
     child: Box<dyn Child + Send + Sync>,
-    master: Box<dyn MasterPty + Send>,
+    master: Option<Box<dyn MasterPty + Send>>,
     input: Box<dyn Write + Send>,
     output: Receiver<Vec<u8>>,
     bytes: Vec<u8>,
     scan: usize,
+    #[cfg(target_os = "windows")]
+    conpty_cursor_query_replied: bool,
 }
 
 impl ViewerSession {
@@ -24,16 +26,6 @@ impl ViewerSession {
         let pair = NativePtySystem::default()
             .openpty(size(120, 40))
             .unwrap_or_else(|error| panic!("native PTY should open: {error}"));
-        let mut command = CommandBuilder::new(env!("CARGO_BIN_EXE_mdv"));
-        command.arg(document);
-        command.env("TERM_PROGRAM", "WezTerm");
-        command.env("TERM", "xterm-256color");
-        command.env("RUST_LOG", "off");
-        let child = pair
-            .slave
-            .spawn_command(command)
-            .unwrap_or_else(|error| panic!("native viewer should start: {error}"));
-        drop(pair.slave);
         let mut reader = pair
             .master
             .try_clone_reader()
@@ -56,7 +48,64 @@ impl ViewerSession {
                 }
             }
         });
-        Self { child, master: pair.master, input, output, bytes: Vec::new(), scan: 0 }
+        let mut command = CommandBuilder::new(env!("CARGO_BIN_EXE_mdv"));
+        command.arg(document);
+        command.env("TERM_PROGRAM", "WezTerm");
+        command.env("TERM", "xterm-256color");
+        command.env("RUST_LOG", "off");
+        let child = pair
+            .slave
+            .spawn_command(command)
+            .unwrap_or_else(|error| panic!("native viewer should start: {error}"));
+        drop(pair.slave);
+        let session = Self {
+            child,
+            master: Some(pair.master),
+            input,
+            output,
+            bytes: Vec::new(),
+            scan: 0,
+            #[cfg(target_os = "windows")]
+            conpty_cursor_query_replied: false,
+        };
+        #[cfg(target_os = "windows")]
+        let session = {
+            let mut session = session;
+            session.reply_to_conpty_cursor_query();
+            session
+        };
+        session
+    }
+
+    #[cfg(target_os = "windows")]
+    fn reply_to_conpty_cursor_query(&mut self) {
+        const QUERY: &[u8] = b"\x1b[6n";
+        const RESPONSE: &[u8] = b"\x1b[1;1R";
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if self.bytes.windows(QUERY.len()).any(|part| part == QUERY) {
+                self.send(RESPONSE);
+                self.conpty_cursor_query_replied = true;
+                return;
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            assert!(
+                !remaining.is_zero(),
+                "ConPTY did not request its inherited cursor position before startup; raw output={}",
+                escaped_tail(&self.bytes)
+            );
+            match self.output.recv_timeout(remaining) {
+                Ok(data) => self.bytes.extend(data),
+                Err(mpsc::RecvTimeoutError::Timeout) => panic!(
+                    "ConPTY did not request its inherited cursor position before startup; raw output={}",
+                    escaped_tail(&self.bytes)
+                ),
+                Err(error) => panic!(
+                    "ConPTY output closed before its inherited cursor query: {error}; raw output={}",
+                    escaped_tail(&self.bytes)
+                ),
+            }
+        }
     }
 
     fn send(&mut self, input: &[u8]) {
@@ -105,8 +154,8 @@ impl ViewerSession {
                 Ok(data) => self.bytes.extend(data),
                 Err(mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(error) => panic!(
-                    "viewer must produce rich image output, not text fallback: {error}; tail={}",
-                    String::from_utf8_lossy(&self.bytes)
+                    "viewer must produce rich image output, not text fallback: {error}; raw output={}",
+                    escaped_tail(&self.bytes)
                 ),
             }
             assert!(self.bytes.len() < 32 * 1024 * 1024, "inline image exceeded the fixture bound");
@@ -135,11 +184,28 @@ impl Drop for ViewerSession {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        #[cfg(target_os = "windows")]
+        if !self.conpty_cursor_query_replied
+            && let Some(master) = self.master.take()
+        {
+            // ClosePseudoConsole can wait forever for this reply and hide the startup panic.
+            // The failed test process will release the handle when it exits.
+            std::mem::forget(master);
+        }
     }
 }
 
 fn size(cols: u16, rows: u16) -> PtySize {
     PtySize { rows, cols, pixel_width: cols * 8, pixel_height: rows * 16 }
+}
+
+fn escaped_tail(bytes: &[u8]) -> String {
+    const LIMIT: usize = 512;
+    bytes[bytes.len().saturating_sub(LIMIT)..]
+        .iter()
+        .flat_map(|byte| std::ascii::escape_default(*byte))
+        .map(char::from)
+        .collect()
 }
 
 #[test]
@@ -220,6 +286,8 @@ fn native_pty_preserves_rich_png_scrolling_resize_and_quit() {
     }
     viewer
         .master
+        .as_ref()
+        .unwrap_or_else(|| panic!("native PTY should remain open until after resize"))
         .resize(size(100, 35))
         .unwrap_or_else(|error| panic!("native console resize should work: {error}"));
     let deadline = Instant::now() + Duration::from_secs(45);
