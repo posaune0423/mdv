@@ -265,8 +265,7 @@ fn render_file_url(page_url: &str, viewport_width_px: u32) -> Result<SnapshotRes
     let browser = Browser::connect_with_timeout(debug_ws_url, remaining_startup.min(CDP_TIMEOUT))
         .context("failed to connect to Chromium snapshot CDP")?;
     let render_deadline = Instant::now() + RENDER_TIMEOUT;
-    browser.set_default_timeout(RENDER_TIMEOUT);
-    let tab = browser.new_tab().context("failed to create Chromium snapshot tab")?;
+    let tab = initial_browser_tab(&browser, render_deadline)?;
     tab.set_default_timeout(remaining_until(
         render_deadline,
         "Chromium snapshot rendering timed out",
@@ -314,6 +313,26 @@ fn render_file_url(page_url: &str, viewport_width_px: u32) -> Result<SnapshotRes
     );
 
     Ok(SnapshotResult { png_bytes, diagnostics })
+}
+
+fn initial_browser_tab(browser: &Browser, deadline: Instant) -> Result<Arc<headless_chrome::Tab>> {
+    loop {
+        browser.register_missing_tabs();
+        if let Some(tab) = browser
+            .get_tabs()
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Chromium snapshot browser tab registry lock poisoned"))?
+            .first()
+            .cloned()
+        {
+            return Ok(tab);
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "Chromium did not expose an initial page target before the render deadline"
+        );
+        thread::sleep(READINESS_INTERVAL);
+    }
 }
 
 fn launch_browser(browser_path: &Path, viewport_width_px: u32) -> Result<ChromiumProcess> {

@@ -48,6 +48,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: Test
+        timeout-minutes: 10
         run: cargo test --workspace --all-targets --all-features --no-fail-fast
 
       - name: Upload Windows native-render evidence

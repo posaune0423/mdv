@@ -22,8 +22,9 @@ fn headless_render_resolves_local_image_and_mermaid_when_available() {
         .unwrap_or_else(|error| panic!("fake Mermaid command should be created: {error}"));
 
     let doc_path = dir.path().join("doc.md");
+    let markdown_image_path = image_path.to_string_lossy().replace('\\', "/");
     let source =
-        format!("![pixel]({})\n\n```mermaid\ngraph TD\n    A --> B\n```\n", image_path.display());
+        format!("![pixel]({markdown_image_path})\n\n```mermaid\ngraph TD\n    A --> B\n```\n");
     if let Err(error) = std::fs::write(&doc_path, source) {
         panic!("doc should be written: {error}");
     }
@@ -36,6 +37,7 @@ fn headless_render_resolves_local_image_and_mermaid_when_available() {
     command
         .arg(&doc_path)
         .env("MDV_MERMAID_CMD", &script)
+        .timeout(std::time::Duration::from_secs(15))
         .assert()
         .success()
         .stdout(contains("[Image: pixel 1x1"))

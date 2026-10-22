@@ -22,6 +22,8 @@ fn prints_rendered_document_when_stdout_is_not_a_tty() {
 
     command
         .arg(file.path())
+        .env("MDV_MERMAID_CMD", file.path().with_extension("missing-mermaid-executable"))
+        .timeout(std::time::Duration::from_secs(15))
         .assert()
         .success()
         .stdout(contains("Title"))
