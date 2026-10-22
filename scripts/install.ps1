@@ -80,7 +80,9 @@ try {
     }
 
     if (Test-Path -LiteralPath $targetBinary) {
-        [System.IO.File]::Replace($stagedBinary, $targetBinary, $null)
+        $backupBinary = Join-Path $installDir ('.mdv-{0}.backup.exe' -f [Guid]::NewGuid())
+        [System.IO.File]::Replace($stagedBinary, $targetBinary, $backupBinary)
+        Remove-Item -LiteralPath $backupBinary -Force
     } else {
         [System.IO.File]::Move($stagedBinary, $targetBinary)
     }
