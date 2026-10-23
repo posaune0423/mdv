@@ -48,8 +48,8 @@ fn ci_workflow_refreshes_the_tracked_binary_on_main_pushes() {
         "ci workflow should fetch the latest main branch before pushing refreshed bin/mdv"
     );
     assert!(
-        workflow.contains("git rebase origin/main"),
-        "ci workflow should rebase onto the latest main branch before pushing refreshed bin/mdv"
+        workflow.contains("git rev-parse origin/main"),
+        "ci workflow should leave both artifacts uncommitted when main advanced after their build"
     );
     assert!(
         branches.iter().any(|branch| branch.as_str() == Some("main")),
@@ -114,7 +114,8 @@ fn lefthook_config_uses_repo_quality_gates() {
 #[test]
 fn make_build_refreshes_the_local_bin_copy() {
     let makefile = fs::read_to_string("Makefile")
-        .unwrap_or_else(|error| panic!("Makefile should be readable: {error}"));
+        .unwrap_or_else(|error| panic!("Makefile should be readable: {error}"))
+        .replace("\r\n", "\n");
 
     assert!(
         makefile.contains("build:\n\tcargo build --release\n\tmkdir -p bin"),

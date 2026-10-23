@@ -116,8 +116,17 @@ pub fn viewport_raster(
     content_rows: usize,
     cell_height_px: f32,
 ) -> Result<Option<ViewportRaster>> {
+    viewport_raster_at(page, scroll_rows as f64, content_rows, cell_height_px)
+}
+
+pub fn viewport_raster_at(
+    page: &GraphicPage,
+    scroll_rows: f64,
+    content_rows: usize,
+    cell_height_px: f32,
+) -> Result<Option<ViewportRaster>> {
     let _span = tracing::info_span!("graphics.viewport_raster").entered();
-    let slice = viewport_slice(page, scroll_rows, content_rows, cell_height_px);
+    let slice = viewport_slice_at(page, scroll_rows, content_rows, cell_height_px);
     if slice.rows == 0 || slice.source_height_px == 0 {
         return Ok(None);
     }

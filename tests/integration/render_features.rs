@@ -20,6 +20,8 @@ fn headless_render_covers_core_mvp_blocks() {
 
     command
         .arg(file.path())
+        .env("MDV_MERMAID_CMD", file.path().with_extension("missing-mermaid-executable"))
+        .timeout(std::time::Duration::from_secs(15))
         .assert()
         .success()
         .stdout(contains("# Title"))
@@ -45,6 +47,8 @@ fn headless_render_supports_repo_rich_fixture() {
 
     command
         .arg(&fixture)
+        .env("MDV_MERMAID_CMD", fixture.with_extension("missing-mermaid-executable"))
+        .timeout(std::time::Duration::from_secs(15))
         .assert()
         .success()
         .stdout(contains("# Rich Markdown Fixture"))

@@ -67,6 +67,51 @@ fn github_html_keeps_relative_image_reference_for_base_url_resolution() {
 }
 
 #[test]
+fn github_html_uses_an_absolute_escaped_file_url_for_a_nonexistent_base_directory() {
+    let base_dir = std::path::Path::new("mdv assets # 日本語");
+    let expected_path = std::env::current_dir()
+        .unwrap_or_else(|error| panic!("current directory should be available: {error}"))
+        .join(base_dir);
+    let expected_url = url::Url::from_directory_path(expected_path)
+        .unwrap_or_else(|_| panic!("absolute base directory should produce a file URL"));
+
+    let html =
+        build_github_html("![image](asset.png)\n", base_dir, Theme::Dark, MermaidMode::Disabled)
+            .unwrap_or_else(|error| panic!("html should render: {error}"));
+
+    assert!(html.contains(&format!(r#"<base href="{expected_url}" />"#)));
+}
+
+#[test]
+fn github_html_escapes_entity_like_ampersands_in_the_base_url_attribute() {
+    let base_dir = tempfile::Builder::new()
+        .prefix("base&copy;")
+        .tempdir()
+        .unwrap_or_else(|error| panic!("base directory should be created: {error}"));
+    let expected_path = base_dir
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|error| panic!("base directory should canonicalize: {error}"));
+    let expected_url = url::Url::from_directory_path(expected_path)
+        .unwrap_or_else(|_| panic!("base directory should produce a file URL"));
+
+    let html = build_github_html(
+        "![image](asset.png)\n",
+        base_dir.path(),
+        Theme::Dark,
+        MermaidMode::Disabled,
+    )
+    .unwrap_or_else(|error| panic!("html should render: {error}"));
+
+    assert!(
+        html.contains(&format!(
+            r#"<base href="{}" />"#,
+            expected_url.as_str().replace('&', "&amp;")
+        ))
+    );
+}
+
+#[test]
 fn github_html_uses_github_task_list_classes() {
     let source = "- [x] done\n- [ ] todo\n";
 

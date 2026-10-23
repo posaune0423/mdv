@@ -113,7 +113,9 @@ fn normalize_path(path: &Path) -> PathBuf {
     for component in path.components() {
         match component {
             std::path::Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
-            std::path::Component::RootDir => {}
+            std::path::Component::RootDir => {
+                normalized.push(Path::new(std::path::MAIN_SEPARATOR_STR));
+            }
             std::path::Component::CurDir => {}
             std::path::Component::ParentDir => {
                 let _ = normalized.pop();
@@ -142,5 +144,26 @@ fn common_path_prefix(left: &Path, right: &Path) -> PathBuf {
         }
     } else {
         prefix
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(windows)]
+    use std::path::Path;
+
+    #[cfg(windows)]
+    use super::normalize_path;
+
+    #[cfg(windows)]
+    #[test]
+    fn normalize_path_preserves_windows_drive_and_unc_roots() {
+        let drive = normalize_path(Path::new(r"C:\Users\reader\..\project"));
+        assert_eq!(drive, Path::new(r"C:\Users\project"));
+        assert!(drive.is_absolute());
+
+        let unc = normalize_path(Path::new(r"\\server\share\assets\..\pixel.png"));
+        assert_eq!(unc, Path::new(r"\\server\share\pixel.png"));
+        assert!(unc.is_absolute());
     }
 }

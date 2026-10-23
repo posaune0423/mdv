@@ -1,7 +1,12 @@
-use std::{path::Path, sync::OnceLock};
+use std::{
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 
+use anyhow::{Context, Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use comrak::plugins::syntect::{SyntectAdapter, SyntectAdapterBuilder};
+use url::Url;
 
 use crate::cli::Theme;
 
@@ -73,26 +78,25 @@ fn font_data_url(bytes: &[u8]) -> String {
     format!("data:font/woff2;base64,{}", STANDARD.encode(bytes))
 }
 
-fn path_url(path: &Path) -> String {
-    let mut encoded = String::from("file://");
-    let display = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    for byte in display.to_string_lossy().as_bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'/' | b'-' | b'_' | b'.' | b'~' => {
-                encoded.push(*byte as char);
-            }
-            _ => encoded.push_str(&format!("%{byte:02X}")),
-        }
+fn absolute_path(path: &Path) -> Result<PathBuf> {
+    if let Ok(path) = path.canonicalize() {
+        return Ok(path);
     }
-    encoded
+
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+
+    Ok(std::env::current_dir()
+        .context("failed to resolve the current directory for the HTML asset base URL")?
+        .join(path))
 }
 
-pub(super) fn directory_url(path: &Path) -> String {
-    let mut encoded = path_url(path);
-    if !encoded.ends_with('/') {
-        encoded.push('/');
-    }
-    encoded
+pub(super) fn directory_url(path: &Path) -> Result<String> {
+    let absolute_path = absolute_path(path)?;
+    Url::from_directory_path(&absolute_path)
+        .map(String::from)
+        .map_err(|()| anyhow!("failed to create a file URL for {}", absolute_path.display()))
 }
 
 const LIGHT_CSS: &str = include_str!("../assets/github-markdown-light.css");

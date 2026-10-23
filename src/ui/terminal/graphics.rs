@@ -1,3 +1,4 @@
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::collections::BTreeSet;
 
 use crate::{
@@ -11,7 +12,70 @@ use crate::{
 };
 
 mod resident;
-pub(super) use resident::PageGraphics;
+use resident::PageGraphics as ResidentGraphics;
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) enum GraphicsProtocol {
+    #[default]
+    Kitty,
+    Inline,
+}
+
+#[derive(Default)]
+pub(super) struct PageGraphics {
+    protocol: GraphicsProtocol,
+    resident: ResidentGraphics,
+}
+
+impl PageGraphics {
+    pub(super) fn new(protocol: GraphicsProtocol) -> Self {
+        Self { protocol, resident: ResidentGraphics::default() }
+    }
+
+    pub(super) fn is_inline(&self) -> bool {
+        self.protocol == GraphicsProtocol::Inline
+    }
+
+    pub(super) fn commands(
+        &mut self,
+        page: &crate::ui::page_graphics::GraphicPage,
+        scroll: f64,
+        content_height: usize,
+        cell_metrics: CellMetrics,
+        previous: &[(u32, u32)],
+    ) -> anyhow::Result<GraphicCommands> {
+        if self.is_inline() {
+            let raster = crate::ui::page_graphics::viewport_raster_at(
+                page,
+                scroll,
+                content_height,
+                cell_metrics.height_px,
+            )?;
+            let mut commands = vec!["\u{1b}[2J".to_string()];
+            if let Some(raster) = raster {
+                let payload = STANDARD.encode(&raster.png_bytes);
+                commands.push(format!(
+                    "{}\u{1b}]1337;File=inline=1;size={};width={};height={};preserveAspectRatio=0;doNotMoveCursor=1:{payload}\u{7}",
+                    ansi_cursor_move(0, 0), raster.png_bytes.len(), page.width_cells, raster.rows,
+                ));
+            }
+            return Ok((commands, Vec::new()));
+        }
+        self.resident.commands(page, scroll, content_height, cell_metrics, previous)
+    }
+
+    pub(super) fn has_pending_work(&self) -> bool {
+        self.resident.has_pending_work()
+    }
+
+    pub(super) fn maintenance(&mut self) -> anyhow::Result<Vec<String>> {
+        self.resident.maintenance()
+    }
+
+    pub(super) fn reset(&mut self) -> Vec<String> {
+        self.resident.reset()
+    }
+}
 
 type GraphicCommands = (Vec<String>, Vec<(u32, u32)>);
 
@@ -184,7 +248,36 @@ mod tests {
 
     use crate::ui::page_graphics::build_graphic_page;
 
-    use super::{CellMetrics, PageGraphics};
+    use super::{CellMetrics, GraphicsProtocol, PageGraphics};
+
+    #[test]
+    fn inline_transport_preserves_fractional_viewport_pixels_without_kitty_apcs() {
+        let page = page();
+        let mut graphics = PageGraphics::new(GraphicsProtocol::Inline);
+        assert!(graphics.is_inline());
+        let metrics = CellMetrics { width_px: 8.0, height_px: 2.0 };
+        let (commands, placements) = graphics
+            .commands(&page, 1.25, 4, metrics, &[])
+            .unwrap_or_else(|error| panic!("inline viewport should render: {error}"));
+        let command = commands
+            .iter()
+            .find(|command| command.contains("\u{1b}]1337;File="))
+            .unwrap_or_else(|| panic!("Windows inline images must use OSC1337"));
+        assert!(command.contains("width=16;height=4;"));
+        let (_, payload) =
+            command.split_once(':').unwrap_or_else(|| panic!("payload should exist"));
+        let png = STANDARD
+            .decode(payload.trim_end_matches('\u{7}'))
+            .unwrap_or_else(|error| panic!("payload should decode: {error}"));
+        let visible = image::load_from_memory(&png)
+            .unwrap_or_else(|error| panic!("png should decode: {error}"))
+            .into_rgba8();
+        assert_eq!(visible, image::imageops::crop_imm(page.image.as_ref(), 0, 3, 8, 8).to_image());
+        assert!(!commands.iter().any(|command| command.contains("\u{1b}_G")));
+        assert!(placements.is_empty());
+        assert!(!graphics.has_pending_work());
+        assert!(graphics.reset().is_empty());
+    }
 
     fn page() -> crate::ui::page_graphics::GraphicPage {
         let image = ImageBuffer::from_fn(8, 160, |x, y| Rgba([x as u8, y as u8, 40, 255]));

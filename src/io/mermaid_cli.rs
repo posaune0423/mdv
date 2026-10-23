@@ -32,17 +32,17 @@ impl MermaidCliRenderer {
             };
         }
 
-        if command_exists("mmdc") {
+        if let Some(command) = command_from_path("mmdc") {
             return Self {
-                command: PathBuf::from("mmdc"),
+                command,
                 base_args: Vec::new(),
                 cache_dir: default_cache_root().join("mermaid"),
             };
         }
 
-        if command_exists("npx") {
+        if let Some(command) = command_from_path("npx") {
             return Self {
-                command: PathBuf::from("npx"),
+                command,
                 base_args: vec![OsString::from("-y"), OsString::from("@mermaid-js/mermaid-cli")],
                 cache_dir: default_cache_root().join("mermaid"),
             };
@@ -217,12 +217,56 @@ fn _exists(path: &Path) -> bool {
     path.exists()
 }
 
+#[cfg(not(windows))]
 fn command_exists(command: &str) -> bool {
     std::env::var_os("PATH").is_some_and(|paths| {
         std::env::split_paths(&paths).any(|path| {
             let candidate = path.join(command);
             candidate.exists() || candidate.with_extension("exe").exists()
         })
+    })
+}
+
+fn command_from_path(command: &str) -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        windows_command_from_path(command)
+    }
+
+    #[cfg(not(windows))]
+    {
+        command_exists(command).then(|| PathBuf::from(command))
+    }
+}
+
+#[cfg(windows)]
+fn windows_command_from_path(command: &str) -> Option<PathBuf> {
+    let paths =
+        std::env::var_os("PATH").map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())?;
+    let extensions = std::env::var("PATHEXT")
+        .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string())
+        .split(';')
+        .filter(|extension| !extension.is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+
+    command_in_paths(command, &paths, &extensions)
+}
+
+#[cfg(any(windows, test))]
+fn command_in_paths(command: &str, paths: &[PathBuf], extensions: &[String]) -> Option<PathBuf> {
+    let is_explicit_filename = Path::new(command).extension().is_some();
+    paths.iter().find_map(|path| {
+        let direct = path.join(command);
+        if is_explicit_filename && direct.is_file() {
+            return Some(direct);
+        }
+
+        extensions
+            .iter()
+            .map(|extension| path.join(format!("{command}{extension}")))
+            .find(|candidate| candidate.is_file())
+            .or_else(|| direct.is_file().then_some(direct))
     })
 }
 
@@ -255,4 +299,62 @@ fn stable_cache_key(parts: &[&str]) -> String {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("{hash:016x}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::command_in_paths;
+
+    #[test]
+    fn resolves_a_cmd_executable_from_pathext() {
+        let directory = tempfile::tempdir().unwrap_or_else(|error| {
+            panic!("temporary command directory should be created: {error}")
+        });
+        let command = directory.path().join("mmdc.CMD");
+        std::fs::write(&command, "@echo off")
+            .unwrap_or_else(|error| panic!("command fixture should be written: {error}"));
+        let extensionless_shim = directory.path().join("mmdc");
+        std::fs::write(&extensionless_shim, "#!/bin/sh")
+            .unwrap_or_else(|error| panic!("extensionless shim should be written: {error}"));
+
+        let resolved = command_in_paths(
+            "mmdc",
+            &[directory.path().to_path_buf()],
+            &[".COM".to_string(), ".CMD".to_string()],
+        );
+
+        assert_eq!(resolved, Some(command));
+    }
+
+    #[test]
+    fn keeps_an_explicit_command_suffix_even_when_pathext_is_configured() {
+        let directory = tempfile::tempdir().unwrap_or_else(|error| {
+            panic!("temporary command directory should be created: {error}")
+        });
+        let command = directory.path().join("mmdc.cmd");
+        std::fs::write(&command, "@echo off")
+            .unwrap_or_else(|error| panic!("command fixture should be written: {error}"));
+
+        let resolved = command_in_paths(
+            "mmdc.cmd",
+            &[directory.path().to_path_buf()],
+            &[".COM".to_string(), ".CMD".to_string()],
+        );
+
+        assert_eq!(resolved, Some(command));
+    }
+
+    #[test]
+    fn falls_back_to_an_extensionless_command_without_pathext() {
+        let directory = tempfile::tempdir().unwrap_or_else(|error| {
+            panic!("temporary command directory should be created: {error}")
+        });
+        let command = directory.path().join("mmdc");
+        std::fs::write(&command, "#!/bin/sh")
+            .unwrap_or_else(|error| panic!("command fixture should be written: {error}"));
+
+        let resolved = command_in_paths("mmdc", &[directory.path().to_path_buf()], &[]);
+
+        assert_eq!(resolved, Some(command));
+    }
 }

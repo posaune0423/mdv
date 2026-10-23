@@ -9,12 +9,23 @@ use std::{
 use anyhow::{Context, Result, bail};
 
 const REPOSITORY: &str = "posaune0423/mdv";
-const MAIN_BINARY_URL: &str = "https://raw.githubusercontent.com/posaune0423/mdv/main/bin/mdv";
+const MAIN_MACOS_AARCH64_BINARY_URL: &str =
+    "https://raw.githubusercontent.com/posaune0423/mdv/main/bin/mdv";
+const MAIN_WINDOWS_X86_64_BINARY_URL: &str =
+    "https://raw.githubusercontent.com/posaune0423/mdv/main/bin/mdv.exe";
 const MAIN_MANIFEST_URL: &str = "https://raw.githubusercontent.com/posaune0423/mdv/main/Cargo.toml";
 
 #[must_use]
 pub const fn main_binary_url() -> &'static str {
-    MAIN_BINARY_URL
+    MAIN_MACOS_AARCH64_BINARY_URL
+}
+
+pub fn main_binary_url_for_target(os: &str, arch: &str) -> Result<&'static str> {
+    match (os, arch) {
+        ("macos", "aarch64") => Ok(MAIN_MACOS_AARCH64_BINARY_URL),
+        ("windows", "x86_64") => Ok(MAIN_WINDOWS_X86_64_BINARY_URL),
+        _ => bail!("unsupported update target {os}-{arch}"),
+    }
 }
 
 #[must_use]
@@ -37,12 +48,13 @@ pub fn update_current_executable() -> Result<()> {
     let local_version = current_version().to_string();
     reporter.ok(&format!("Local mdv version: {}", format_version(&local_version)));
 
+    let binary_url = main_binary_url_for_target(std::env::consts::OS, std::env::consts::ARCH)?;
     let temp_dir = tempfile::tempdir().context("failed to create a temporary update directory")?;
     let latest_binary_path = temp_dir.path().join("mdv-main");
 
-    reporter.loading("Downloading latest main/bin/mdv");
-    download_main_binary(main_binary_url(), &latest_binary_path)?;
-    reporter.ok("Downloaded latest main/bin/mdv");
+    reporter.loading(&format!("Downloading latest {binary_url}"));
+    download_main_binary(binary_url, &latest_binary_path)?;
+    reporter.ok(&format!("Downloaded latest {binary_url}"));
 
     let binaries_are_identical = binaries_match(&current_exe, &latest_binary_path)?;
     let install_decision = decide_install(&local_version, &github_version, binaries_are_identical);
@@ -126,6 +138,84 @@ fn binaries_match(current_exe: &Path, latest_binary: &Path) -> Result<bool> {
     Ok(current == latest)
 }
 
+#[cfg(windows)]
+pub fn replace_running_executable(replacement: &Path) -> Result<()> {
+    let current_exe = std::env::current_exe()
+        .context("failed to resolve the running executable before replacement")?;
+    let install_dir = current_exe
+        .parent()
+        .with_context(|| format!("{} has no parent directory", current_exe.display()))?;
+    let backup = tempfile::Builder::new()
+        .prefix(".mdv-update-backup-")
+        .suffix(".exe")
+        .tempfile_in(install_dir)
+        .context("failed to reserve a recoverable backup path next to the running executable")?
+        .into_temp_path()
+        .keep()
+        .context("failed to preserve a recoverable backup path next to the running executable")?;
+
+    if let Err(error) = fs::copy(&current_exe, &backup) {
+        let _ = fs::remove_file(&backup);
+        return Err(error).with_context(|| {
+            format!(
+                "failed to create a recoverable backup of {} at {}",
+                current_exe.display(),
+                backup.display()
+            )
+        });
+    }
+
+    match self_replace::self_replace(replacement) {
+        Ok(()) => {
+            fs::remove_file(&backup).with_context(|| {
+                format!(
+                    "replacement succeeded but failed to remove the backup at {}",
+                    backup.display()
+                )
+            })?;
+            Ok(())
+        }
+        Err(error) if !current_exe.exists() => match fs::rename(&backup, &current_exe) {
+            Ok(()) => Err(error).with_context(|| {
+                format!(
+                    "failed to replace the running executable with {}; restored the original executable at {}",
+                    replacement.display(),
+                    current_exe.display()
+                )
+            }),
+            Err(rollback_error) => Err(rollback_error).with_context(|| {
+                format!(
+                    "failed to replace the running executable with {} ({error}) and failed to restore {}. The backup is preserved at {}",
+                    replacement.display(),
+                    current_exe.display(),
+                    backup.display()
+                )
+            }),
+        },
+        Err(error) => {
+            fs::remove_file(&backup).with_context(|| {
+                format!(
+                    "failed to replace the running executable with {} ({error}) and failed to remove the unused backup at {}",
+                    replacement.display(),
+                    backup.display()
+                )
+            })?;
+            Err(error).with_context(|| {
+                format!(
+                    "failed to schedule replacement of the running executable with {}",
+                    replacement.display()
+                )
+            })
+        }
+    }
+}
+
+#[cfg(windows)]
+fn install_replacement(_current_exe: &Path, replacement: &Path) -> Result<()> {
+    replace_running_executable(replacement)
+}
+
+#[cfg(not(windows))]
 fn install_replacement(current_exe: &Path, replacement: &Path) -> Result<()> {
     let install_dir = current_exe
         .parent()

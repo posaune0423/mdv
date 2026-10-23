@@ -1,3 +1,6 @@
+#[path = "../support/fake_mermaid.rs"]
+mod fake_mermaid;
+
 use assert_cmd::Command;
 use image::{ImageBuffer, Rgba};
 use predicates::str::contains;
@@ -15,34 +18,13 @@ fn headless_render_resolves_local_image_and_mermaid_when_available() {
         panic!("image fixture should be written: {error}");
     }
 
-    let script = dir.path().join("fake-mmdc.sh");
-    let content = format!(
-        r#"#!/bin/sh
-set -eu
-out=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    -o) out="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-cp "{}" "$out"
-"#,
-        image_path.display()
-    );
-    if let Err(error) = std::fs::write(&script, content) {
-        panic!("script should be written: {error}");
-    }
-    let status = std::process::Command::new("chmod").arg("+x").arg(&script).status();
-    match status {
-        Ok(status) if status.success() => {}
-        Ok(status) => panic!("chmod failed: {status}"),
-        Err(error) => panic!("chmod failed to start: {error}"),
-    }
+    let script = fake_mermaid::successful_command(dir.path(), &image_path, None, None)
+        .unwrap_or_else(|error| panic!("fake Mermaid command should be created: {error}"));
 
     let doc_path = dir.path().join("doc.md");
+    let markdown_image_path = image_path.to_string_lossy().replace('\\', "/");
     let source =
-        format!("![pixel]({})\n\n```mermaid\ngraph TD\n    A --> B\n```\n", image_path.display());
+        format!("![pixel]({markdown_image_path})\n\n```mermaid\ngraph TD\n    A --> B\n```\n");
     if let Err(error) = std::fs::write(&doc_path, source) {
         panic!("doc should be written: {error}");
     }
@@ -55,6 +37,7 @@ cp "{}" "$out"
     command
         .arg(&doc_path)
         .env("MDV_MERMAID_CMD", &script)
+        .timeout(std::time::Duration::from_secs(15))
         .assert()
         .success()
         .stdout(contains("[Image: pixel 1x1"))

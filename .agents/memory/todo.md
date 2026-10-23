@@ -706,3 +706,58 @@ Historical first-round record; superseded by the further improvement below. Its 
 - Both initial PR heads passed remote Ubuntu `checks`; scrolling CI ran41 lib +4 e2e +14 integration +79 unit =138 tests (macOS-specific tests omitted). The tracked-binary refresh job is correctly skipped for pull requests.
 - Both PRs are attached to this chat and mergeable; no merge was requested or performed. CodeRabbit skips stacked non-default-base PRs, so its skipped status on #11 is not a completed remote review.
 - Original work remains recoverable under `refs/backup/pre-split-20261022-053532` and `/tmp/mdv-pr-split-20261022-053532/`; all original source/artifact bytes were checked after splitting. The startup worktree remains under `.worktrees/fix/startup-latency` for review.
+
+## Windows rich viewer support (2026-10-22)
+
+- [x] Isolate Windows work from concurrent renderer experiments in a fresh worktree from current main.
+- [x] Define the Windows renderer, supported terminal/transport, installation/update, and platform test contracts from current code and official docs.
+- [x] Add meaningful failing tests for Windows image/asset handling, platform paths, browser launch, and binary selection/replacement.
+- [x] Implement a Windows browser-backed lossless raster renderer while keeping macOS WebKit and existing smooth-scrolling behavior.
+- [x] Add safe Windows installation/update and CI builds, plus actual Windows Chromium raster and executable smoke tests.
+- [x] Run local quality gates and Windows CI, review changes, document installation and exact native-UI verification limits.
+
+### Windows portability subtask: paths, browser launch, and Mermaid CLI
+
+- [x] Add failing regressions for absolute file URLs with spaces, Unicode, and reserved characters.
+- [x] Replace manual file-URL encoding with `url::Url` and preserve a trailing directory slash.
+- [x] Use Windows native URL opening without invoking `cmd.exe` and keep Unix argument behavior.
+- [x] Resolve Windows Mermaid `.cmd`/PATHEXT executables and make Mermaid fixtures runnable on Windows.
+- [x] Run focused portability tests and record results.
+
+#### Windows portability subtask review
+
+- Path URL: `directory_url` now canonicalizes when possible, makes unresolved relative directories absolute, and delegates escaping and Windows drive/UNC formatting to `url::Url::from_directory_path`. It returns an error for an unrepresentable file path instead of silently changing the asset base to `file:///`. Regressions exercise spaces, `#`, Japanese text, and entity-like ampersands in directory names.
+- Browser: Windows calls `open::that_detached`, which uses the native shell integration and passes the URL as data. Unix retains `open` / `xdg-open` with one literal argument; no browser was launched during tests.
+- Mermaid: `from_env` resolves `mmdc` and `npx` to a concrete Windows `PATHEXT` match, including `.cmd`. The test launcher is now an executable shell script on Unix and a quoted `.cmd` file on Windows; its filename contains a space. Unit and e2e coverage retains PNG output, width/scale/theme arguments, cache reuse, and stderr failure assertions.
+- Review follow-up: when Windows has both an extensionless POSIX shim and a `.cmd` peer, Mermaid now follows `PATHEXT` before falling back to the shim; an explicitly suffixed command still resolves directly. Windows browser launch accepts only parsed `http`, `https`, or `mailto` URLs, rejecting existing local `file:` links, relative paths, and non-web schemes before `ShellExecute` is called.
+- Windows path follow-up: `normalize_path` now preserves `RootDir` after a Windows drive or UNC prefix, preventing `C:\Users\...` from degrading to drive-relative `C:Users\...`. Native-Windows-only regressions cover both drive and UNC normalization; shared workspace and asset-root tests remain portable.
+- Verification: focused URL, browser, Mermaid unit tests and the headless Mermaid e2e passed with `CARGO_TARGET_DIR=/tmp/mdv-windows-target`. `cargo check --target x86_64-pc-windows-msvc --lib` could not complete locally because the macOS host lacks the Windows C toolchain headers required by `ring` (`assert.h`); Windows CI remains the target compile evidence.
+
+### Windows distribution subtask
+
+- [x] Add failing behavioral tests for host-specific update artifact selection and Windows replacement routing.
+- [x] Implement host artifact selection and safe Windows self-replacement while retaining the macOS path and update-version policy.
+- [x] Add a PowerShell installer that validates an MDV executable before atomically replacing the user-local install.
+- [x] Make CI validate Ubuntu and Windows, publish both per-SHA artifacts, and use one guarded publisher for both tracked binaries.
+- [x] Update Windows install/update documentation and run focused Rust plus workflow/script validation.
+
+### Windows local review
+
+- Windows transport is explicitly WezTerm OSC1337 lossless viewport PNG; Windows Terminal is not claimed as a rich-image terminal. macOS Ghostty/Kitty retain resident Kitty source crops.
+- Meaningful Red/Green: WezTerm was rejected by the existing interactive gate; inline-mode commands emitted Kitty APC rather than OSC; Windows artifact selection initially returned the macOS binary; entity-like base paths were parsed incorrectly by HTML. These now pass focused regressions.
+- Reviewer findings fixed: case-sensitive Linux PATHEXT fixture, actually bounded owned Chromium startup/watchdog, overflow-safe image bounds, and recoverable Windows executable replacement after a copy error.
+- Local Mac gates: fmt and all-targets/all-features clippy passed; full suite170 passed with2 Chromium tests intentionally ignored outside Windows; those2 real Chrome tests also passed explicitly. Native PTY large-PNG/scroll/resize/quit passed, but actual Windows ConPTY and Windows installer/runtime evidence remain pending CI.
+- Existing root checkout renderer experiments were preserved; this task is isolated under `.worktrees/feature/windows-support` from main `d216aa9`.
+
+- CodeRabbit review fixes verified: PATHEXT executables take precedence over npm POSIX shims, and Windows shell link opening permits only http/https/mailto.
+- Native Windows CI follow-up: static-CRT executable build/import inspection and new/overwrite PowerShell installation passed at `84999e4`. Windows lib tests exposed POSIX-only fixture paths, a classic-scrollbar width loss (610 instead of 640 raster pixels), and an intermittent Edge `networkAlmostIdle` wait. Fixtures now use real temporary roots; Chromium hides its scrollbar through CDP and waits for the requested document URL/readiness under the existing deadline. Full local gates and explicit Chrome tests pass after these fixes; native rerun remains pending.
+- Native rerun `fa70874` additionally exposed drive-root loss in shared path normalization, Edge target-created event reliance, and a headless test starting an external `npx` installation indefinitely. Drive/UNC roots are preserved; the browser discovers its existing page directly through CDP; fallback tests explicitly select an unavailable Mermaid executable and successful fixtures use portable Markdown paths. Local full gates and real Chrome tests pass; Windows runtime acceptance remains pending the next run.
+- Later native runs verified executable replacement and rollback, all headless e2e cases, and drive/UNC normalization. Remaining failures exposed an Edge startup-page navigation abort, CRLF-sensitive Makefile fixture, another test implicitly starting npm, and an unanswered ConPTY inherited-cursor query that deadlocked teardown. Rendering now owns a new CDP page; fixtures preserve their assertions with portable line endings/explicit unavailable renderer; the PTY host answers its required cursor query before image validation. Full local gates and actual Chrome tests pass after these changes; native rerun remains pending.
+
+### Windows native acceptance review
+
+- Native Windows 2022 CI run `39766929925` at source `7d4cd0e` passed157 tests (50 lib,4 e2e,16 integration,84 unit,2 terminal-support,1 ConPTY transport), with one intentionally ignored subprocess entry point invoked by the replacement tests. Actual Edge full-page assets/device-scale rendering, running-executable replacement and rollback, and native ConPTY PNG/scroll/resize/quit all passed.
+- Ubuntu checks and both macOS/Windows distribution jobs passed. The Windows executable uses static CRT, import inspection found no required Visual C++ runtime DLL, and PowerShell fresh plus overwrite installs both reported the installed executable version. Tracked binaries remain CI-owned and unchanged in this PR.
+- Evidence artifact: https://github.com/posaune0423/mdv/actions/runs/39766929925/artifacts/12421145904 ; Windows executable: https://github.com/posaune0423/mdv/actions/runs/39766929925/artifacts/12420243565 . Names use the tested PR synthetic merge SHA `6c442daab16400b91806f8998b2d08d790743d08`.
+- Native ConPTY evidence contains a1238x805 lossless PNG (3,189,541 bytes); first PNG11,045.6ms and first changed-scroll PNG3,137.7ms measure PTY receipt plus base64 decoding. Native WezTerm compositor, physical input feel, acceleration and60fps are not verified.
+- Follow-up test-host robustness keeps the ConPTY output reader draining during synchronous resize/close; the same actual native transport test validates the final head. No production behavior or performance measurement values were changed for that fixture adjustment.

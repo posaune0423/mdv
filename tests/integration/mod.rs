@@ -1,3 +1,5 @@
 mod distribution_contract;
 mod help_output;
 mod render_features;
+#[cfg(windows)]
+mod self_update_runtime;
