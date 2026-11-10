@@ -26,7 +26,7 @@ pub fn supports_kitty_graphics() -> io::Result<bool> {
 
 fn query_kitty_graphics() -> io::Result<bool> {
     let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
+    thread::Builder::new().spawn(move || {
         let mut stdin = io::stdin().lock();
         let mut reply = Vec::new();
         let mut byte = [0; 1];
@@ -37,7 +37,7 @@ fn query_kitty_graphics() -> io::Result<bool> {
                 return;
             }
         }
-    });
+    })?;
 
     let mut stdout = io::stdout();
     stdout.write_all(encode_support_query().as_bytes())?;
