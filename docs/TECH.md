@@ -208,7 +208,7 @@ repo の `bin/mdv` は install / update の実体であり、`main` への push 
 1. Windows の画像表示には対応端末（WezTerm）とインストール済み Edge/Chrome が必要
 2. native compositor の描画・入力の感触は各端末・OSで別途確認が必要
 3. link open は first link 固定で、link focus state を持たない
-4. terminal 判定は Ghostty / Kitty に限定される
+4. terminal 判定は Ghostty / Kitty / WezTerm と、Kitty graphics query に応答する端末に限定される
 5. README の platform statement と現実装の runtime contract に差がある
 
 ## 11. 改善候補
