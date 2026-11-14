@@ -761,3 +761,31 @@ Historical first-round record; superseded by the further improvement below. Its 
 - Evidence artifact: https://github.com/posaune0423/mdv/actions/runs/39766929925/artifacts/12421145904 ; Windows executable: https://github.com/posaune0423/mdv/actions/runs/39766929925/artifacts/12420243565 . Names use the tested PR synthetic merge SHA `6c442daab16400b91806f8998b2d08d790743d08`.
 - Native ConPTY evidence contains a1238x805 lossless PNG (3,189,541 bytes); first PNG11,045.6ms and first changed-scroll PNG3,137.7ms measure PTY receipt plus base64 decoding. Native WezTerm compositor, physical input feel, acceleration and60fps are not verified.
 - Follow-up test-host robustness keeps the ConPTY output reader draining during synchronous resize/close; the same actual native transport test validates the final head. No production behavior or performance measurement values were changed for that fixture adjustment.
+
+## Persistent page cache and automatic refresh (2026-11-14)
+
+- [x] Record current interactive startup and add failing cache/refresh regressions.
+- [x] Cache decoded pages across launches with content, asset, layout, and renderer invalidation.
+- [x] Enable automatic file refresh by default and schedule redraw after changes.
+- [x] Verify cold/warm startup, identical cached pixels, edits, resize, and quit in a real PTY.
+- [x] Run formatting, lint, and the full tests; document results and limits.
+
+### Acceptance
+
+Reopening unchanged local Markdown must bypass HTML/browser rendering. Changed Markdown must never reuse stale pixels. A running viewer must refresh after normal or atomic saves, including equal/backward timestamps, while preserving usable scroll bounds. Cache failures must not prevent normal rendering. Preserve existing terminal transport and headless behavior.
+
+### Review and verification
+
+- Added a persistent decoded-RGBA cache with 128 MiB entry and 512 MiB total limits. Full source, effective asset base, theme, widths, executable identity, and local asset contents determine validity. Remote assets expire after 60 seconds; manual reload bypasses the page cache. Cache entries are atomic and private; corrupt or inaccessible entries are misses.
+- Watching is enabled by default, compares source content every 250 ms, and schedules redraw after saving. Timestamp-preserving and atomic replacement saves, scroll clamping, and explicit opt-out are covered. This follows the new requested default over the former opt-in documentation.
+- TDD reproduced cache misses, invalidation, renderer/asset races, malformed/private-cache handling, disabled Mermaid caching, redraw omission, and same/backward timestamp failures before fixes.
+- Final fmt and all-target/all-feature Clippy passed; full tests: 197 passed, 2 intentionally ignored Chromium tests on macOS. Independent review fixes added read-time permission checks and geometry-aware pixel hashes. CodeRabbit could not run because its provider session required reauthentication; a read-only independent agent reviewed the changes instead.
+- Installed the signed release at `/Users/asumayamada/.local/bin/mdv`; previous executable backed up at `/tmp/mdv-before-page-cache-20261114`. Final installed-binary PTY tests verified default automatic refresh, atomic saves, local-image invalidation, cached/reloaded pixel equality, and quit. Full suite also covers scroll/resize/quit transport.
+- Matched local fixture/geometry: repeated uncached opens median 138.34 ms; cached opens median 17.95 ms (5 warm samples). First run with an empty page cache and an existing WebKit worker: 148.35 ms. Captured pixels are exactly equal to baseline. These are PTY image-and-placement receipt timings, not compositor paint timings. Evidence: `docs/benchmarks/page-cache-2026-11-14.json`.
+- Work is isolated on `feature/markdown-cache` because the primary checkout has concurrent language-cleanup edits. No push was performed.
+
+### Pull request preparation
+
+- [x] Review the complete change with the requested read-only review-agent skill: no actionable findings.
+- [ ] Commit and push the feature, then create its pull request against main.
+- [ ] Integrate current main, resolve actionable feedback, and verify all required CI checks.

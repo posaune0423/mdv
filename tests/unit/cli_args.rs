@@ -25,3 +25,15 @@ fn defaults_theme_to_system() {
 
     assert_eq!(args.theme, Theme::System);
 }
+
+#[test]
+fn automatically_watches_files_by_default() {
+    let args = MdvArgs::parse_from(["mdv", "README.md"]);
+    assert!(args.watch, "saving an open document should refresh without a flag");
+}
+
+#[test]
+fn automatic_refresh_can_be_disabled_explicitly() {
+    let args = MdvArgs::parse_from(["mdv", "--watch=false", "README.md"]);
+    assert!(!args.watch);
+}
