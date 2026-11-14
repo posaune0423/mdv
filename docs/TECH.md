@@ -51,7 +51,7 @@
 条件:
 
 - `stdout` と `stdin` がともに TTY
-- Ghostty / Kitty / WezTerm、または Unix 上で Kitty graphics query に応答する端末
+- Ghostty / Kitty / WezTerm, or a Unix terminal that answers the Kitty graphics support query
 
 挙動:
 
@@ -183,7 +183,7 @@ Rust toolchain は `1.92.0` に固定されている。
 release automation は現在持たない。配布契約は次の 2 本だけである。
 
 - `scripts/install.sh` は GitHub `main` 上の追跡対象 `bin/mdv` を取得して install directory に配置する
-- `mdv update` は対象OSの追跡バイナリを比較し、内容が異なり、GitHub `main` のバージョンが新しい場合に置き換える。同じバージョン番号では更新しないため、配布時は `Cargo.toml` のバージョンも上げる
+- `mdv update` compares the tracked binary for the current OS and replaces it when its contents differ and GitHub `main` has a newer version. Equal versions are not updated, so publishing a new binary requires incrementing the version in `Cargo.toml`.
 
 repo の `bin/mdv` は install / update の実体であり、`main` への push 後に `ci.yml` の macOS job が自動生成して必要時のみ commit する。ローカルでは `make build-tracked-bin` で同じ packaging path を再現できるが、追跡 binary の更新責務は人手ではなく CI が持つ。
 
@@ -208,7 +208,7 @@ repo の `bin/mdv` は install / update の実体であり、`main` への push 
 1. Windows の画像表示には対応端末（WezTerm）とインストール済み Edge/Chrome が必要
 2. native compositor の描画・入力の感触は各端末・OSで別途確認が必要
 3. link open は first link 固定で、link focus state を持たない
-4. terminal 判定は Ghostty / Kitty / WezTerm と、Kitty graphics query に応答する端末に限定される
+4. Terminal detection accepts Ghostty / Kitty / WezTerm and Unix terminals that answer the Kitty graphics support query
 5. README の platform statement と現実装の runtime contract に差がある
 
 ## 11. 改善候補
