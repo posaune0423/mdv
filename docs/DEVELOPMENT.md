@@ -13,7 +13,7 @@ uv run scripts/benchmark-startup.py --runs 7 --output /tmp/mdv-startup.json --ca
 
 計測範囲はプロセス生成直前から、最初のページ画像の送信と配置命令を PTY で受信するまでです。既定は 120 列 × 40 行、セルは 8 × 16 px。PNG の送信を検証するため、plain-text fallback は成功として数えません。初回、各回の値、中央値、バイナリの SHA-256 を JSON に保存し、`--capture` で最初に送信した viewport の PNG を保存します。Ghostty/Kitty の compositor が画面に描画する時間は含みません。比較時は同じ文書・テーマ・サイズを使用し、ビルドやテストを同時に走らせず、初回を OS キャッシュが空の状態と同一視しないでください。
 
-描画 worker は120秒間再利用されます。worker が存在しない起動と、起動済み worker で別の文書を開くケースを分けて記録してください。画像の完成結果はキャッシュせず、ローカル画像・文書・テーマ・サイズの変更を毎回描画へ反映します。worker の helper とログは `/tmp/mdv-render-<effective-uid>-<helper-hash>/` に置き、親ディレクトリは所有者だけがアクセス可能です。headless 表示では worker を起動しません。worker と展開済み RGBA の保持には追加のメモリを使用します。
+The rendering worker is reused for 120 seconds. Record startup without a worker separately from a warm worker. Decoded pages are now cached across launches, with invalidation for source content, local assets, theme, dimensions, and executable identity. Use a fresh `MDV_CACHE_DIR` for a cold page-cache run, then repeat with the same directory for warm runs. Remote assets have a short cache lifetime; press `r` to force a fresh render. Worker helpers and logs are stored under `/tmp/mdv-render-<effective-uid>-<helper-hash>/`. Headless output does not use the worker or page cache.
 
 `MDV_PROFILE_STARTUP=1 RUST_LOG=mdv=info` を付けると Rust の段階別時間を出力できます。`--transcript /tmp/mdv-startup.pty` で PTY の生出力を保存できます。helper の段階別ログを有効にするには、その環境変数を設定したコマンドから worker を初めて起動します。
 
@@ -108,3 +108,7 @@ MDV_TEST_BROWSER='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' 
 ```
 
 配布は同一ソースSHAの macOS/Windows成果物をCIで生成し、単一publisherが `bin/mdv` と `bin/mdv.exe` をまとめて更新します。mainが進んだ場合は古い成果物を新しいソースへ載せず、次のrunへ委ねます。PRではダウンロード用artifactまで生成し、mainのバイナリは変更しません。
+
+## Automatic refresh
+
+Interactive file watching is enabled by default. Every 250 ms the viewer compares the current UTF-8 source with the displayed source, detecting saves even when timestamps are preserved or move backward. Missing files during atomic saves are retried. Reload clamps scroll to the new document and schedules a frame without requiring keyboard input. `--watch=false` disables polling; `--watch` remains accepted. This polls the Markdown file, not remote assets.

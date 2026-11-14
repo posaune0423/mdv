@@ -372,3 +372,54 @@ fn terminal_text_expands_tabs_without_losing_code_whitespace() {
     assert!(rendered.lines.iter().any(|line| line.plain_text == "echo    hello"));
     assert_eq!(crate::render::text::sanitize_terminal_line("a\u{1b}\tb"), "a       b");
 }
+
+#[test]
+fn file_refresh_schedules_a_redraw_without_input() -> anyhow::Result<()> {
+    let mut viewer = sample_viewer("# Before\n");
+    viewer.needs_redraw = false;
+    let before = viewer.source.modified_at()?;
+    fs::write(viewer.source.path(), "# After\n")?;
+    fs::File::options()
+        .write(true)
+        .open(viewer.source.path())?
+        .set_modified(before + std::time::Duration::from_secs(1))?;
+
+    assert!(viewer.maybe_reload());
+    assert_eq!(viewer.source_text, "# After\n");
+    assert!(viewer.needs_redraw, "a file change must be visible without keyboard input");
+    Ok(())
+}
+
+#[test]
+fn file_refresh_detects_equal_and_backward_timestamps() -> anyhow::Result<()> {
+    let mut viewer = sample_viewer("# First\n");
+    let original = viewer.source.modified_at()?;
+    for (content, modified) in
+        [("# Other\n", original), ("# Third\n", original - std::time::Duration::from_secs(1))]
+    {
+        fs::write(viewer.source.path(), content)?;
+        fs::File::options().write(true).open(viewer.source.path())?.set_modified(modified)?;
+        assert!(viewer.maybe_reload(), "content changes must not depend on increasing mtime");
+        assert_eq!(viewer.source_text, content);
+    }
+    viewer.needs_redraw = false;
+    assert!(!viewer.maybe_reload());
+    assert!(!viewer.needs_redraw, "unchanged content should not repaint");
+    Ok(())
+}
+
+#[test]
+fn file_refresh_recovers_after_atomic_save_and_clamps_scroll() -> anyhow::Result<()> {
+    let mut viewer = sample_viewer(&long_document(50));
+    viewer.scroll = viewer.max_scroll();
+    let original = viewer.source.modified_at()?;
+    let path = viewer.source.path().clone();
+    fs::remove_file(&path)?;
+    assert!(!viewer.maybe_reload());
+    fs::write(&path, "# Replacement\n")?;
+    fs::File::options().write(true).open(&path)?.set_modified(original)?;
+    assert!(viewer.maybe_reload());
+    assert_eq!(viewer.source_text, "# Replacement\n");
+    assert_eq!(viewer.scroll, viewer.max_scroll(), "reload must clamp to the current viewport");
+    Ok(())
+}

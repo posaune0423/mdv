@@ -6,7 +6,7 @@ use tracing::info_span;
 
 use crate::{
     core::{config::AppConfig, document::Document},
-    io::snapshot::render_html_to_raster,
+    io::{page_cache::PageCache, snapshot::render_html_to_raster},
     render::github_html::build_github_html,
     ui::{
         page_graphics::{GraphicPage, build_graphic_page},
@@ -21,6 +21,7 @@ pub(super) fn render_graphic_page(
     document: &Document,
     source_text: &str,
     cell_metrics: CellMetrics,
+    use_cache: bool,
 ) -> Result<GraphicPage> {
     let _span = info_span!("startup.render_graphic_page").entered();
     if cfg!(test) {
@@ -31,6 +32,17 @@ pub(super) fn render_graphic_page(
     let display_width_px =
         (f32::from(viewport_width) * cell_metrics.width_px).round().max(1.0) as u32;
     let snapshot_width_px = ((display_width_px as f32) / GRAPHIC_PAGE_ZOOM).round().max(1.0) as u32;
+    let mut cache = PageCache::for_document(
+        config,
+        source_text,
+        viewport_width,
+        display_width_px,
+        snapshot_width_px,
+    );
+    if use_cache && let Some(page) = cache.as_ref().and_then(PageCache::load) {
+        tracing::debug!("page cache hit");
+        return Ok(page);
+    }
     let base_dir = document
         .path
         .parent()
@@ -40,15 +52,22 @@ pub(super) fn render_graphic_page(
         let _span = info_span!("startup.build_github_html").entered();
         build_github_html(source_text, base_dir, config.theme, config.mermaid_mode)?
     };
+    if let Some(cache) = cache.as_mut() {
+        cache.prepare(&html);
+    }
     let snapshot = {
         let _span = info_span!("startup.render_html_to_raster").entered();
         render_html_to_raster(&html, base_dir, snapshot_width_px)?
     };
 
-    {
+    let page = {
         let _span = info_span!("startup.build_graphic_page").entered();
-        build_graphic_page(&snapshot, viewport_width, display_width_px)
+        build_graphic_page(&snapshot, viewport_width, display_width_px)?
+    };
+    if let Some(cache) = cache {
+        cache.store(&html, &page);
     }
+    Ok(page)
 }
 
 pub(super) fn fit_to_width(line: &str, width: usize) -> String {

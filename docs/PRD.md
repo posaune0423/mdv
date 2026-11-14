@@ -50,7 +50,7 @@ terminal 常用者が Markdown を読むとき、次の摩擦が発生しやす�
 | 1 | `mdv README.md` を実行してドキュメントを読む | 対話 TTY では graphic page 表示、非対話では plain-text 表示 |
 | 2 | rich fixture のような画像付き設計書を確認する | ローカル画像を解決し、表示可能なら描画する |
 | 3 | Mermaid を含む仕様書を読む | renderer が使えれば表示、使えなければ unavailable 表示に degrade する |
-| 4 | 文書を編集しながら確認する | `--watch` で変更監視し再読み込みする |
+| 4 | Preview while editing | Reload saved changes automatically; `--watch=false` opts out |
 | 5 | shell pipeline で Markdown を読む | stdout 非 TTY 時にヘッドレス整形結果を出力する |
 
 ## 5. 現在の製品スコープ
@@ -125,7 +125,7 @@ terminal 常用者が Markdown を読むとき、次の摩擦が発生しやす�
 3. 非対話時は viewer ではなく plain-text を返せること
 4. ローカル画像を相対パス解決できること
 5. Mermaid renderer が無い場合でもプロセス全体は継続すること
-6. `--watch` でファイル更新を検知し、再読み込みできること
+6. Detect file content changes and reload automatically by default; `--watch=false` disables polling.
 7. `system` を既定に、`light` / `dark` を明示指定で切り替えられること
 8. 最低限の keyboard navigation を持つこと
 9. `update` で GitHub `main` の追跡対象 `bin/mdv` と現在の `mdv` 実行ファイルを比較し、差分があるときだけ上書きインストールできること
