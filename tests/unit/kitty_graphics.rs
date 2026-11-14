@@ -1,8 +1,62 @@
 use base64::Engine as _;
 use mdv::io::kitty_graphics::{
     DeleteCommand, KittyImagePlacement, encode_delete, encode_place, encode_support_query,
-    encode_transmit_png, parse_support_reply,
+    encode_tmux_support_query, encode_transmit_png, parse_support_reply,
 };
+
+#[test]
+fn tmux_wraps_a_complete_transfer_in_one_dcs_packet() {
+    let png_bytes = vec![42; 12_345];
+    let direct = encode_transmit_png(7, &png_bytes);
+    let transfer = mdv::io::kitty_graphics::encode_tmux_transmit_png(7, &png_bytes, 32_768)
+        .unwrap_or_else(|error| panic!("tmux transfer should fit: {error}"));
+
+    assert_eq!(transfer.matches("\u{1b}Ptmux;").count(), 1);
+    assert_eq!(transfer.matches("\u{1b}_G").count(), 5);
+    assert!(transfer.starts_with("\u{1b}Ptmux;"));
+    assert!(transfer.ends_with("\u{1b}\\"));
+    assert_eq!(
+        transfer
+            .trim_start_matches("\u{1b}Ptmux;")
+            .strip_suffix("\u{1b}\\")
+            .unwrap_or_else(|| panic!("tmux packet should end with DCS terminator"))
+            .replace("\u{1b}\u{1b}", "\u{1b}"),
+        direct,
+        "tmux wrapping must not re-encode or alter the completed Kitty transfer"
+    );
+}
+
+#[test]
+fn tmux_rejects_a_transfer_larger_than_its_input_buffer() {
+    let error = match mdv::io::kitty_graphics::encode_tmux_transmit_png(7, &[42; 64], 32) {
+        Ok(_) => panic!("oversized tmux transfer should fail"),
+        Err(error) => error,
+    };
+
+    assert!(error.to_string().contains("input-buffer-size"));
+}
+
+#[test]
+fn tmux_placement_uses_the_outer_pane_origin_without_moving_tmux_cursor() {
+    let placement = KittyImagePlacement {
+        image_id: 31,
+        placement_id: 31,
+        columns: 10,
+        rows: 4,
+        source_x_px: 0,
+        source_y_px: 0,
+        source_width_px: 80,
+        source_height_px: 64,
+        cursor_x: 0,
+        cursor_y: 0,
+        z_index: -1,
+    };
+    let command = mdv::io::kitty_graphics::encode_tmux_place_at(&placement, 80, 1, 2, 3);
+
+    assert!(command.starts_with("\u{1b}[4;3H\u{1b}Ptmux;"));
+    assert!(command.contains("\u{1b}\u{1b}[5;83H"));
+    assert!(command.contains("i=31,p=31"));
+}
 
 #[test]
 fn encodes_png_transfer_command() {
@@ -98,4 +152,12 @@ fn support_reply_requires_ok_before_device_attributes() {
     assert_eq!(parse_support_reply(b"\x1b_Gi=31;ENOTSUPPORTED\x1b\\\x1b[?62;22c"), Some(false));
     assert_eq!(parse_support_reply(b"\x1b_Gi=7;OK\x1b\\\x1b[?62;22c"), Some(false));
     assert_eq!(parse_support_reply(b"\x1b_Gi=31;OK\x1b\\\x1b[?62;2"), None);
+}
+
+#[test]
+fn wraps_the_query_and_device_attributes_together_for_tmux() {
+    let query = encode_tmux_support_query();
+    assert_eq!(query.matches("\u{1b}Ptmux;").count(), 1);
+    assert!(query.contains("\u{1b}\u{1b}_Gi=31"));
+    assert!(query.contains("\u{1b}\u{1b}[c"));
 }

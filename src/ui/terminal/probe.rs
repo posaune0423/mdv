@@ -1,7 +1,10 @@
 use std::io;
 
 #[cfg(unix)]
-use crate::io::kitty_graphics::{encode_support_query, parse_support_reply};
+use crate::io::{
+    kitty_graphics::{encode_support_query, encode_tmux_support_query, parse_support_reply},
+    tmux,
+};
 #[cfg(unix)]
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 #[cfg(unix)]
@@ -36,7 +39,16 @@ pub fn supports_kitty_graphics() -> io::Result<bool> {
 #[cfg(unix)]
 fn query_kitty_graphics() -> io::Result<bool> {
     let mut stdout = io::stdout();
-    stdout.write_all(encode_support_query().as_bytes())?;
+    let query = if std::env::var("TMUX").is_ok()
+        && std::env::var("TMUX_PANE").ok().is_some_and(|pane| !pane.is_empty())
+    {
+        let pane = std::env::var("TMUX_PANE").unwrap_or_default();
+        tmux::load_config(&pane).map_err(io::Error::other)?;
+        encode_tmux_support_query()
+    } else {
+        encode_support_query()
+    };
+    stdout.write_all(query.as_bytes())?;
     stdout.flush()?;
 
     let stdin = io::stdin();

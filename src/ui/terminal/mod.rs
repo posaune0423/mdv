@@ -38,9 +38,9 @@ use self::{
 use crate::render::text::render_document;
 use crate::{
     core::{config::AppConfig, document::Document, theme::ThemeTokens},
-    io::fs::FileSystemDocumentSource,
     io::kitty_graphics::{DeleteCommand, encode_delete},
     io::{browser, image_decoder::ImageDecoder, mermaid_cli::MermaidCliRenderer},
+    io::{fs::FileSystemDocumentSource, tmux},
     render::{
         markdown::parse_document,
         text::{
@@ -95,6 +95,34 @@ pub fn is_supported_terminal(term_program: Option<&str>, term: Option<&str>) -> 
     graphics_protocol(term_program, term).is_some()
 }
 
+#[must_use]
+pub fn is_supported_tmux_outer_terminal(outer_terminal: Option<&str>) -> bool {
+    outer_terminal.is_some_and(|terminal| {
+        terminal.eq_ignore_ascii_case("ghostty") || terminal.eq_ignore_ascii_case("kitty")
+    })
+}
+
+#[must_use]
+pub fn known_tmux_outer_terminal_from(
+    in_tmux: bool,
+    lc_terminal: Option<&str>,
+    queried_client: Result<bool, anyhow::Error>,
+) -> bool {
+    in_tmux && (queried_client.unwrap_or(false) || is_supported_tmux_outer_terminal(lc_terminal))
+}
+
+#[must_use]
+pub fn has_known_tmux_outer_terminal() -> bool {
+    let pane = std::env::var("TMUX_PANE").ok().filter(|pane| !pane.is_empty());
+    let in_tmux = std::env::var("TMUX").is_ok() && pane.is_some();
+    let queried_client = pane.map_or_else(|| Ok(false), |pane| tmux::known_outer_terminal(&pane));
+    known_tmux_outer_terminal_from(
+        in_tmux,
+        std::env::var("LC_TERMINAL").ok().as_deref(),
+        queried_client,
+    )
+}
+
 fn graphics_protocol(term_program: Option<&str>, term: Option<&str>) -> Option<GraphicsProtocol> {
     if term_program.is_some_and(|value| value.eq_ignore_ascii_case("wezterm")) {
         Some(GraphicsProtocol::Inline)
@@ -107,12 +135,17 @@ fn graphics_protocol(term_program: Option<&str>, term: Option<&str>) -> Option<G
     }
 }
 
-fn current_graphics_protocol() -> GraphicsProtocol {
+fn current_graphics_protocol() -> Result<GraphicsProtocol> {
+    if let Some(pane) = std::env::var("TMUX_PANE").ok().filter(|pane| !pane.is_empty())
+        && std::env::var("TMUX").is_ok()
+    {
+        return Ok(GraphicsProtocol::Tmux(tmux::load_config(&pane)?));
+    }
     graphics_protocol(
         std::env::var("TERM_PROGRAM").ok().as_deref(),
         std::env::var("TERM").ok().as_deref(),
     )
-    .unwrap_or_default()
+    .map_or(Ok(GraphicsProtocol::Kitty), Ok)
 }
 
 impl TerminalViewer {
@@ -148,7 +181,7 @@ impl TerminalViewer {
             graphic_page,
             scroll: 0,
             scroll_motion: ScrollMotion::default(),
-            page_graphics: PageGraphics::new(current_graphics_protocol()),
+            page_graphics: PageGraphics::new(current_graphics_protocol()?),
             pending_image_deletes: Vec::new(),
             clear_text: true,
             last_status: None,
@@ -197,7 +230,7 @@ impl TerminalViewer {
             graphic_page,
             scroll: 0,
             scroll_motion: ScrollMotion::default(),
-            page_graphics: PageGraphics::new(current_graphics_protocol()),
+            page_graphics: PageGraphics::new(current_graphics_protocol().unwrap_or_default()),
             pending_image_deletes: Vec::new(),
             clear_text: true,
             last_status: None,
@@ -228,10 +261,10 @@ impl TerminalViewer {
         for command in self.release_page_images() {
             write!(io::stdout(), "{command}")?;
         }
-        let clear_graphics = if self.page_graphics.is_inline() {
-            String::new()
-        } else {
+        let clear_graphics = if !self.page_graphics.is_inline() && !self.page_graphics.is_tmux() {
             encode_delete(DeleteCommand::AllVisiblePlacements)
+        } else {
+            String::new()
         };
         execute!(
             io::stdout(),
@@ -246,6 +279,13 @@ impl TerminalViewer {
 
     fn release_page_images(&mut self) -> Vec<String> {
         let mut deletes = std::mem::take(&mut self.pending_image_deletes);
+        if self.page_graphics.is_tmux() {
+            deletes.extend(
+                std::mem::take(&mut self.transmitted_graphics)
+                    .into_iter()
+                    .map(|image_id| self.page_graphics.delete(DeleteCommand::Image { image_id })),
+            );
+        }
         deletes.extend(self.page_graphics.reset());
         deletes
     }
@@ -414,6 +454,7 @@ impl TerminalViewer {
     fn draw(&mut self) -> Result<()> {
         let _span = tracing::info_span!("terminal.draw").entered();
         if self.pending_layout_refresh {
+            self.page_graphics.refresh_tmux_config()?;
             self.rerender(true);
             let _ = self.set_scroll(cmp::min(self.scroll, self.max_scroll()));
             self.pending_layout_refresh = false;
@@ -454,7 +495,7 @@ impl TerminalViewer {
                 &self.visible_placements,
             )?
         } else if let Some(rendered) = &self.rendered {
-            collect_graphics_commands(
+            let (commands, visible) = collect_graphics_commands(
                 rendered,
                 GraphicViewport {
                     scroll: self.scroll,
@@ -466,14 +507,26 @@ impl TerminalViewer {
                 },
                 &self.visible_placements,
                 &mut self.transmitted_graphics,
-            )
+                self.page_graphics.image_namespace(),
+            );
+            (self.page_graphics.wrap_commands(commands)?, visible)
         } else {
             (Vec::new(), Vec::new())
         };
 
         if self.clear_all_graphics {
             if !self.page_graphics.is_inline() {
-                write!(frame, "{}", encode_delete(DeleteCommand::AllVisiblePlacements))?;
+                if self.page_graphics.is_tmux() {
+                    for image_id in &self.transmitted_graphics {
+                        write!(
+                            frame,
+                            "{}",
+                            self.page_graphics.delete(DeleteCommand::Image { image_id: *image_id })
+                        )?;
+                    }
+                } else {
+                    write!(frame, "{}", encode_delete(DeleteCommand::AllVisiblePlacements))?;
+                }
             }
             self.clear_all_graphics = false;
         }
@@ -577,6 +630,11 @@ impl TerminalViewer {
     }
 
     fn rerender(&mut self, use_cache: bool) {
+        if self.page_graphics.is_tmux() {
+            self.pending_image_deletes.extend(self.transmitted_graphics.iter().map(|image_id| {
+                self.page_graphics.delete(DeleteCommand::Image { image_id: *image_id })
+            }));
+        }
         self.pending_image_deletes.extend(self.page_graphics.reset());
         self.clear_text = true;
         self.last_status = None;

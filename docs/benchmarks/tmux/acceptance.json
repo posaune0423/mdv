@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-14",
+  "original_pr": "https://github.com/posaune0423/mdv/pull/8",
+  "tested_transport_revision": "66d80c873ed09e5ec08ba689dc432f460f8c31e8",
+  "detection_followup_revision": "05cf0ddfc007038de273d8595edfe57a3506923c",
+  "platform": "macOS",
+  "terminal": "Ghostty 1.4.0",
+  "multiplexer": "tmux 3.7c",
+  "isolation": "Dedicated Ghostty process/window and tmux server; only synthetic local Markdown/SVG fixtures.",
+  "configuration": {
+    "allow-passthrough": "on",
+    "status-position": "top",
+    "input-buffer-size": 16777216
+  },
+  "results": {
+    "two_panes": "PASS: distinct red/blue Markdown pages render independently below the top status line.",
+    "one_pane_quit": "PASS: quitting the left viewer preserves the right page.",
+    "window_switch": "FAIL: the right-page image remains visible over a newly selected blank shell window.",
+    "startup_detection": "A simultaneous startup without LC_TERMINAL exposed focused-pane probe routing. The client identity follow-up has unit coverage; the captured transport screenshots use an explicit Ghostty hint.",
+    "zoom_copy_mode_nested_multiple_clients": "Not verified."
+  },
+  "screenshots": {
+    "two_panes": "split-panes.png",
+    "one_pane_quit": "one-pane-quit.png",
+    "window_switch": "window-switch-blocker.png"
+  },
+  "limits": "A subsequent baseline capture was blocked by macOS Accessibility permission_denied; no baseline screenshot or final detection/compositor pass is claimed. The window-switch failure blocks release.",
+  "independent_review": [
+    {
+      "priority": "P1",
+      "finding": "Images remain visible after their tmux window is hidden.",
+      "status": "open; native screenshot reproduced"
+    },
+    {
+      "priority": "P2",
+      "finding": "Equal-size pane moves do not refresh the absolute origin.",
+      "status": "open; source review; native reproduction pending"
+    },
+    {
+      "priority": "P2",
+      "finding": "Numeric multi-line top status was treated as zero rows.",
+      "status": "fixed; actual tmux metadata and failing-then-passing production parser regression"
+    }
+  ]
+}

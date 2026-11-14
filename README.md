@@ -115,6 +115,7 @@ The page cache is bounded to 512 MiB (128 MiB per page). Use `MDV_CACHE_DIR` to 
 ## Requirements
 
 - **Terminal**: macOS: [Ghostty](https://ghostty.org/), [Kitty](https://sw.kovidgoyal.net/kitty/), [WezTerm](https://wezterm.org/), or a terminal that answers the Kitty graphics support query (such as Rex); Windows: WezTerm; Linux: a terminal that supports Kitty graphics
+- **tmux (under validation)**: This branch adds Ghostty/Kitty passthrough with `tmux set-option -g allow-passthrough on` and checks `input-buffer-size` before transferring images. Basic split panes render, but switching windows can leave stale images; this remains a release blocker. See [native acceptance evidence](docs/benchmarks/tmux/acceptance.json).
 - **Protocol ecosystem**: The [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) is also implemented by Ghostty, Konsole, st (with a patch), Warp, wayst, WezTerm, iTerm2, and xterm.js
 - **Rich rendering**: macOS uses its system WebKit; Windows x64 uses installed Microsoft Edge or Chrome; Linux uses installed Chrome or Chromium. Each backend produces lossless page images.
 - **Mermaid** (optional): `mmdc` or `npx @mermaid-js/mermaid-cli`, or set `MDV_MERMAID_CMD`

@@ -86,9 +86,10 @@ fn graphics_commands_only_transmit_png_payload_once() {
         viewport_width: 80,
         cell_metrics: CellMetrics { width_px: 8.0, height_px: 16.0 },
     };
-    let (first_commands, _) = collect_graphics_commands(&rendered, viewport, &[], &mut transmitted);
+    let (first_commands, _) =
+        collect_graphics_commands(&rendered, viewport, &[], &mut transmitted, 0);
     let (second_commands, _) =
-        collect_graphics_commands(&rendered, viewport, &[], &mut transmitted);
+        collect_graphics_commands(&rendered, viewport, &[], &mut transmitted, 0);
 
     assert_eq!(first_commands.iter().filter(|command| command.contains("a=t")).count(), 1);
     assert_eq!(second_commands.iter().filter(|command| command.contains("a=t")).count(), 0);

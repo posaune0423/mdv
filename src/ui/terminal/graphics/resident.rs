@@ -96,6 +96,7 @@ struct PendingPreparation {
 }
 
 pub(in crate::ui::terminal) struct PageGraphics {
+    image_ids: [u32; 2],
     page: Option<PageKey>,
     windows: Vec<ResidentWindow>,
     active_image_id: Option<u32>,
@@ -108,6 +109,7 @@ pub(in crate::ui::terminal) struct PageGraphics {
 impl Default for PageGraphics {
     fn default() -> Self {
         Self {
+            image_ids: RESIDENT_IMAGE_IDS,
             page: None,
             windows: Vec::new(),
             active_image_id: None,
@@ -120,6 +122,18 @@ impl Default for PageGraphics {
 }
 
 impl PageGraphics {
+    pub(in crate::ui::terminal) fn with_image_ids(image_ids: [u32; 2]) -> Self {
+        Self {
+            image_ids,
+            page: None,
+            windows: Vec::new(),
+            active_image_id: None,
+            last_source_y_px: None,
+            motion_direction: 1,
+            generation: 0,
+            pending: None,
+        }
+    }
     pub(in crate::ui::terminal) fn commands(
         &mut self,
         page: &GraphicPage,
@@ -350,7 +364,7 @@ impl PageGraphics {
     fn slot_for_window(&self, source_y_px: u32) -> (usize, u32) {
         if self.windows.len() < MAX_RESIDENT_WINDOWS {
             let slot = self.windows.len();
-            return (slot, RESIDENT_IMAGE_IDS[slot]);
+            return (slot, self.image_ids[slot]);
         }
         let slot = self
             .windows

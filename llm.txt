@@ -8,6 +8,7 @@ Authoritative details: README.md, docs/MARKDOWN.md, docs/ARCHITECTURE.md, docs/T
 - Binary name: mdv
 - Renders GitHub Flavored Markdown (GFM) in the terminal with rich layout, images, code highlighting, optional Mermaid.
 - Interactive mode: recognizes Ghostty, Kitty, and WezTerm. Other macOS terminals (such as Rex) are detected through the Kitty graphics support query. Windows image viewing requires WezTerm.
+- Inside tmux, Ghostty and Kitty use passthrough when `allow-passthrough` is on. `mdv` does not change tmux settings automatically.
 - If stdout is not a TTY (pipe, redirect, CI), mdv prints plain text to stdout instead of opening the interactive viewer.
 
 ## Install (fast path)
@@ -51,6 +52,7 @@ Examples:
 
 - command not found: fix PATH to include the install bin directory.
 - unsupported terminal in interactive mode: use a terminal that supports Kitty graphics on macOS, or WezTerm on Windows. Rex is detected automatically; no TERM_PROGRAM override is needed.
+- tmux graphics unavailable: enable `tmux set-option -g allow-passthrough on`; increase `input-buffer-size` only if `mdv` reports that a particular image transfer exceeds it.
 - plain text instead of viewer: stdin/stdout not both a TTY (expected for scripts).
 - Mermaid missing: install Mermaid CLI or set MDV_MERMAID_CMD; or use --no-mermaid.
 

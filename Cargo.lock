@@ -1905,6 +1905,7 @@ dependencies = [
  "comrak",
  "crossterm",
  "dark-light",
+ "getrandom 0.3.4",
  "headless_chrome",
  "image",
  "open",

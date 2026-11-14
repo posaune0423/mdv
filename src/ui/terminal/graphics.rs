@@ -1,10 +1,18 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use std::collections::BTreeSet;
+use std::{
+    collections::BTreeSet,
+    sync::{
+        OnceLock,
+        atomic::{AtomicU32, Ordering},
+    },
+};
 
 use crate::{
     io::kitty_graphics::{
-        DeleteCommand, KittyImagePlacement, encode_delete, encode_place, encode_transmit_png,
+        DeleteCommand, KittyImagePlacement, encode_delete, encode_place, encode_tmux_command,
+        encode_tmux_command_at, encode_tmux_delete, encode_tmux_transfer, encode_transmit_png,
     },
+    io::tmux::TmuxConfig,
     render::text::{
         RenderedDocument, RenderedGraphic, RenderedGraphicContent, RenderedLine, RenderedLineKind,
     },
@@ -19,21 +27,59 @@ pub(super) enum GraphicsProtocol {
     #[default]
     Kitty,
     Inline,
+    Tmux(TmuxConfig),
 }
 
-#[derive(Default)]
 pub(super) struct PageGraphics {
     protocol: GraphicsProtocol,
     resident: ResidentGraphics,
+    image_namespace: u32,
+}
+
+const IMAGE_NAMESPACE_WIDTH: u32 = 1_024;
+static NEXT_TMUX_IMAGE_NAMESPACE: OnceLock<AtomicU32> = OnceLock::new();
+
+impl Default for PageGraphics {
+    fn default() -> Self {
+        Self::new(GraphicsProtocol::Kitty)
+    }
 }
 
 impl PageGraphics {
     pub(super) fn new(protocol: GraphicsProtocol) -> Self {
-        Self { protocol, resident: ResidentGraphics::default() }
+        let image_namespace = if matches!(protocol, GraphicsProtocol::Tmux(_)) {
+            next_tmux_image_namespace()
+        } else {
+            0
+        };
+        let resident = if image_namespace == 0 {
+            ResidentGraphics::default()
+        } else {
+            ResidentGraphics::with_image_ids([image_namespace, image_namespace.saturating_add(1)])
+        };
+        Self { protocol, resident, image_namespace }
     }
 
     pub(super) fn is_inline(&self) -> bool {
         self.protocol == GraphicsProtocol::Inline
+    }
+
+    pub(super) fn is_tmux(&self) -> bool {
+        matches!(self.protocol, GraphicsProtocol::Tmux(_))
+    }
+
+    pub(super) fn image_namespace(&self) -> u32 {
+        self.image_namespace
+    }
+
+    pub(super) fn refresh_tmux_config(&mut self) -> anyhow::Result<()> {
+        if !self.is_tmux() {
+            return Ok(());
+        }
+        let pane = std::env::var("TMUX_PANE")
+            .map_err(|_| anyhow::anyhow!("TMUX_PANE is missing inside tmux"))?;
+        self.protocol = GraphicsProtocol::Tmux(crate::io::tmux::load_config(&pane)?);
+        Ok(())
     }
 
     pub(super) fn commands(
@@ -61,7 +107,9 @@ impl PageGraphics {
             }
             return Ok((commands, Vec::new()));
         }
-        self.resident.commands(page, scroll, content_height, cell_metrics, previous)
+        let (commands, placements) =
+            self.resident.commands(page, scroll, content_height, cell_metrics, previous)?;
+        Ok((self.wrap_commands(commands)?, placements))
     }
 
     pub(super) fn has_pending_work(&self) -> bool {
@@ -69,12 +117,44 @@ impl PageGraphics {
     }
 
     pub(super) fn maintenance(&mut self) -> anyhow::Result<Vec<String>> {
-        self.resident.maintenance()
+        let commands = self.resident.maintenance()?;
+        self.wrap_commands(commands)
     }
 
     pub(super) fn reset(&mut self) -> Vec<String> {
-        self.resident.reset()
+        let commands = self.resident.reset();
+        self.wrap_commands(commands).unwrap_or_default()
     }
+
+    pub(super) fn delete(&self, command: DeleteCommand) -> String {
+        match self.protocol {
+            GraphicsProtocol::Tmux(_) => encode_tmux_delete(command),
+            GraphicsProtocol::Kitty | GraphicsProtocol::Inline => encode_delete(command),
+        }
+    }
+
+    pub(super) fn wrap_commands(&self, commands: Vec<String>) -> anyhow::Result<Vec<String>> {
+        let Some(config) = (match self.protocol {
+            GraphicsProtocol::Tmux(config) => Some(config),
+            GraphicsProtocol::Kitty | GraphicsProtocol::Inline => None,
+        }) else {
+            return Ok(commands);
+        };
+        commands.into_iter().map(|command| wrap_tmux_command(command, config)).collect()
+    }
+}
+
+fn next_tmux_image_namespace() -> u32 {
+    let generator = NEXT_TMUX_IMAGE_NAMESPACE.get_or_init(|| {
+        let maximum = u32::MAX.saturating_sub(IMAGE_NAMESPACE_WIDTH);
+        let seed =
+            getrandom::u32().unwrap_or_else(|_| std::process::id()).rem_euclid(maximum).max(1);
+        AtomicU32::new(seed)
+    });
+    generator
+        .fetch_add(IMAGE_NAMESPACE_WIDTH, Ordering::Relaxed)
+        .rem_euclid(u32::MAX.saturating_sub(IMAGE_NAMESPACE_WIDTH))
+        .max(1)
 }
 
 type GraphicCommands = (Vec<String>, Vec<(u32, u32)>);
@@ -84,10 +164,15 @@ pub(super) fn collect_graphics_commands(
     viewport: GraphicViewport,
     previous_visible_placements: &[(u32, u32)],
     transmitted_graphics: &mut BTreeSet<u32>,
+    image_namespace: u32,
 ) -> GraphicCommands {
     let mut commands = Vec::new();
-    let visible_placements =
-        visible_graphic_placements(rendered, viewport.scroll, viewport.content_height);
+    let visible_placements = visible_graphic_placements_in_namespace(
+        rendered,
+        viewport.scroll,
+        viewport.content_height,
+        image_namespace,
+    );
 
     for (image_id, placement_id) in previous_visible_placements
         .iter()
@@ -110,7 +195,7 @@ pub(super) fn collect_graphics_commands(
             continue;
         };
 
-        let image_id = (index + 2) as u32;
+        let image_id = image_id_for_graphic(index, image_namespace);
         if transmitted_graphics.insert(image_id) {
             commands.push(encode_transmit_png(image_id, png_bytes));
         }
@@ -221,10 +306,41 @@ pub(super) fn visible_graphic_placements(
             graphic.line_index >= scroll && graphic.line_index - scroll < content_height
         })
         .map(|(index, _)| {
-            let id = (index + 2) as u32;
+            let id = image_id_for_graphic(index, 0);
             (id, id)
         })
         .collect()
+}
+
+fn visible_graphic_placements_in_namespace(
+    rendered: &RenderedDocument,
+    scroll: usize,
+    content_height: usize,
+    image_namespace: u32,
+) -> Vec<(u32, u32)> {
+    if image_namespace == 0 {
+        return visible_graphic_placements(rendered, scroll, content_height);
+    }
+    rendered
+        .graphics
+        .iter()
+        .enumerate()
+        .filter(|(_, graphic)| {
+            graphic.line_index >= scroll && graphic.line_index - scroll < content_height
+        })
+        .map(|(index, _)| {
+            let id = image_id_for_graphic(index, image_namespace);
+            (id, id)
+        })
+        .collect()
+}
+
+fn image_id_for_graphic(index: usize, image_namespace: u32) -> u32 {
+    if image_namespace == 0 {
+        (index + 2) as u32
+    } else {
+        image_namespace.saturating_add(index as u32).saturating_add(2)
+    }
 }
 
 fn graphic_png_bytes(graphic: &RenderedGraphic) -> Option<&[u8]> {
@@ -239,14 +355,47 @@ fn ansi_cursor_move(x: u16, y: u16) -> String {
     format!("\u{1b}[{};{}H", y + 1, x + 1)
 }
 
+fn wrap_tmux_command(command: String, config: TmuxConfig) -> anyhow::Result<String> {
+    if let Some((column, row, kitty_command)) = split_cursor_command(&command) {
+        return Ok(encode_tmux_command_at(
+            kitty_command,
+            config.geometry.column,
+            config.geometry.row,
+            column,
+            row,
+        ));
+    }
+    if command.starts_with("\u{1b}_Ga=t") {
+        return encode_tmux_transfer(&command, config.input_buffer_size);
+    }
+    if command.starts_with("\u{1b}_G") {
+        return Ok(encode_tmux_command(&command));
+    }
+    Ok(command)
+}
+
+fn split_cursor_command(command: &str) -> Option<(u16, u16, &str)> {
+    let cursor = command.strip_prefix("\u{1b}[")?;
+    let (position, rest) = cursor.split_once('H')?;
+    let (row, column) = position.split_once(';')?;
+    Some((
+        column.parse::<u16>().ok()?.saturating_sub(1),
+        row.parse::<u16>().ok()?.saturating_sub(1),
+        rest,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{io::Cursor, process::Command};
 
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
 
-    use crate::ui::page_graphics::build_graphic_page;
+    use crate::{
+        io::tmux::{PaneGeometry, TmuxConfig},
+        ui::page_graphics::build_graphic_page,
+    };
 
     use super::{CellMetrics, GraphicsProtocol, PageGraphics};
 
@@ -277,6 +426,84 @@ mod tests {
         assert!(placements.is_empty());
         assert!(!graphics.has_pending_work());
         assert!(graphics.reset().is_empty());
+    }
+
+    #[test]
+    fn tmux_graphics_use_distinct_image_namespaces_and_scoped_cleanup() {
+        let page = page();
+        let config = TmuxConfig {
+            geometry: PaneGeometry { column: 80, row: 1, status_top_rows: 1 },
+            input_buffer_size: 1_000_000,
+        };
+        let mut first = PageGraphics::new(GraphicsProtocol::Tmux(config));
+        let mut second = PageGraphics::new(GraphicsProtocol::Tmux(config));
+        let metrics = CellMetrics { width_px: 8.0, height_px: 2.0 };
+
+        let (first_commands, _) = first
+            .commands(&page, 0.0, 4, metrics, &[])
+            .unwrap_or_else(|error| panic!("first tmux page should render: {error}"));
+        let (second_commands, _) = second
+            .commands(&page, 0.0, 4, metrics, &[])
+            .unwrap_or_else(|error| panic!("second tmux page should render: {error}"));
+
+        assert_ne!(first.image_namespace(), second.image_namespace());
+        assert!(first_commands.iter().all(|command| command.contains("\u{1b}Ptmux;")));
+        assert!(second_commands.iter().all(|command| command.contains("\u{1b}Ptmux;")));
+        assert!(
+            first_commands.iter().any(|command| command.contains("\u{1b}\u{1b}[2;81H")),
+            "the real PageGraphics placement path must offset the outer cursor"
+        );
+        let cleanup = first.reset();
+        assert!(cleanup.iter().all(|command| command.contains("a=d,d=I")));
+        assert!(!cleanup.iter().any(|command| command.contains("\u{1b}_Ga=d\u{1b}\\")));
+    }
+
+    #[test]
+    fn tmux_image_namespaces_are_distinct_across_processes() {
+        let first = child_namespace();
+        let second = child_namespace();
+        assert_ne!(first, second, "independent mdv processes must not share Kitty image ids");
+    }
+
+    #[test]
+    #[ignore = "subprocess entry point for tmux namespace isolation"]
+    fn tmux_namespace_child() {
+        let config = TmuxConfig {
+            geometry: PaneGeometry { column: 0, row: 0, status_top_rows: 0 },
+            input_buffer_size: 1_000_000,
+        };
+        println!(
+            "TMUX_NAMESPACE={}",
+            PageGraphics::new(GraphicsProtocol::Tmux(config)).image_namespace()
+        );
+    }
+
+    fn child_namespace() -> u32 {
+        let output = Command::new(
+            std::env::current_exe()
+                .unwrap_or_else(|error| panic!("test executable should resolve: {error}")),
+        )
+        .args([
+            "ui::terminal::graphics::tests::tmux_namespace_child",
+            "--exact",
+            "--ignored",
+            "--nocapture",
+        ])
+        .output()
+        .unwrap_or_else(|error| panic!("namespace child should run: {error}"));
+        assert!(
+            output.status.success(),
+            "namespace child failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let output = String::from_utf8_lossy(&output.stdout);
+        let line = output
+            .lines()
+            .find(|line| line.starts_with("TMUX_NAMESPACE="))
+            .unwrap_or_else(|| panic!("namespace child did not report an id"));
+        line.trim_start_matches("TMUX_NAMESPACE=")
+            .parse()
+            .unwrap_or_else(|error| panic!("namespace should be numeric: {error}"))
     }
 
     fn page() -> crate::ui::page_graphics::GraphicPage {
