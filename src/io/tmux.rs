@@ -51,10 +51,15 @@ pub fn parse_pane_geometry(output: &str) -> Result<PaneGeometry> {
     if fields.next().is_some() {
         bail!("tmux pane geometry has unexpected fields");
     }
-    let status_top_rows = u16::from(status == "on" && status_position == "top");
+    let status_rows = match status {
+        "on" => 1,
+        "off" => 0,
+        rows => rows.parse::<u16>().context("tmux status row count is invalid")?,
+    };
+    let status_top_rows = if status_position == "top" { status_rows } else { 0 };
     Ok(PaneGeometry {
         column: column.parse().context("tmux pane column is invalid")?,
-        // pane_top excludes a top status row. With an attached tmux 3.7c
+        // pane_top excludes top status rows. With an attached tmux 3.7c
         // client, pane_top=0 and a row-0 marker rendered at CUP 2;1.
         row: row
             .parse::<u16>()
@@ -95,6 +100,14 @@ mod tests {
         );
         assert_eq!(
             parse_pane_geometry("80,0,on,bottom\n").ok(),
+            Some(PaneGeometry { column: 80, row: 0, status_top_rows: 0 })
+        );
+        assert_eq!(
+            parse_pane_geometry("80,0,2,top\n").ok(),
+            Some(PaneGeometry { column: 80, row: 2, status_top_rows: 2 })
+        );
+        assert_eq!(
+            parse_pane_geometry("80,0,2,bottom\n").ok(),
             Some(PaneGeometry { column: 80, row: 0, status_top_rows: 0 })
         );
         assert!(parse_pane_geometry("80").is_err());

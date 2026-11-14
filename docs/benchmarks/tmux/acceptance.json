@@ -24,5 +24,22 @@
     "one_pane_quit": "one-pane-quit.png",
     "window_switch": "window-switch-blocker.png"
   },
-  "limits": "A subsequent baseline capture was blocked by macOS Accessibility permission_denied; no baseline screenshot or final detection/compositor pass is claimed. The window-switch failure blocks release."
+  "limits": "A subsequent baseline capture was blocked by macOS Accessibility permission_denied; no baseline screenshot or final detection/compositor pass is claimed. The window-switch failure blocks release.",
+  "independent_review": [
+    {
+      "priority": "P1",
+      "finding": "Images remain visible after their tmux window is hidden.",
+      "status": "open; native screenshot reproduced"
+    },
+    {
+      "priority": "P2",
+      "finding": "Equal-size pane moves do not refresh the absolute origin.",
+      "status": "open; source review; native reproduction pending"
+    },
+    {
+      "priority": "P2",
+      "finding": "Numeric multi-line top status was treated as zero rows.",
+      "status": "fixed; actual tmux metadata and failing-then-passing production parser regression"
+    }
+  ]
 }

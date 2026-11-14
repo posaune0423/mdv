@@ -842,3 +842,5 @@ Original contribution: https://github.com/posaune0423/mdv/pull/7. The successor 
 Review notes: the source transfer and renderer tests demonstrate byte framing, cross-process namespace isolation, scoped cleanup, and target-pane tmux configuration handling. An outer PTY experiment confirms tmux receives the passthrough stream, and native Ghostty validation is now in progress in a dedicated test window. Copy mode, nested tmux, multiple clients, and visibility transitions remain unsupported until native client evidence exists.
 
 Native review: Ghostty 1.4.0 and tmux 3.7c render two independent panes with top status rows; quitting one preserves the other. Switching to a blank tmux window leaves an image from the prior window visible. This is a reproduced release blocker, so the successor remains a draft. Captures are in docs/benchmarks/tmux/.
+
+Independent review confirmed the window-visibility blocker and a separate equal-size pane-move geometry gap. Numeric status row counts were fixed with a real tmux metadata check and Red/Green parser regression. The successor stays draft until image lifetime and geometry follow tmux transitions.
