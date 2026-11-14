@@ -4,15 +4,7 @@
 
 Detects duplicate TypeScript/JavaScript code using AST comparison for refactoring.
 
-## AI 用プロンプト / AI Prompt
-
-日本語:
-
-```
-`similarity-ts .` でコードの意味的な類似が得られます。あなたはこれを実行し、ソースコードの重複を検知して、リファクタリング計画を立てます。細かいオプションは similarity-ts -h で確認してください。
-```
-
-English:
+## AI Prompt
 
 ```
 Run `similarity-ts .` to detect semantic code similarities. Execute this command, analyze the duplicate code patterns, and create a refactoring plan. Check `similarity-ts -h` for detailed options.

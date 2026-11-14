@@ -2,13 +2,15 @@
 
 - please do not eslint-disable, just fix the implementation
 - Please use GitHub Flavored Markdown
+- Use English for all Git-tracked source, comments, documentation, plans, and other project materials. Keep user conversations primarily in Japanese.
+- Preserve Unicode test coverage with escaped test data rather than literal Japanese text. CI checks tracked text for Japanese characters.
 
 ## Project Docs (Project Context)
 
 Load `docs/` as project memory at session start or when context is needed.
 
 - **Path**: `docs/`
-- **Default files**: `PRODUCT.md`, `TECH.md`, `STRUCTURE.md`
+- **Default files**: `PRD.md`, `TECH.md`, `STRUCTURE.md`
 - **Task memory**: `.agents/memory/todo.md`, `.agents/memory/lessons.md`
 - **Other docs**: Add or manage as needed (domain-specific .md)
 

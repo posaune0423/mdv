@@ -1,18 +1,18 @@
 ## Current Task
 
-- [x] raw HTML 復元後に `&nbsp;` などの double-escaped entity が残る再現点を固定する
-- [x] supported raw HTML の text segment で entity を 1 段だけ戻す最小修正を入れる
-- [x] 関連テストと build/run 経路で混入が消えたことを確認する
+- [x] Establish a reproducible case where double-escaped entities such as `&nbsp;` remain after raw HTML restoration
+- [x] Apply a minimal fix that decodes one layer of entities in text segments of supported raw HTML
+- [x] Verify through relevant tests and the build/run path that the stray entities no longer appear
 
 ## Current Task Review
 
-- Root cause: `restore_supported_raw_html` は `&lt;...&gt;` の tag だけを復元しており、raw HTML 内テキストに含まれる `&amp;nbsp;` のような double-escaped entity はそのまま残っていた。その結果、復元後の HTML に literal `&nbsp;` が混入した。
-- Fix: `src/render/github_html/postprocess.rs` に double-escaped HTML entity を 1 段だけ戻す処理を追加し、code/pre の外側テキスト segment にだけ適用した。これで `&amp;nbsp;` は `&nbsp;` に戻り、ブラウザ側で通常どおり non-breaking space として解釈される。
+- Root cause: `restore_supported_raw_html` restored only tags encoded as `&lt;...&gt;`, leaving double-escaped entities such as `&amp;nbsp;` in raw HTML text unchanged. As a result, literal `&nbsp;` appeared in the restored HTML output.
+- Fix: Added one-layer decoding of double-escaped HTML entities in `src/render/github_html/postprocess.rs`, applied only to text segments outside code/pre. This turns `&amp;nbsp;` back into `&nbsp;`, which the browser interprets as a normal non-breaking space.
 - Regression coverage:
-- `tests/unit/render_pipeline/github_html.rs` に raw HTML 内の `&nbsp;` が `&amp;nbsp;` のまま残らないことを確認するテストを追加した。
-- 既存の centered fixture テストも再実行し、README 風 badge row の復元が壊れていないことを確認した。
+- Added a test in `tests/unit/render_pipeline/github_html.rs` to verify that `&nbsp;` in raw HTML does not remain encoded as `&amp;nbsp;`.
+- Reran the existing centered fixture test to confirm that README-style badge row restoration still works.
 - Exact-path verification:
-- `make build && TERM=xterm-kitty ./bin/mdv ~/Work/daikolabs/marry-fun/README.md` を再実行し、出力上に literal `&nbsp;` が混入していないことを確認した。
+- Reran `make build && TERM=xterm-kitty ./bin/mdv ~/Work/daikolabs/marry-fun/README.md` and confirmed that no literal `&nbsp;` appeared in the output.
 - Verification:
 - `cargo test github_html_decodes_double_escaped_entities_inside_restored_raw_html -- --nocapture` passed
 - `cargo test centered_block_fixture_ignores_extra_attrs_but_restores_centered_html -- --nocapture` passed
@@ -761,3 +761,22 @@ Historical first-round record; superseded by the further improvement below. Its 
 - Evidence artifact: https://github.com/posaune0423/mdv/actions/runs/39766929925/artifacts/12421145904 ; Windows executable: https://github.com/posaune0423/mdv/actions/runs/39766929925/artifacts/12420243565 . Names use the tested PR synthetic merge SHA `6c442daab16400b91806f8998b2d08d790743d08`.
 - Native ConPTY evidence contains a1238x805 lossless PNG (3,189,541 bytes); first PNG11,045.6ms and first changed-scroll PNG3,137.7ms measure PTY receipt plus base64 decoding. Native WezTerm compositor, physical input feel, acceleration and60fps are not verified.
 - Follow-up test-host robustness keeps the ConPTY output reader draining during synchronous resize/close; the same actual native transport test validates the final head. No production behavior or performance measurement values were changed for that fixture adjustment.
+
+## English repository language (2026-11-14)
+
+- [x] Translate Japanese prose in all Git-tracked documentation and agent instructions into English.
+- [x] Remove literal Japanese from source and tests while preserving Unicode coverage.
+- [x] Record English as the repository language and Japanese as the conversation language.
+- [x] Verify the tracked-text language scan, formatting, lint, and tests; review the diff.
+
+### Plan and acceptance
+
+Translate existing content without changing product behavior or historical claims. Keep non-ASCII path and rendering test coverage using Unicode escapes. Use English for all tracked source, comments, docs, plans, and materials. The final scan must find no literal Japanese in tracked text files.
+
+### Review
+
+- Translated all 15 tracked text files containing Japanese, preserving document structure and Unicode fixture values. Added the language policy to `AGENTS.md` and lessons, with a CI check for Japanese scripts and punctuation.
+- The CI language command passed locally with no matches. `git diff --check`, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo test --workspace --all-targets --all-features` passed.
+- Both normally ignored Chromium rendering tests also passed with the installed Chrome executable (`cargo test --lib chromium_snapshot -- --include-ignored`: 5 passed). Native Windows execution was not rerun on this macOS host.
+- Inspected the tracked documentation screenshots and sampled the demo GIF; their displayed content was already English.
+- Corrected the nonexistent `PRODUCT.md` instruction to the actual `PRD.md`. Existing Makefile-based commands and Bun/TypeScript refactor guidance were translated without changing the working Rust project or its task runner. Existing platform/terminal and distribution claims, the proposed backend abstraction, and the historical initial design remain as written; reconciling those older descriptions is outside this language-only change.

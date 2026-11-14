@@ -7,9 +7,9 @@
 | Product | `mdv` |
 | Document Basis | Repository audit on 2026-03-29 |
 
-## 1. ルート構成
+## 1. Root Layout
 
-主要なトップレベルは次の通り。
+The main top-level entries are:
 
 ```text
 .
@@ -28,20 +28,20 @@
 └── rust-toolchain.toml
 ```
 
-## 2. ディレクトリ別の役割
+## 2. Directory Responsibilities
 
 | Path | Role |
 | --- | --- |
-| `docs/` | 製品・技術・構造ドキュメント、および初期設計メモ |
-| `.agents/memory/` | エージェント用の task memory と lessons |
+| `docs/` | Product, technical, and structural documentation, plus initial design notes |
+| `.agents/memory/` | Agent task memory and lessons |
 | `.github/workflows/` | CI workflow |
-| `bin/` | install / update 対象として git 管理する `mdv` binary |
-| `scripts/` | 配布用 install script |
-| `examples/` | rich Markdown fixture とサンプル画像 |
-| `src/` | 本体実装 |
-| `tests/` | unit / integration / e2e テスト |
+| `bin/` | Git-tracked `mdv` binary used for installation and updates |
+| `scripts/` | Distribution install script |
+| `examples/` | Rich Markdown fixtures and sample images |
+| `src/` | Main implementation |
+| `tests/` | Unit / integration / e2e tests |
 
-## 3. `src/` の構造
+## 3. `src/` Layout
 
 ```text
 src/
@@ -64,111 +64,111 @@ src/
 
 | File | Role |
 | --- | --- |
-| `src/main.rs` | プロセス entrypoint。CLI parse と `app::run()` 呼び出しのみ |
-| `src/lib.rs` | 公開 module 定義と最小限の smoke test |
+| `src/main.rs` | Process entry point; only parses the CLI and calls `app::run()` |
+| `src/lib.rs` | Public module definitions and minimal smoke tests |
 
 ### 3.2 `src/cli/`
 
 | File | Role |
 | --- | --- |
-| `src/cli/mod.rs` | `parse()` と startup message 補助 |
-| `src/cli/args.rs` | `MdvArgs`、`Theme`、CLI schema |
+| `src/cli/mod.rs` | `parse()` and startup message helpers |
+| `src/cli/args.rs` | `MdvArgs`, `Theme`, and CLI schema |
 
 ### 3.3 `src/app/`
 
 | File | Role |
 | --- | --- |
-| `src/app/mod.rs` | 起動 orchestration、TTY 判定、interactive / headless 分岐 |
+| `src/app/mod.rs` | Startup orchestration, TTY detection, and interactive / headless branching |
 
-`app` は実質的な composition root で、`cli`、`core`、`io`、`render`、`ui` を束ねる。
+`app` is effectively the composition root, bringing together `cli`, `core`, `io`, `render`, and `ui`.
 
 ### 3.4 `src/core/`
 
 | File | Role |
 | --- | --- |
-| `src/core/config.rs` | `AppConfig`、`MermaidMode` |
-| `src/core/document.rs` | `Document`、`BlockKind`、inline style などの中間表現 |
-| `src/core/layout.rs` | viewport と visible range 計算 |
-| `src/core/theme.rs` | TUI 用 color token |
-| `src/core/diff.rs` | `Document` 間の block diff |
+| `src/core/config.rs` | `AppConfig`, `MermaidMode` |
+| `src/core/document.rs` | Intermediate representations such as `Document`, `BlockKind`, and inline styles |
+| `src/core/layout.rs` | Viewport and visible-range calculations |
+| `src/core/theme.rs` | TUI color tokens |
+| `src/core/diff.rs` | Block diffs between `Document` instances |
 
-ここは製品ロジックの基礎型を置く層で、renderer と UI の双方から参照される。
+This layer holds the foundational types for product logic and is used by both renderers and the UI.
 
 ### 3.5 `src/render/`
 
 | File | Role |
 | --- | --- |
-| `src/render/markdown.rs` | `comrak` AST を `Document` へ正規化 |
-| `src/render/markdown_pipeline.rs` | GFM options の共通定義 |
-| `src/render/text.rs` | headless renderer と structured text layout |
-| `src/render/svg.rs` | SVG 描画補助 |
-| `src/render/mod.rs` | render module 公開面 |
+| `src/render/markdown.rs` | Normalize the `comrak` AST into `Document` |
+| `src/render/markdown_pipeline.rs` | Shared GFM option definitions |
+| `src/render/text.rs` | Headless renderer and structured text layout |
+| `src/render/svg.rs` | SVG rendering helpers |
+| `src/render/mod.rs` | Public render module interface |
 
 #### `src/render/github_html/`
 
 | File | Role |
 | --- | --- |
-| `src/render/github_html/mod.rs` | GitHub HTML 生成の入口 |
-| `src/render/github_html/styles.rs` | GitHub CSS と font-face 埋め込み |
-| `src/render/github_html/mermaid.rs` | Mermaid code block の事前置換 |
-| `src/render/github_html/postprocess.rs` | code block 整形、alert icon 注入、token retint |
-| `src/render/github_html/tests.rs` | render pipeline 周辺の局所テスト |
+| `src/render/github_html/mod.rs` | Entry point for GitHub HTML generation |
+| `src/render/github_html/styles.rs` | Embed GitHub CSS and font-face declarations |
+| `src/render/github_html/mermaid.rs` | Replace Mermaid code blocks before rendering |
+| `src/render/github_html/postprocess.rs` | Format code blocks, inject alert icons, and retint tokens |
+| `src/render/github_html/tests.rs` | Focused tests for the render pipeline |
 
 #### `src/render/assets/`
 
 - GitHub light / dark CSS
-- 埋め込みフォント
+- Embedded fonts
 
 ### 3.6 `src/io/`
 
 | File | Role |
 | --- | --- |
-| `src/io/fs.rs` | ファイル読み込みと更新時刻取得 |
-| `src/io/browser.rs` | 既定ブラウザ起動 |
-| `src/io/image_decoder.rs` | ローカル画像読み込み、PNG 化、寸法取得 |
+| `src/io/fs.rs` | Read files and retrieve modification times |
+| `src/io/browser.rs` | Launch the default browser |
+| `src/io/image_decoder.rs` | Load local images, convert to PNG, and retrieve dimensions |
 | `src/io/kitty_graphics.rs` | Kitty graphics escape sequence encoder |
-| `src/io/mermaid_cli.rs` | Mermaid CLI 実行と cache |
-| `src/io/mod.rs` | IO module 公開面 |
+| `src/io/mermaid_cli.rs` | Run the Mermaid CLI and cache results |
+| `src/io/mod.rs` | Public IO module interface |
 
 #### `src/io/webkit_snapshot/`
 
 | File | Role |
 | --- | --- |
-| `src/io/snapshot.rs` | OSごとのHTML raster backend選択 |
-| `src/io/chromium_snapshot/mod.rs` | Windows Edge/ChromeのCDP描画・readiness・PNG取得 |
-| `src/io/webkit_snapshot/mod.rs` | HTML snapshot 実行の公開 API |
-| `src/io/webkit_snapshot/diagnostics.rs` | snapshot report の型 |
-| `src/io/webkit_snapshot/paths.rs` | read-access root と temp workspace 計算 |
-| `src/io/webkit_snapshot/snapshot.swift` | ビルド時にコンパイルする WebKit snapshot helper |
-| `src/io/webkit_snapshot/worker.rs` | private Unix socket と共有 helper の起動・再接続・期限の管理 |
-| `src/io/webkit_snapshot/tests.rs` | path / diagnostics 周辺テスト |
+| `src/io/snapshot.rs` | Select the HTML raster backend for each OS |
+| `src/io/chromium_snapshot/mod.rs` | CDP rendering, readiness checks, and PNG capture with Edge/Chrome on Windows |
+| `src/io/webkit_snapshot/mod.rs` | Public API for HTML snapshots |
+| `src/io/webkit_snapshot/diagnostics.rs` | Snapshot report types |
+| `src/io/webkit_snapshot/paths.rs` | Calculate the read-access root and temporary workspace |
+| `src/io/webkit_snapshot/snapshot.swift` | WebKit snapshot helper compiled at build time |
+| `src/io/webkit_snapshot/worker.rs` | Manage the private Unix socket and shared helper startup, reconnection, and deadlines |
+| `src/io/webkit_snapshot/tests.rs` | Tests for paths and diagnostics |
 
 ### 3.7 `src/ui/`
 
 | File | Role |
 | --- | --- |
-| `src/ui/mod.rs` | UI module 公開面 |
-| `src/ui/page_graphics.rs` | full-page PNG の viewport slicing |
+| `src/ui/mod.rs` | Public UI module interface |
+| `src/ui/page_graphics.rs` | Slice full-page PNGs into viewports |
 
 #### `src/ui/terminal/`
 
 | File | Role |
 | --- | --- |
-| `src/ui/terminal/mod.rs` | `TerminalViewer`、event loop、draw、reload、status line |
-| `src/ui/terminal/layout.rs` | article width、cell metrics、graphic page 構築 |
-| `src/ui/terminal/graphics.rs` | graphics placement と visible command 収集 |
-| `src/ui/terminal/graphics/resident.rs` | 最大2枚の画像常駐・先読み・source crop 更新 |
-| `src/ui/terminal/scroll.rs` | 論理スクロール位置と時間ベースの視覚位置の補間 |
-| `src/ui/terminal/highlight.rs` | code highlight の terminal 表現 |
-| `src/ui/terminal/tests.rs` | viewer と placement 周辺テスト |
+| `src/ui/terminal/mod.rs` | `TerminalViewer`, event loop, drawing, reload, and status line |
+| `src/ui/terminal/layout.rs` | Article width, cell metrics, and graphic page construction |
+| `src/ui/terminal/graphics.rs` | Graphics placement and visible-command collection |
+| `src/ui/terminal/graphics/resident.rs` | Keep up to two images resident, prefetch, and update source crops |
+| `src/ui/terminal/scroll.rs` | Logical scroll position and time-based interpolation of the visual position |
+| `src/ui/terminal/highlight.rs` | Terminal representation of code highlighting |
+| `src/ui/terminal/tests.rs` | Tests for the viewer and placement |
 
 ### 3.8 `src/support/`
 
 | File | Role |
 | --- | --- |
-| `src/support/tracing.rs` | tracing 初期化 |
+| `src/support/tracing.rs` | Tracing initialization |
 
-## 4. 実行フローに沿った責務分離
+## 4. Separation of Responsibilities Along the Execution Flow
 
 ### 4.1 Startup
 
@@ -196,7 +196,7 @@ src/
 2. `src/io/image_decoder.rs`
 3. `src/io/mermaid_cli.rs`
 
-## 5. `tests/` の構造
+## 5. `tests/` Layout
 
 ```text
 tests/
@@ -211,59 +211,59 @@ tests/
 
 ### 5.1 `tests/unit/`
 
-責務:
+Responsibilities:
 
-- parser 正規化
-- layout 計算
-- image decoder
+- Parser normalization
+- Layout calculations
+- Image decoder
 - Mermaid CLI adapter
-- SVG / terminal render
+- SVG / terminal rendering
 - GitHub HTML / WebKit snapshot diagnostics
 
 ### 5.2 `tests/integration/`
 
-責務:
+Responsibilities:
 
-- CLI の observable contract
-- help output
-- headless render feature coverage
+- Observable CLI contract
+- Help output
+- Headless render feature coverage
 
 ### 5.3 `tests/e2e/`
 
-責務:
+Responsibilities:
 
-- richer fixture を使った end-to-end 実行
-- local image と fake Mermaid renderer を含む実行シナリオ
+- End-to-end execution with richer fixtures
+- Execution scenarios involving local images and a fake Mermaid renderer
 
-## 6. 補助ファイル
+## 6. Supporting Files
 
 | File | Role |
 | --- | --- |
-| `README.md` | エンドユーザー向け紹介と使い方 |
-| `Cargo.toml` | crate metadata、依存、lint policy |
-| `build.rs` | macOS 用 Swift helper の事前コンパイルと target architecture の指定 |
-| `Cargo.lock` | 依存 lock |
-| `rust-toolchain.toml` | Rust version 固定 |
-| `.cargo/config.toml` | cargo alias |
-| `Makefile` | build / test / lint の短縮コマンドと CI 再現用 `build-tracked-bin` |
-| `bin/mdv` | install script と `mdv update` が参照する追跡 binary |
-| `scripts/install.sh` | GitHub `main` の `bin/mdv` を取得して install する |
-| `.github/workflows/ci.yml` | fmt / clippy / test を回し、`main` push 後は `bin/mdv` も自動生成して commit する CI |
+| `README.md` | Introduction and usage instructions for end users |
+| `Cargo.toml` | Crate metadata, dependencies, and lint policy |
+| `build.rs` | Precompile the macOS Swift helper and specify the target architecture |
+| `Cargo.lock` | Dependency lockfile |
+| `rust-toolchain.toml` | Pin the Rust version |
+| `.cargo/config.toml` | Cargo aliases |
+| `Makefile` | Build / test / lint shortcuts and `build-tracked-bin` for reproducing CI packaging |
+| `bin/mdv` | Tracked binary used by the install script and `mdv update` |
+| `scripts/install.sh` | Download and install `bin/mdv` from GitHub `main` |
+| `.github/workflows/ci.yml` | CI for fmt / clippy / test; also generates and commits `bin/mdv` after pushes to `main` |
 
-## 7. 設計上の見どころ
+## 7. Notable Design Choices
 
-この repo の構造で重要なのは、`render` と `io` が単なる補助層ではなく、製品価値の中心にいる点である。
+A key aspect of this repository is that `render` and `io` are central to the product's value rather than merely supporting layers.
 
-- `core` は共通モデルを提供する
-- `render` は Markdown と GitHub-like fidelity を担う
-- `io` は browser、Mermaid、WebKit、Kitty protocol という外界接続を担う
-- `ui` は terminal の対話体験を担う
-- `app` はそれらを組み立てる
+- `core` provides shared models
+- `render` handles Markdown and GitHub-like fidelity
+- `io` connects to external systems: the browser, Mermaid, WebKit, and the Kitty protocol
+- `ui` provides the interactive terminal experience
+- `app` assembles these components
 
-strict clean architecture よりも、viewer 製品としての描画パイプラインを前面に出した構成になっている。
+The structure emphasizes the rendering pipeline of a viewer product over strict clean architecture.
 
-## 8. 今後構造化しやすい領域
+## 8. Areas Suited to Further Structural Work
 
-- `DocumentMeta.links.first()` に依存する link UX を stateful navigation に分離する
-- interactive fallback を `ui::terminal` 内で strategy として切り出す
-- platform-specific snapshot backend を `io::webkit_snapshot` 以外へ拡張できるよう抽象化する
+- Separate the link UX that depends on `DocumentMeta.links.first()` into stateful navigation
+- Extract the interactive fallback as a strategy within `ui::terminal`
+- Abstract platform-specific snapshot backends so they can extend beyond `io::webkit_snapshot`

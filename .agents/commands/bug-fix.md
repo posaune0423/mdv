@@ -2,9 +2,9 @@
 
 ## Steps
 
-1. まず以下のerrorをstackをよく確認し、問題となるfile, codeを直接読み込める場合はコンテキストとして読み込み具体的な原因を特定してください。
-2. どうしても原因特定ができない場合、もし原因特定に必要な情報が不足している場合は、開発者に伝えてください。
-3. その後その原因を確実に解決するminimumかつ効果的な手段を検討してください。
-4. その手段を実行してください。
-5. lint, format, build, testがあれば実行し、全てのtestが成功することを確認してください。
-6. testがfailした場合そのerrorについてまた1からやり直してください。
+1. Carefully inspect the error and stack trace below. If the affected files and code are accessible, read them for context and identify the specific cause.
+2. Tell the developer if you cannot identify the cause or lack the information needed to do so.
+3. Choose the smallest effective approach that reliably resolves the cause.
+4. Apply that approach.
+5. Run lint, format, build, and tests where available, and confirm that all tests pass.
+6. If a test fails, return to step 1 for that error.
