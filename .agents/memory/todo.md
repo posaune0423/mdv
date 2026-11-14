@@ -812,6 +812,25 @@ Reopening unchanged local Markdown must bypass HTML/browser rendering. Changed M
 
 - Pre-push validation exposed a test assumption about terminal height: the atomic-save regression expected scroll zero even when the hook PTY reports zero rows. Reproduced with `stty rows 0 cols 0`; assert clamping to the actual viewport bound, preserving the behavior check across terminal sizes.
 
+## Linux graphics contribution recovery (PR #7)
+
+- [x] Confirm that the original fork was deleted and preserve the upstream PR head for attribution.
+- [x] Add a real Linux platform-routing regression for Chromium snapshots.
+- [x] Route Linux snapshots through the existing hardened Chromium backend and discover installed browsers without downloading or sandbox overrides.
+- [ ] Run a real Linux Chromium raster check in Ubuntu CI and document source-only Linux installation.
+- [x] Run formatting, tests, Clippy, and record the review evidence before opening a successor PR.
+
+Original contribution: https://github.com/posaune0423/mdv/pull/7. The successor retains the original contributor credit while adapting the implementation to the current snapshot architecture.
+
+### Review
+
+- The removed test-only whitelist was not evidence of the production dispatcher. The real Linux integration regression at `tests/linux_snapshot.rs` failed against baseline `434793a` in Ubuntu CI before this implementation is pushed.
+- macOS verification: formatting and Clippy pass; 173 tests pass with 3 intentional ignored tests; the existing real Chrome raster tests pass with `MDV_TEST_BROWSER`.
+- Linux verification is pending Ubuntu CI, where native Chrome or Chromium is required and the formerly ignored raster tests become required. The local cross-check could not link because this macOS host lacks `x86_64-linux-gnu-gcc`; no Linux result is claimed locally.
+- The implementation retains the existing dedicated profile, owned process timeout, asset readiness checks, and Chromium sandbox. It neither downloads a browser nor adds a Linux distribution artifact.
+- Linux discovery skips non-executable files and Snap launchers, including explicit `MDV_BROWSER`; native candidates later in `PATH` remain eligible.
+- Snap detection reads at most 64 KiB and only examines shebang scripts, avoiding scans of native browser binaries. Regression coverage includes both known Chromium wrapper forms and incidental Snap text in non-script data.
+
 ## Carry forward closed PR #8 tmux graphics support (2026-11-14)
 
 - [x] Compare the closed contribution with the resident-image renderer and identify shared-image and chunk-interleaving failures.
@@ -821,3 +840,5 @@ Reopening unchanged local Markdown must bypass HTML/browser rendering. Changed M
 - [ ] Validate rich rendering through a native Ghostty or Kitty tmux client before calling the feature fully accepted.
 
 Review notes: the source transfer and renderer tests demonstrate byte framing, cross-process namespace isolation, scoped cleanup, and target-pane tmux configuration handling. An outer PTY experiment confirms tmux receives the passthrough stream, and native Ghostty validation is now in progress in a dedicated test window. Copy mode, nested tmux, multiple clients, and visibility transitions remain unsupported until native client evidence exists.
+
+Native review: Ghostty 1.4.0 and tmux 3.7c render two independent panes with top status rows; quitting one preserves the other. Switching to a blank tmux window leaves an image from the prior window visible. This is a reproduced release blocker, so the successor remains a draft. Captures are in docs/benchmarks/tmux/.

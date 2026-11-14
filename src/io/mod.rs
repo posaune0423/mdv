@@ -1,5 +1,5 @@
 pub mod browser;
-#[cfg(any(windows, all(test, target_os = "macos")))]
+#[cfg(any(windows, target_os = "linux", all(test, target_os = "macos")))]
 pub(crate) mod chromium_snapshot;
 pub mod fs;
 pub mod image_decoder;

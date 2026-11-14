@@ -50,8 +50,10 @@ rustix = { version = "1.1.4", features = ["process"] }
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1.1.4", features = ["event"] }
 
-[target.'cfg(windows)'.dependencies]
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
 headless_chrome = "1.0.22"
+
+[target.'cfg(windows)'.dependencies]
 open = { version = "5.4.5", features = ["shellexecute-on-windows"] }
 self-replace = "1.5.0"
 
