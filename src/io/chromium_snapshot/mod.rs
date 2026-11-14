@@ -631,8 +631,8 @@ fn browser_executable() -> Result<PathBuf> {
 #[cfg(target_os = "linux")]
 fn installed_linux_browser() -> Result<PathBuf> {
     let names = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"];
-    let paths =
-        std::env::var_os("PATH").as_deref().map(std::env::split_paths).into_iter().flatten();
+    let search_path = std::env::var_os("PATH");
+    let paths = search_path.as_deref().map(std::env::split_paths).into_iter().flatten();
     if let Some(browser) = find_linux_browser_in_paths(paths, &names) {
         return Ok(browser);
     }
