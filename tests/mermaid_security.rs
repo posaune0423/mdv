@@ -154,7 +154,7 @@ fn write_fake_npx(directory: &Path, marker: &Path) {
     let command = directory.join("npx");
     fs::write(&command, format!("#!/bin/sh\nprintf invoked > '{}'\nexit 1\n", marker.display()))
         .unwrap_or_else(|error| panic!("fake npx should be written: {error}"));
-    make_executable(&command);
+    install_unix_launcher(&command);
 }
 
 #[cfg(windows)]
@@ -175,7 +175,7 @@ fn write_fake_mmdc(directory: &Path) {
         "#!/bin/sh\nset -eu\nout=\"\"\nwhile [ \"$#\" -gt 0 ]; do\n  if [ \"$1\" = \"-o\" ]; then out=\"$2\"; fi\n  shift\ndone\nprintf '<svg></svg>' > \"$out\"\n",
     )
     .unwrap_or_else(|error| panic!("fake mmdc should be written: {error}"));
-    make_executable(&command);
+    install_unix_launcher(&command);
 }
 
 #[cfg(windows)]
@@ -199,7 +199,7 @@ fn write_workspace_recording_failure(directory: &Path, record: &Path) -> PathBuf
         ),
     )
     .unwrap_or_else(|error| panic!("failing renderer should be written: {error}"));
-    make_executable(&command);
+    install_unix_launcher(&command);
     command
 }
 
@@ -214,7 +214,7 @@ fn write_workspace_recording_success(directory: &Path, record: &Path) -> PathBuf
         ),
     )
     .unwrap_or_else(|error| panic!("successful renderer should be written: {error}"));
-    make_executable(&command);
+    install_unix_launcher(&command);
     command
 }
 
@@ -233,13 +233,33 @@ fn write_workspace_recording_failure(directory: &Path, record: &Path) -> PathBuf
 }
 
 #[cfg(not(windows))]
-fn make_executable(command: &Path) {
-    use std::os::unix::fs::PermissionsExt;
+fn install_unix_launcher(command: &Path) {
+    fs::rename(command, unix_command_content_path(command))
+        .unwrap_or_else(|error| panic!("fixture body should be moved: {error}"));
+    std::os::unix::fs::symlink(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/support/mermaid_security_launcher.sh"),
+        command,
+    )
+    .unwrap_or_else(|error| panic!("immutable launcher should be linked: {error}"));
+}
 
-    let mut permissions = fs::metadata(command)
-        .unwrap_or_else(|error| panic!("fake command metadata should be read: {error}"))
-        .permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(command, permissions)
-        .unwrap_or_else(|error| panic!("fake command should be executable: {error}"));
+#[cfg(not(windows))]
+#[test]
+fn runs_security_fixture_while_generated_content_is_open_for_writing() {
+    let directory = temporary_directory();
+    write_fake_mmdc(directory.path());
+    let command = directory.path().join("mmdc");
+    let _writer = fs::OpenOptions::new()
+        .write(true)
+        .open(unix_command_content_path(&command))
+        .unwrap_or_else(|error| panic!("fixture content should open for writing: {error}"));
+    let svg = MermaidCliRenderer::new(command)
+        .render_svg_sized("graph TD\n A --> BusyContent\n", None, None, Theme::Light)
+        .unwrap_or_else(|error| panic!("fixture should execute while content is open: {error:#}"));
+    assert_eq!(svg, "<svg></svg>");
+}
+
+#[cfg(not(windows))]
+fn unix_command_content_path(command: &Path) -> PathBuf {
+    command.with_extension("body")
 }
