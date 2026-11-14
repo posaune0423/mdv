@@ -43,6 +43,26 @@ jobs:
           "MDV_TEST_BROWSER=$edge" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "MDV_TEST_ARTIFACTS=$env:RUNNER_TEMP\mdv-render-evidence" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      - name: Require Chrome or Chromium for Linux raster tests
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          browser=""
+          for name in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$name" >/dev/null 2>&1; then
+              browser="$(command -v "$name")"
+              break
+            fi
+          done
+          if [ -z "$browser" ] && [ -x /opt/google/chrome/chrome ]; then
+            browser=/opt/google/chrome/chrome
+          fi
+          if [ -z "$browser" ]; then
+            echo "Chrome or Chromium is required for Linux raster tests" >&2
+            exit 1
+          fi
+          echo "MDV_TEST_BROWSER=$browser" >> "$GITHUB_ENV"
+
       - name: Format check
         run: cargo fmt --all -- --check
 

@@ -1,5 +1,24 @@
 ## Current Task
 
+## Linux graphics contribution recovery (PR #7)
+
+- [x] Confirm that the original fork was deleted and preserve the upstream PR head for attribution.
+- [x] Add a failing platform-routing regression for Linux Chromium snapshots.
+- [x] Route Linux snapshots through the existing hardened Chromium backend and discover installed browsers without downloading or sandbox overrides.
+- [x] Run a real Linux Chromium raster check in Ubuntu CI and document source-only Linux installation.
+- [x] Run formatting, tests, Clippy, and record the review evidence before opening a successor PR.
+
+Original contribution: https://github.com/posaune0423/mdv/pull/7. The successor retains the original contributor credit while adapting the implementation to the current snapshot architecture.
+
+### Review
+
+- The routing regression failed before the implementation and passes after it.
+- macOS verification: formatting and Clippy pass; 174 tests pass with 3 intentional ignored tests; the existing real Chrome raster tests pass with `MDV_TEST_BROWSER`.
+- Linux verification is delegated to Ubuntu CI, where Chrome or Chromium is required and the formerly ignored raster tests become required. The local cross-check could not link because this macOS host lacks `x86_64-linux-gnu-gcc`; no Linux result is claimed locally.
+- The implementation retains the existing dedicated profile, owned process timeout, asset readiness checks, and Chromium sandbox. It neither downloads a browser nor adds a Linux distribution artifact.
+
+## Current Task
+
 - [x] raw HTML 復元後に `&nbsp;` などの double-escaped entity が残る再現点を固定する
 - [x] supported raw HTML の text segment で entity を 1 段だけ戻す最小修正を入れる
 - [x] 関連テストと build/run 経路で混入が消えたことを確認する
