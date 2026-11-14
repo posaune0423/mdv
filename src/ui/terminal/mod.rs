@@ -21,6 +21,7 @@ use crossterm::{
 mod graphics;
 mod highlight;
 mod layout;
+pub mod probe;
 mod scroll;
 #[cfg(test)]
 mod tests;
