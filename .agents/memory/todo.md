@@ -787,7 +787,8 @@ Reopening unchanged local Markdown must bypass HTML/browser rendering. Changed M
 ### Pull request preparation
 
 - [x] Review the complete change with the requested read-only review-agent skill: no actionable findings.
-- [ ] Commit and push the feature, then create its pull request against main.
-- [ ] Integrate current main, resolve actionable feedback, and verify all required CI checks.
+- [x] Commit and push the feature, then create its pull request against main: https://github.com/posaune0423/mdv/pull/17.
+- [x] Integrate current main without conflicts; include PR screenshot evidence and the template correction lesson.
+- [ ] Verify final-head CI after the merge push; initial CI has 3 passing checks and 2 pending, with no failures. CodeRabbit is quota-limited and returned no review findings; the independent review is complete.
 
 - Pre-push validation exposed a test assumption about terminal height: the atomic-save regression expected scroll zero even when the hook PTY reports zero rows. Reproduced with `stty rows 0 cols 0`; assert clamping to the actual viewport bound, preserving the behavior check across terminal sizes.
