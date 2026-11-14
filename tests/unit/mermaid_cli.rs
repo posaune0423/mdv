@@ -1,6 +1,9 @@
 #[path = "../support/fake_mermaid.rs"]
 mod fake_mermaid;
 
+#[cfg(target_os = "linux")]
+use std::fs::OpenOptions;
+
 use image::{ImageBuffer, Rgba};
 use mdv::cli::Theme;
 use mdv::io::mermaid_cli::MermaidCliRenderer;
@@ -24,7 +27,7 @@ fn invokes_external_mermaid_command_and_reads_png_output() {
     let renderer = MermaidCliRenderer::new(command);
     let output = renderer
         .render_png("graph TD\n    A --> B\n", Theme::Light)
-        .unwrap_or_else(|error| panic!("render should succeed: {error}"));
+        .unwrap_or_else(|error| panic!("render should succeed: {error:#}"));
 
     assert!(!output.is_empty());
 }
@@ -45,7 +48,7 @@ fn passes_requested_width_and_scale_to_mermaid_cli() {
     let renderer = MermaidCliRenderer::new(command);
     let output = renderer
         .render_png_sized("graph TD\n    A --> B\n", Some(640), Some(2.0), Theme::Dark)
-        .unwrap_or_else(|error| panic!("render should succeed: {error}"));
+        .unwrap_or_else(|error| panic!("render should succeed: {error:#}"));
 
     assert!(!output.is_empty());
     let args = std::fs::read_to_string(args_path)
@@ -70,10 +73,31 @@ fn surfaces_stderr_when_mermaid_cli_fails() {
         Ok(_) => panic!("render should fail"),
         Err(error) => error,
     };
-    let message = error.to_string();
+    let message = format!("{error:#}");
 
     assert!(message.contains('7'));
     assert!(message.contains("parse error near node A"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn runs_fake_mermaid_while_its_generated_content_is_open_for_writing() {
+    let directory =
+        TempDir::new().unwrap_or_else(|error| panic!("temp dir should be created: {error}"));
+    let command =
+        fake_mermaid::successful_command(directory.path(), &png_fixture(&directory), None, None)
+            .unwrap_or_else(|error| panic!("fake Mermaid command should be created: {error}"));
+    let content = fake_mermaid::dynamic_content_path(directory.path());
+    let _content_writer = OpenOptions::new()
+        .write(true)
+        .open(content)
+        .unwrap_or_else(|error| panic!("fixture content should open for writing: {error}"));
+
+    let output = MermaidCliRenderer::new(command)
+        .render_png("graph TD\n    A --> B\n", Theme::Light)
+        .unwrap_or_else(|error| panic!("fixture should execute while content is open: {error:#}"));
+
+    assert!(!output.is_empty());
 }
 
 #[test]

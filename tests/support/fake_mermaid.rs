@@ -34,6 +34,11 @@ pub fn failing_command(directory: &Path) -> io::Result<PathBuf> {
     Ok(command)
 }
 
+#[cfg(target_os = "linux")]
+pub fn dynamic_content_path(directory: &Path) -> PathBuf {
+    command_path(directory)
+}
+
 #[cfg(windows)]
 fn command_path(directory: &Path) -> PathBuf {
     directory.join("fake mmdc.cmd")
