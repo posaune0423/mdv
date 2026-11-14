@@ -2,7 +2,7 @@
 
 ## Steps
 
-1. lint, format, typecheckを実行し、error, warningが出ていないことをしっかりと確認してください。
-2. error, warningが出ている場合はその根本原因を冷静に特定し、その原因を解決するための最小限の修正を行ってください。
-3. 修正が完了したら再度lint, format, typecheckを実行し、error, warningが出ていないことを確認してください。
-4. error, warningがなくなるまで2, 3を繰り返してください。
+1. Run lint, format, and typecheck, and carefully confirm that there are no errors or warnings.
+2. If errors or warnings appear, identify their root cause and make the smallest changes needed to resolve it.
+3. After applying the fixes, rerun lint, format, and typecheck, and confirm that there are no errors or warnings.
+4. Repeat steps 2 and 3 until no errors or warnings remain.

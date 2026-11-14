@@ -1,5 +1,9 @@
 # Lessons
 
+- When the user requests the create-pr template, resolve the repository template first and use the shared create-pr default layout if none exists. Do not substitute an older local skill's short prose format for the requested structured body.
+
+- Keep every Git-tracked project artifact in English, even when the user conversation is in Japanese. Encode Unicode-only test data with escapes so language cleanup does not weaken coverage.
+
 - Do not call an implementation a rich markdown viewer until it has been validated in a real TTY and is visibly distinct from raw markdown output.
 - Do not use a repaint-on-every-poll loop for an interactive graphics viewer; redraw must be driven by state changes and placement diffs or the result will flicker and hide input bugs.
 - Typography and code rendering are part of fidelity; if the viewer still looks small or flat next to GitHub, revisit font scale and syntax highlighting before calling the design pass complete.

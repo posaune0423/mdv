@@ -5,62 +5,62 @@
 | Version | 1.0 |
 | Status | Active |
 | Product | `mdv` |
-| Type | Rust 製 CLI Markdown Viewer |
+| Type | CLI Markdown Viewer written in Rust |
 | Repository Version | `0.1.1` |
 | Primary Interface | Terminal CLI |
 | Document Basis | Repository audit on 2026-03-29 |
 
-## 1. 目的
+## 1. Purpose
 
-`mdv` は、Markdown 文書を browser や editor preview に切り替えず、terminal 内で高い可読性のまま読むための single-binary viewer である。
+`mdv` is a single-binary viewer for reading Markdown documents with high readability inside a terminal, without switching to a browser or editor preview.
 
-このリポジトリから確認できる現在の製品方針は次の 2 本柱に集約される。
+The current product direction evident in this repository has two pillars:
 
-- 対話モードでは、GitHub 風の見た目をできるだけそのまま terminal に持ち込む
-- 非対話モードでは、パイプや CI でも破綻しない plain-text rendering を返す
+- Bring a GitHub-like appearance to the terminal as faithfully as possible in interactive mode
+- Return plain-text rendering that works reliably in pipes and CI in non-interactive mode
 
-## 2. 解く課題
+## 2. Problems to Solve
 
-terminal 常用者が Markdown を読むとき、次の摩擦が発生しやすい。
+Frequent terminal users commonly encounter the following friction when reading Markdown:
 
-- README、設計書、仕様書の確認のためだけに browser や IDE preview を開く必要がある
-- 既存の terminal viewer では table、image、callout、Mermaid、syntax highlight の fidelity が落ちやすい
-- CI や pipe では rich viewer が使えず、最低限読める代替表現が必要になる
+- Opening a browser or IDE preview just to inspect a README, design document, or specification
+- Reduced fidelity for tables, images, callouts, Mermaid, and syntax highlighting in existing terminal viewers
+- The need for a minimally readable alternative when rich viewers are unavailable in CI or pipes
 
-`mdv` はこの摩擦を減らし、Markdown の閲覧体験を terminal workflow に戻すことを狙う。
+`mdv` aims to reduce this friction and bring Markdown reading back into the terminal workflow.
 
-## 3. 対象ユーザー
+## 3. Target Users
 
 ### Primary User
 
-- Ghostty または Kitty を日常的に使うソフトウェアエンジニア
-- README、設計 docs、仕様書を Markdown で読む人
-- terminal から離れない作業フローを重視する人
+- Software engineers who use Ghostty or Kitty daily
+- People who read READMEs, design docs, and specifications in Markdown
+- People who value workflows that stay in the terminal
 
 ### Secondary User
 
-- CLI 中心でレビューや調査を進める技術者
-- CI や shell pipeline で Markdown を読みやすく整形したい人
-- GitHub に近い Markdown 表示をローカルでも欲しい人
+- Engineers who conduct reviews and research primarily through the CLI
+- People who want readable Markdown formatting in CI or shell pipelines
+- People who want local Markdown display similar to GitHub
 
-## 4. 主要ユースケース
+## 4. Main Use Cases
 
 | # | Use Case | Current Outcome |
 | --- | --- | --- |
-| 1 | `mdv README.md` を実行してドキュメントを読む | 対話 TTY では graphic page 表示、非対話では plain-text 表示 |
-| 2 | rich fixture のような画像付き設計書を確認する | ローカル画像を解決し、表示可能なら描画する |
-| 3 | Mermaid を含む仕様書を読む | renderer が使えれば表示、使えなければ unavailable 表示に degrade する |
+| 1 | Run `mdv README.md` to read a document | Graphic page display in an interactive TTY; plain-text display otherwise |
+| 2 | Inspect illustrated design documents such as the rich fixture | Resolve local images and render them when display is available |
+| 3 | Read specifications containing Mermaid | Render when a renderer is available; otherwise degrade to an unavailable indicator |
 | 4 | Preview while editing | Reload saved changes automatically; `--watch=false` opts out |
-| 5 | shell pipeline で Markdown を読む | stdout 非 TTY 時にヘッドレス整形結果を出力する |
+| 5 | Read Markdown in a shell pipeline | Output headless formatting when stdout is not a TTY |
 
-## 5. 現在の製品スコープ
+## 5. Current Product Scope
 
-### 5.1 入力
+### 5.1 Input
 
-- ローカル Markdown ファイルのパス
-- 主に `.md` / `.markdown` を想定
+- A local Markdown file path
+- Primarily `.md` / `.markdown` files
 
-### 5.2 CLI オプション
+### 5.2 CLI Options
 
 - `--watch`
 - `--theme system|light|dark`
@@ -68,9 +68,9 @@ terminal 常用者が Markdown を読むとき、次の摩擦が発生しやす�
 - `--version`
 - `update`
 
-### 5.3 Markdown 表示対象
+### 5.3 Supported Markdown Elements
 
-実装上、`Document` 中間表現に正規化されているブロックは以下。
+The implementation normalizes the following blocks into the `Document` intermediate representation:
 
 - Heading
 - Paragraph
@@ -84,90 +84,90 @@ terminal 常用者が Markdown を読むとき、次の摩擦が発生しやす�
 - Rule
 - Footnote
 
-加えて inline では以下を保持する。
+It also preserves the following inline elements:
 
 - bold
 - italic
 - inline code
-- link text と link destination
+- link text and link destination
 
-### 5.4 対話モードの体験
+### 5.4 Interactive Experience
 
-対話モードは `stdout` と `stdin` の両方が TTY で、かつ terminal 判定が Ghostty または Kitty のときにだけ起動する。
+Interactive mode starts only when both `stdout` and `stdin` are TTYs and the terminal is identified as Ghostty or Kitty.
 
-現行実装から確認できる操作は以下。
+The current implementation supports these controls:
 
-- `j` / `Down`: 1 行下へ
-- `k` / `Up`: 1 行上へ
+- `j` / `Down`: move down one line
+- `k` / `Up`: move up one line
 - `PageDown`
 - `PageUp`
-- `g`: 先頭へ
-- `G`: 末尾へ
-- `r`: 再読み込み
-- `o`: 文書内の最初のリンクを既定ブラウザで開く
-- `q`: 終了
+- `g`: go to the beginning
+- `G`: go to the end
+- `r`: reload
+- `o`: open the first link in the document in the default browser
+- `q`: quit
 
-### 5.5 非対話モードの体験
+### 5.5 Non-Interactive Experience
 
-非対話モードでは plain-text renderer を使い、次のように degrade する。
+Non-interactive mode uses the plain-text renderer and degrades rich elements as follows:
 
-- link は `label <url>` 形式
-- image は解決できれば寸法つきメタ表示、失敗時は missing 表示
-- Mermaid は rendered / disabled / unavailable のいずれかで表現
-- table、footnote、callout もテキストとして読める形に整形
+- Links use the `label <url>` format
+- Images show metadata including dimensions when resolved, or a missing indicator on failure
+- Mermaid is represented as rendered / disabled / unavailable
+- Tables, footnotes, and callouts are formatted as readable text
 
-## 6. 製品要件
+## 6. Product Requirements
 
 ### 6.1 Functional Requirements
 
-1. Markdown ファイルを一度 parse して内部 `Document` に正規化できること
-2. 対話 TTY では terminal viewer を起動できること
-3. 非対話時は viewer ではなく plain-text を返せること
-4. ローカル画像を相対パス解決できること
-5. Mermaid renderer が無い場合でもプロセス全体は継続すること
+1. Parse a Markdown file once and normalize it into the internal `Document`
+2. Start the terminal viewer in an interactive TTY
+3. Return plain text instead of launching the viewer in non-interactive contexts
+4. Resolve local images using relative paths
+5. Keep the overall process running when no Mermaid renderer is available
 6. Detect file content changes and reload automatically by default; `--watch=false` disables polling.
-7. `system` を既定に、`light` / `dark` を明示指定で切り替えられること
-8. 最低限の keyboard navigation を持つこと
-9. `update` で GitHub `main` の追跡対象 `bin/mdv` と現在の `mdv` 実行ファイルを比較し、差分があるときだけ上書きインストールできること
+7. Default to `system`, with explicit `light` / `dark` overrides
+8. Provide basic keyboard navigation
+9. Use `update` to compare the current `mdv` executable against the tracked `bin/mdv` on GitHub `main`, overwriting the installation only when they differ
 
 ### 6.2 Non-Functional Requirements
 
-1. 単一バイナリで配布できること
-2. `unsafe` を禁止し、Clippy 警告ゼロを維持すること
-3. CI で `fmt`、`clippy -D warnings`、`cargo test` を通せること
-4. rich rendering が失敗しても、少なくとも原因が分かるエラーまたは診断が返ること
+1. Distribute as a single binary
+2. Prohibit `unsafe` and maintain zero Clippy warnings
+3. Pass `fmt`, `clippy -D warnings`, and `cargo test` in CI
+4. Return at least an explanatory error or diagnostic when rich rendering fails
 
-## 7. 非ゴール
+## 7. Non-Goals
 
-この repo からは、次は現時点で製品スコープ外または未実装と判断できる。
+Based on this repository, the following are currently outside the product scope or unimplemented:
 
-- Markdown 編集機能
-- 検索 UI
-- TOC パネル
-- 複数リンクのフォーカス移動
-- tmux / zellij の正式サポート
-- remote image fetch
-- arbitrary HTML 実行
-- Windows 対応
+- Markdown editing
+- Search UI
+- TOC panel
+- Focus navigation between multiple links
+- Official tmux / zellij support
+- Remote image fetching
+- Arbitrary HTML execution
+- Windows support
 
-## 8. 現行実装ベースの制約
+## 8. Constraints Based on the Current Implementation
 
-README の配布ターゲットは macOS / Linux だが、現行の interactive rendering は GitHub HTML を WebKit で PNG 化する経路に依存している。`src/io/webkit_snapshot` は非 macOS で `bail!` するため、現在の rich interactive path は実質 macOS 前提である。
+The README lists macOS / Linux as distribution targets, but current interactive rendering depends on converting GitHub HTML to PNG through WebKit. Because `src/io/webkit_snapshot` calls `bail!` on non-macOS platforms, the current rich interactive path effectively assumes macOS.
 
-また、`o` キーは「現在フォーカス中のリンク」ではなく、`DocumentMeta.links.first()` を開く。将来の UX 文言や仕様を整えるなら、ここは仕様として固定するか、本当にフォーカス移動を実装するかを決める必要がある。
+The `o` key opens `DocumentMeta.links.first()` rather than the currently focused link. Future UX wording and specifications need to either formalize this behavior or introduce actual focus navigation.
 
-## 9. 成功指標
+## 9. Success Metrics
 
-コードベースから妥当と判断できる短期指標は以下。
+The following short-term metrics are reasonable based on the codebase:
 
-- rich fixture を使った integration / e2e テストが green であること
-- README、examples 配下の文書が `mdv` で読み切れること
-- Mermaid や local image の失敗時に silent failure にならないこと
-- 対話モードと非対話モードで最低限の閲覧品質を維持できること
+- Passing integration / e2e tests using rich fixtures
+- Being able to read the README and documents under examples through to the end with `mdv`
+- No silent failures for Mermaid or local images
+- Maintaining a basic level of viewing quality in both interactive and non-interactive modes
 
-## 10. 次に詰めるべき項目
+## 10. Open Questions
 
-- Linux での rich interactive path をどう成立させるか
-- graphic page 失敗時の runtime fallback を復活させるか
-- link navigation を複数リンク対応に広げるか
-- search / TOC など viewer UX の優先順位をどう置くか
+- How to support the rich interactive path on Linux
+- Whether to restore a runtime fallback when graphic page generation fails
+- Whether to expand link navigation to multiple links
+- How to prioritize viewer UX features such as search and a TOC

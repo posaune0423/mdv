@@ -1,34 +1,34 @@
 # Development
 
-macOS のソースビルドには Swift コンパイラを含む Xcode Command Line Tools が必要です。Cargo のビルド時に WebKit helper をコンパイルして `mdv` に同梱するため、配布バイナリの実行時には Swift コンパイラは不要です。Linux ビルドでは helper をコンパイルしません。
+Building from source on macOS requires Xcode Command Line Tools, including the Swift compiler. Cargo compiles the WebKit helper and bundles it into `mdv`, so running the distributed binary does not require a Swift compiler. Linux builds do not compile the helper.
 
-## 起動時間の計測
+## Measuring startup time
 
-release バイナリをビルドして、実際の対話モードを固定サイズの PTY で計測できます。
+Build the release binary and measure the actual interactive mode in a PTY with fixed dimensions.
 
 ```bash
 cargo build --release
 uv run scripts/benchmark-startup.py --runs 7 --output /tmp/mdv-startup.json --capture /tmp/mdv-first-frame.png -- ./target/release/mdv README.md
 ```
 
-計測範囲はプロセス生成直前から、最初のページ画像の送信と配置命令を PTY で受信するまでです。既定は 120 列 × 40 行、セルは 8 × 16 px。PNG の送信を検証するため、plain-text fallback は成功として数えません。初回、各回の値、中央値、バイナリの SHA-256 を JSON に保存し、`--capture` で最初に送信した viewport の PNG を保存します。Ghostty/Kitty の compositor が画面に描画する時間は含みません。比較時は同じ文書・テーマ・サイズを使用し、ビルドやテストを同時に走らせず、初回を OS キャッシュが空の状態と同一視しないでください。
+Measurement starts immediately before process creation and ends when the PTY receives the first page image transmission and placement command. The default size is 120 columns by 40 rows, with 8 by 16 px cells. The benchmark verifies PNG transmission, so a plain-text fallback does not count as success. It saves the first run, individual run values, median, and binary SHA-256 to JSON; `--capture` saves the PNG of the first transmitted viewport. It does not include the time Ghostty/Kitty's compositor takes to display the image. Use the same document, theme, and dimensions for comparisons, do not run builds or tests concurrently, and do not equate the first run with an empty OS cache.
 
 The rendering worker is reused for 120 seconds. Record startup without a worker separately from a warm worker. Decoded pages are now cached across launches, with invalidation for source content, local assets, theme, dimensions, and executable identity. Use a fresh `MDV_CACHE_DIR` for a cold page-cache run, then repeat with the same directory for warm runs. Remote assets have a short cache lifetime; press `r` to force a fresh render. Worker helpers and logs are stored under `/tmp/mdv-render-<effective-uid>-<helper-hash>/`. Headless output does not use the worker or page cache.
 
-`MDV_PROFILE_STARTUP=1 RUST_LOG=mdv=info` を付けると Rust の段階別時間を出力できます。`--transcript /tmp/mdv-startup.pty` で PTY の生出力を保存できます。helper の段階別ログを有効にするには、その環境変数を設定したコマンドから worker を初めて起動します。
+Set `MDV_PROFILE_STARTUP=1 RUST_LOG=mdv=info` to output timings for each Rust stage. Use `--transcript /tmp/mdv-startup.pty` to save raw PTY output. To enable per-stage helper logs, first start the worker from a command with those environment variables set.
 
-`docs/benchmarks/startup-2026-10-22.json` は最初の改善時の記録です。当時の計測器は大きな PNG を受信するたびに全バッファを再走査していたため、特に README の測定値に計測器の負荷を含みます。以降の比較では末尾だけを検査する修正版を使い、修正前バイナリも同じ計測器で測り直します。
+`docs/benchmarks/startup-2026-10-22.json` records the initial improvements. At that time, the measurement tool rescanned the entire buffer whenever it received a large PNG, so the results, especially for README, include measurement overhead. For subsequent comparisons, use the corrected tool that checks only the tail, and remeasure the pre-change binary with that same tool.
 
-## スクロールの計測
+## Measuring scrolling
 
 ```bash
 uv run scripts/benchmark-scroll.py --output /tmp/mdv-scroll.json -- ./target/release/mdv README.md
 uv run scripts/benchmark-scroll.py --input-kind wheel --duration 1 --output /tmp/mdv-wheel.json -- ./target/release/mdv docs/TECH.md
 ```
 
-固定 PTY で単発入力の最初の位置変更、連続入力中のフレーム間隔、画像の転送回数・バイト数を記録します。`first_changed_frame_latency_ms` は画像が変わらない最初の frame を除外します。ホイール計測は terminal が送る SGR wheel event の検証で、実際の trackpad と compositor の感触・描画時間は対象外です。比較時はビルド・テストや別の計測を同時実行しないでください。
+Using a fixed-size PTY, the benchmark records the first position change after a single input, frame intervals during continuous input, and image transmission counts and byte totals. `first_changed_frame_latency_ms` excludes initial frames in which the image does not change. Wheel measurements validate SGR wheel events sent by the terminal; they do not measure the feel or rendering time of a physical trackpad and compositor. Do not run builds, tests, or other measurements concurrently when comparing results.
 
-画像は最大2枚、各画像はおよそ3 viewport 高までを保持します。最初は可視領域だけを転送し、周辺領域はバックグラウンドで準備して先読み転送します。全ページを端末の texture にしません。PNG の chunk は4096 base64 bytes以下で、転送途中に別の graphics command を挟みません。reload・resize・終了で画像データを解放し、古い先読み結果は破棄します。
+At most two images are retained, each up to approximately three viewport heights. Only the visible region is transmitted initially; surrounding regions are prepared in the background and sent ahead of use. The entire page is not turned into a terminal texture. PNG chunks contain no more than 4096 base64 bytes, and no other graphics command is interleaved during a transmission. Image data is released on reload, resize, and exit, and stale prefetch results are discarded.
 
 ## Local helper script
 
@@ -39,11 +39,13 @@ chmod +x ./mdv   # once, if needed
 ./mdv ./some.md
 ```
 
-## Quality gates (same as CI)
+## Rust quality gates
 
 ```bash
 make ci    # fmt-check, clippy -D warnings, full test suite
 ```
+
+CI additionally checks tracked text for literal Japanese; Unicode test data should use escapes.
 
 ## Git hooks
 
@@ -86,11 +88,11 @@ This repository currently has no release automation and no changelog workflow. D
 
 Everyone who lands a change shows up automatically on the [GitHub contributors graph](https://github.com/posaune0423/mdv/graphs/contributors).
 
-## Windows の開発・検証
+## Windows development and verification
 
-Windows x64 はインストール済み Edge/Chrome を専用の一時 profile で起動し、HTML/CSS・埋め込みフォント・画像・SVGを PNG として描画します。`MDV_BROWSER` はブラウザ実行ファイルの明示パスです。macOS は既存の WebKit/TIFF を維持します。
+Windows x64 launches an installed Edge/Chrome browser with a dedicated temporary profile to render HTML/CSS, embedded fonts, images, and SVG to PNG. `MDV_BROWSER` specifies an explicit browser executable path. macOS retains the existing WebKit/TIFF backend.
 
-Windows の画像表示は WezTerm の OSC1337 を使用します。Windows Terminal の Kitty keyboard/input 対応は画像表示とは別であり、この viewer の画像モードには利用できません。macOS Ghostty/Kitty の常駐画像・source crop 更新はそのままです。WezTerm では毎フレームの可視領域を可逆 PNG で送るため、Mac の常駐画像方式と同じ転送量・フレームレートは保証しません。
+Windows image display uses WezTerm's OSC1337 support. Windows Terminal's Kitty keyboard/input support is separate from image display and cannot be used for this viewer's image mode. The resident images and source-crop updates used by Ghostty/Kitty on macOS remain unchanged. WezTerm receives the visible region as a lossless PNG on every frame, so the same transfer volume and frame rate as the Mac resident-image approach are not guaranteed.
 
 ```powershell
 cargo test --workspace --all-targets --all-features
@@ -99,15 +101,15 @@ cargo build --release
 .\target\release\mdv.exe README.md
 ```
 
-Windows CI は Edge の存在を必須にし、フォント/画像/SVG・長文末尾の画素・ローカル画像更新・欠損画像診断、ConPTYを通した実CLIのPNG転送・スクロール・resize・終了、実行中exeの置換、PowerShellインストーラの新規/上書きインストールを検証します。ConPTY受信の検証と実際のWezTerm compositorの描画・入力の感触は別の境界です。
+Windows CI requires Edge and verifies fonts/images/SVG, pixels at the end of long documents, local image updates, missing-image diagnostics, actual CLI PNG transmission/scrolling/resize/exit through ConPTY, replacement of a running executable, and fresh/overwrite installs using the PowerShell installer. Verifying ConPTY receipt and checking actual rendering and input feel in the WezTerm compositor are separate boundaries.
 
-macOS 上で Windows backend の Chromium 回帰テストを実行する場合のみ Chrome が必要です。
+Chrome is required on macOS only when running Chromium regression tests for the Windows backend.
 
 ```bash
 MDV_TEST_BROWSER='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' cargo test --lib chromium_snapshot -- --include-ignored
 ```
 
-配布は同一ソースSHAの macOS/Windows成果物をCIで生成し、単一publisherが `bin/mdv` と `bin/mdv.exe` をまとめて更新します。mainが進んだ場合は古い成果物を新しいソースへ載せず、次のrunへ委ねます。PRではダウンロード用artifactまで生成し、mainのバイナリは変更しません。
+For distribution, CI builds macOS/Windows artifacts from the same source SHA, and a single publisher updates `bin/mdv` and `bin/mdv.exe` together. If main has advanced, old artifacts are not applied to newer source; publication is left to the next run. PRs produce downloadable artifacts without modifying the binaries on main.
 
 ## Automatic refresh
 
