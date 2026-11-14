@@ -789,3 +789,5 @@ Reopening unchanged local Markdown must bypass HTML/browser rendering. Changed M
 - [x] Review the complete change with the requested read-only review-agent skill: no actionable findings.
 - [ ] Commit and push the feature, then create its pull request against main.
 - [ ] Integrate current main, resolve actionable feedback, and verify all required CI checks.
+
+- Pre-push validation exposed a test assumption about terminal height: the atomic-save regression expected scroll zero even when the hook PTY reports zero rows. Reproduced with `stty rows 0 cols 0`; assert clamping to the actual viewport bound, preserving the behavior check across terminal sizes.

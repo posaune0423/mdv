@@ -352,6 +352,6 @@ fn file_refresh_recovers_after_atomic_save_and_clamps_scroll() -> anyhow::Result
     fs::File::options().write(true).open(&path)?.set_modified(original)?;
     assert!(viewer.maybe_reload());
     assert_eq!(viewer.source_text, "# Replacement\n");
-    assert_eq!(viewer.scroll, 0);
+    assert_eq!(viewer.scroll, viewer.max_scroll(), "reload must clamp to the current viewport");
     Ok(())
 }
