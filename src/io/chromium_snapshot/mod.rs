@@ -8,6 +8,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(target_os = "linux")]
+use std::io::Read;
+
 use anyhow::{Context, Result, bail, ensure};
 use headless_chrome::{
     Tab,
@@ -667,17 +670,31 @@ fn is_usable_linux_browser(path: &Path) -> bool {
 
 #[cfg(target_os = "linux")]
 fn is_snap_launcher(path: &Path) -> bool {
+    const MAX_SCRIPT_PREFIX_BYTES: usize = 64 * 1024;
+    const SNAP_LAUNCHER_PATTERNS: &[&[u8]] = &[
+        b"snap run chromium",
+        b"snap run chromium-browser",
+        b"/snap/bin/chromium",
+        b"/snap/bin/chromium-browser",
+    ];
+
     let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     if canonical.starts_with("/snap") || canonical.file_name().is_some_and(|name| name == "snap") {
         return true;
     }
 
-    fs::read(path).is_ok_and(|contents| {
-        contents.windows(b"snap run chromium".len()).any(|part| part == b"snap run chromium")
-            || contents
-                .windows(b"snap run chromium-browser".len())
-                .any(|part| part == b"snap run chromium-browser")
-    })
+    let mut prefix = vec![0; MAX_SCRIPT_PREFIX_BYTES];
+    let Ok(mut file) = fs::File::open(path) else {
+        return false;
+    };
+    let Ok(length) = file.read(&mut prefix) else {
+        return false;
+    };
+    prefix.truncate(length);
+    prefix.starts_with(b"#!")
+        && SNAP_LAUNCHER_PATTERNS
+            .iter()
+            .any(|pattern| prefix.windows(pattern.len()).any(|part| part == *pattern))
 }
 
 #[cfg(target_os = "linux")]
@@ -751,16 +768,26 @@ mod tests {
     fn linux_browser_discovery_skips_non_executable_and_snap_launchers() -> Result<()> {
         let root = tempfile::tempdir()?;
         let unusable = root.path().join("google-chrome");
-        let snap = root.path().join("chromium-browser");
+        let snap_run = root.path().join("chromium-browser");
+        let snap_path = root.path().join("chromium-snap-path");
         let native = root.path().join("chromium");
+        let native_data = root.path().join("google-chrome-stable");
         write_linux_browser(&unusable, "#!/bin/sh\n", false)?;
-        write_linux_browser(&snap, "#!/bin/sh\nexec /usr/bin/snap run chromium \"$@\"\n", true)?;
+        write_linux_browser(
+            &snap_run,
+            "#!/bin/sh\nexec /usr/bin/snap run chromium \"$@\"\n",
+            true,
+        )?;
+        write_linux_browser(&snap_path, "#!/bin/sh\nexec /snap/bin/chromium \"$@\"\n", true)?;
         write_linux_browser(&native, "#!/bin/sh\nexit 0\n", true)?;
+        write_linux_browser(&native_data, "\x7fELFsnap run chromium", true)?;
 
         assert!(!is_usable_linux_browser(&unusable));
-        assert!(!is_usable_linux_browser(&snap));
+        assert!(!is_usable_linux_browser(&snap_run));
+        assert!(!is_usable_linux_browser(&snap_path));
         assert!(is_snap_launcher(Path::new("/snap/bin/chromium")));
         assert!(is_usable_linux_browser(&native));
+        assert!(is_usable_linux_browser(&native_data));
         assert_eq!(
             find_linux_browser_in_paths(
                 [root.path().to_path_buf()],
@@ -769,7 +796,7 @@ mod tests {
             Some(native),
             "PATH discovery must continue past unusable candidates"
         );
-        let error = validate_linux_browser(&snap, "MDV_BROWSER")
+        let error = validate_linux_browser(&snap_path, "MDV_BROWSER")
             .err()
             .unwrap_or_else(|| panic!("a Snap launcher must be rejected"));
         assert!(error.to_string().contains("MDV_BROWSER"));

@@ -17,6 +17,7 @@ Original contribution: https://github.com/posaune0423/mdv/pull/7. The successor 
 - Linux verification is pending Ubuntu CI, where native Chrome or Chromium is required and the formerly ignored raster tests become required. The local cross-check could not link because this macOS host lacks `x86_64-linux-gnu-gcc`; no Linux result is claimed locally.
 - The implementation retains the existing dedicated profile, owned process timeout, asset readiness checks, and Chromium sandbox. It neither downloads a browser nor adds a Linux distribution artifact.
 - Linux discovery skips non-executable files and Snap launchers, including explicit `MDV_BROWSER`; native candidates later in `PATH` remain eligible.
+- Snap detection reads at most 64 KiB and only examines shebang scripts, avoiding scans of native browser binaries. Regression coverage includes both known Chromium wrapper forms and incidental Snap text in non-script data.
 
 ## Current Task
 
