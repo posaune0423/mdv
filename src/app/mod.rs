@@ -44,7 +44,9 @@ pub fn run(args: MdvArgs) -> Result<()> {
             std::env::var("TERM").ok().as_deref(),
         ) && !crate::ui::terminal::probe::supports_kitty_graphics().unwrap_or(false)
         {
-            bail!("interactive mode requires Ghostty, Kitty, or WezTerm (Windows: WezTerm)");
+            bail!(
+                "interactive mode requires a Kitty graphics-compatible terminal or WezTerm (Windows: WezTerm)"
+            );
         }
         let mut viewer = {
             let _span = info_span!("startup.create_viewer").entered();
