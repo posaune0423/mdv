@@ -95,6 +95,7 @@ mdv ./README.md | head -n 50            # plain-text output (pipe/CI)
 ## Requirements
 
 - **Terminal**: macOS: [Ghostty](https://ghostty.org/), [Kitty](https://sw.kovidgoyal.net/kitty/), [WezTerm](https://wezterm.org/), or a terminal that answers the Kitty graphics support query (such as Rex); Windows: WezTerm
+- **tmux**: Ghostty or Kitty users can run `mdv` inside tmux after enabling passthrough: `tmux set-option -g allow-passthrough on`. `mdv` checks tmux's configured `input-buffer-size` before sending an image and reports the required setting when it is too small.
 - **Protocol ecosystem**: The [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) is also implemented by Ghostty, Konsole, st (with a patch), Warp, wayst, WezTerm, iTerm2, and xterm.js
 - **Rich rendering**: macOS uses its system WebKit; Windows x64 uses installed Microsoft Edge or Chrome. Both produce lossless page images. Linux remains a plain-text/headless target.
 - **Mermaid** (optional): `mmdc` or `npx @mermaid-js/mermaid-cli`, or set `MDV_MERMAID_CMD`

@@ -7,4 +7,5 @@ pub mod kitty_graphics;
 pub mod mermaid_cli;
 pub mod self_update;
 pub mod snapshot;
+pub mod tmux;
 pub mod webkit_snapshot;

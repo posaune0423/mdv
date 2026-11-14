@@ -761,3 +761,12 @@ Historical first-round record; superseded by the further improvement below. Its 
 - Evidence artifact: https://github.com/posaune0423/mdv/actions/runs/39766929925/artifacts/12421145904 ; Windows executable: https://github.com/posaune0423/mdv/actions/runs/39766929925/artifacts/12420243565 . Names use the tested PR synthetic merge SHA `6c442daab16400b91806f8998b2d08d790743d08`.
 - Native ConPTY evidence contains a1238x805 lossless PNG (3,189,541 bytes); first PNG11,045.6ms and first changed-scroll PNG3,137.7ms measure PTY receipt plus base64 decoding. Native WezTerm compositor, physical input feel, acceleration and60fps are not verified.
 - Follow-up test-host robustness keeps the ConPTY output reader draining during synchronous resize/close; the same actual native transport test validates the final head. No production behavior or performance measurement values were changed for that fixture adjustment.
+## Carry forward closed PR #8 tmux graphics support (2026-11-14)
+
+- [x] Compare the closed contribution with the resident-image renderer and identify shared-image and chunk-interleaving failures.
+- [x] Add failing encoder tests for complete tmux transfer envelopes, input-buffer limits, and pane-relative placements.
+- [x] Add tmux transport configuration, scoped image namespaces, wrapped graphics queries, and scoped cleanup.
+- [x] Verify formatting, a fresh-target full local suite, Clippy, cross-process image namespaces, and an isolated tmux 3.7c server configuration query.
+- [ ] Validate rich rendering through a native Ghostty or Kitty tmux client before calling the feature fully accepted.
+
+Review notes: the source transfer and renderer tests demonstrate byte framing, cross-process namespace isolation, scoped cleanup, and target-pane tmux configuration handling. An outer PTY experiment confirms tmux receives the passthrough stream, but no Ghostty or Kitty client is available to confirm compositor behavior. Copy mode, nested tmux, multiple clients, and visibility transitions remain unsupported until native client evidence exists.

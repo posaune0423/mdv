@@ -1,3 +1,4 @@
+use anyhow::{Result, bail};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,6 +45,28 @@ pub fn encode_transmit_png(image_id: u32, png_bytes: &[u8]) -> String {
     command
 }
 
+/// Encode all chunks for one PNG in a single tmux passthrough packet so tmux
+/// cannot interleave continuation chunks from another pane.
+pub fn encode_tmux_transmit_png(
+    image_id: u32,
+    png_bytes: &[u8],
+    input_buffer_size: usize,
+) -> Result<String> {
+    encode_tmux_transfer(&encode_transmit_png(image_id, png_bytes), input_buffer_size)
+}
+
+pub fn encode_tmux_transfer(transfer: &str, input_buffer_size: usize) -> Result<String> {
+    let wrapped = encode_tmux_passthrough(transfer);
+    if wrapped.len() > input_buffer_size {
+        bail!(
+            "tmux input-buffer-size ({input_buffer_size}) is too small for this image transfer ({} bytes); increase it with: tmux set-option -s input-buffer-size {}",
+            wrapped.len(),
+            wrapped.len()
+        );
+    }
+    Ok(wrapped)
+}
+
 #[must_use]
 pub fn encode_place(placement: &KittyImagePlacement) -> String {
     format!(
@@ -62,6 +85,45 @@ pub fn encode_place(placement: &KittyImagePlacement) -> String {
     )
 }
 
+/// Keep normal cursor movement pane-local while placing the image at the
+/// corresponding absolute outer-terminal position through tmux.
+#[must_use]
+pub fn encode_tmux_place_at(
+    placement: &KittyImagePlacement,
+    pane_column: u16,
+    pane_row: u16,
+    local_column: u16,
+    local_row: u16,
+) -> String {
+    encode_tmux_command_at(&encode_place(placement), pane_column, pane_row, local_column, local_row)
+}
+
+#[must_use]
+pub fn encode_tmux_command_at(
+    kitty_command: &str,
+    pane_column: u16,
+    pane_row: u16,
+    local_column: u16,
+    local_row: u16,
+) -> String {
+    let local_cursor = ansi_cursor_move(local_column, local_row);
+    let outer_cursor = ansi_cursor_move(
+        pane_column.saturating_add(local_column),
+        pane_row.saturating_add(local_row),
+    );
+    format!("{local_cursor}{}", encode_tmux_passthrough(&format!("{outer_cursor}{kitty_command}")))
+}
+
+#[must_use]
+pub fn encode_tmux_delete(command: DeleteCommand) -> String {
+    encode_tmux_passthrough(&encode_delete(command))
+}
+
+#[must_use]
+pub fn encode_tmux_command(command: &str) -> String {
+    encode_tmux_passthrough(command)
+}
+
 #[must_use]
 pub fn encode_delete(command: DeleteCommand) -> String {
     match command {
@@ -75,12 +137,25 @@ pub fn encode_delete(command: DeleteCommand) -> String {
     }
 }
 
+fn ansi_cursor_move(column: u16, row: u16) -> String {
+    format!("\u{1b}[{};{}H", row.saturating_add(1), column.saturating_add(1))
+}
+
+fn encode_tmux_passthrough(command: &str) -> String {
+    format!("\u{1b}Ptmux;{}\u{1b}\\", command.replace('\u{1b}', "\u{1b}\u{1b}"))
+}
+
 const SUPPORT_QUERY_ID: u32 = 31;
 
 /// Kitty graphics query followed by DA1, which terminals answer last.
 #[must_use]
 pub fn encode_support_query() -> String {
     format!("\u{1b}_Gi={SUPPORT_QUERY_ID},s=1,v=1,a=q,t=d,f=24;AAAA\u{1b}\\\u{1b}[c")
+}
+
+#[must_use]
+pub fn encode_tmux_support_query() -> String {
+    encode_tmux_passthrough(&encode_support_query())
 }
 
 /// Whether `OK` preceded the DA1 reply, or `None` until DA1 arrives.
