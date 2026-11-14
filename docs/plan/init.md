@@ -1,4 +1,4 @@
-# `mdv` 初期開発設計書
+# `mdv` Initial Development Design
 
 | Item | Value |
 | --- | --- |
@@ -14,87 +14,87 @@
 
 ---
 
-## 1. この文書の目的
+## 1. Purpose of This Document
 
-この文書は、`mdv` の **MVP 実装を着手できる粒度まで具体化した技術設計書** である。
+This document is a **technical design detailed enough to begin implementing the `mdv` MVP**.
 
-`docs/PRD.md` が扱うのは以下である。
+`docs/PRD.md` covers:
 
-- 何を作るか
-- どのユーザーのどの課題を解くか
-- MVP のスコープをどこまでに絞るか
+- What to build
+- Which users and problems to address
+- How narrowly to define the MVP scope
 
-この文書が扱うのは以下である。
+This document covers:
 
-- どう実装するか
-- どの crate / tool を採用するか
-- どのデータ構造と責務分離で進めるか
-- どの順序で実装するか
-
----
-
-## 2. 設計要約
-
-`mdv` は、ローカル Markdown を **block-oriented に正規化し、visible-first に strip rasterize して、Kitty graphics protocol で表示する Rust 製 viewer** として実装する。
-
-MVP の核は次の 6 点である。
-
-1. Markdown を `comrak` で AST 化し、独自 `Block` モデルへ正規化する。
-2. 文書を paragraph / heading / code / table / image / mermaid などの block 列として保持する。
-3. block 列から block layout と strip 単位の render plan を作る。
-4. visible range とその周辺だけを raster 化する。
-5. 生成した strip を Kitty graphics protocol で差分表示する。
-6. `watch` / `reload` 時は dirty block 以降だけを再レイアウトし、必要 strip のみ再描画する。
+- How to implement it
+- Which crates and tools to adopt
+- Which data structures and responsibility boundaries to use
+- The implementation order
 
 ---
 
-## 3. 設計判断
+## 2. Design Summary
 
-### 3.1 主要 ADR
+Implement `mdv` as a **Rust viewer that normalizes local Markdown into blocks, rasterizes strips with visible content first, and displays them through the Kitty graphics protocol**.
+
+The MVP has six core elements:
+
+1. Parse Markdown into an AST with `comrak` and normalize it into a custom `Block` model.
+2. Store the document as a sequence of blocks such as paragraphs, headings, code, tables, images, and Mermaid diagrams.
+3. Build a block layout and a strip-based render plan from that sequence.
+4. Rasterize only the visible range and its surroundings.
+5. Display incremental updates to the generated strips through the Kitty graphics protocol.
+6. On `watch` or `reload`, relayout only from the dirty block onward and redraw only the required strips.
+
+---
+
+## 3. Design Decisions
+
+### 3.1 Key Architecture Decisions
 
 | Topic | Decision | Why |
 | --- | --- | --- |
-| 実行形態 | 単一バイナリ、単一対話プロセス | 運用・配布・デバッグを簡単にする |
-| モジュール構成 | strict clean architecture ではなく pragmatic modular layering | `markdown` / `graphics` / `render` は製品の中心能力であり、単なる infrastructure ではない |
-| レンダリング戦略 | custom scene renderer + strip rasterization | Rust 単体で実装可能、レイアウトが決定的、差分更新しやすい |
-| 文書モデル | block-oriented | diff / reload / cache の単位を安定化できる |
-| 表示単位 | full-width vertical strip | 縦スクロール主体の viewer と相性が良い |
-| 優先順位 | visible-first | 体感速度を最優先にできる |
-| Mermaid | adapter 抽象化し、利用可能な renderer があれば SVG 化。なければ degraded 表示 | Mermaid でコア実装を止めないため |
+| Execution model | Single binary, single interactive process | Simplify operation, distribution, and debugging |
+| Module structure | Pragmatic modular layering rather than strict clean architecture | `markdown`, `graphics`, and `render` are core product capabilities, not merely infrastructure |
+| Rendering strategy | Custom scene renderer + strip rasterization | Implementable entirely in Rust, with deterministic layout and straightforward incremental updates |
+| Document model | Block-oriented | Stabilize the units used for diffing, reloading, and caching |
+| Display unit | Full-width vertical strip | Suits a viewer centered on vertical scrolling |
+| Priority | Visible-first | Prioritize perceived speed |
+| Mermaid | Abstract behind an adapter; generate SVG when a renderer is available, otherwise use a degraded display | Avoid blocking core implementation on Mermaid |
 
-### 3.2 旧案からの変更点
+### 3.2 Changes from the Previous Proposal
 
-以前の設計案では「HTML fragment をまとめて rasterize」する方針が強かったが、MVP では採用しない。
+The previous proposal emphasized rasterizing HTML fragments together, but the MVP will not adopt that approach.
 
-理由は以下である。
+The reasons are:
 
-- Rust 単体で HTML/CSS を高 fidelity に rasterize する実装難度が高い
-- HTML/CSS エンジンを抱えると single-binary 方針とコンパイルコストが悪化する
-- viewer に必要なのは browser 互換ではなく、Markdown block を安定描画できること
+- High-fidelity HTML/CSS rasterization is difficult to implement entirely in Rust
+- Bundling an HTML/CSS engine complicates the single-binary approach and increases compilation cost
+- The viewer needs reliable Markdown block rendering rather than browser compatibility
 
-そのため MVP では、**Markdown を custom scene model に正規化し、text / code / box / image を直接レイアウトする** 方が合理的である。
+For the MVP, it is therefore more practical to **normalize Markdown into a custom scene model and directly lay out text, code, boxes, and images**.
 
-### 3.3 Clean Architecture をどこまで採るか
+### 3.3 How Much Clean Architecture to Adopt
 
-結論として、`mdv` では **strict clean architecture は採らない**。
+`mdv` will **not adopt strict clean architecture**.
 
-理由は以下である。
+The reasons are:
 
-- `markdown parse` は外側の補助機能ではなく、viewer の中心能力そのもの
-- `graphics` と `rasterize` も、この製品では domain に準ずる中核ロジックに近い
-- 無理に `infrastructure` に押し込むと、かえってフォルダ構成の意味が薄れる
-- viewer は web app や業務 CRUD と違い、描画パイプライン自体が主役である
+- Markdown parsing is a core viewer capability rather than an outer supporting function
+- Graphics and rasterization are also close to domain-level core logic in this product
+- Forcing them into `infrastructure` would make the folder structure less meaningful
+- Unlike a web app or business CRUD application, a viewer centers on the rendering pipeline itself
 
-一方で testability の観点から、**変動しやすい境界だけは trait で切る**。
+For testability, however, **use traits to separate boundaries that are likely to change**.
 
-trait 化する候補は以下。
+Candidates for traits include:
 
 - filesystem read
 - file watch
 - terminal graphics surface
 - external Mermaid command execution
 
-逆に、最初から trait を強制しない領域は以下。
+Do not require traits from the outset in these areas:
 
 - block normalize
 - layout / diff
@@ -102,13 +102,13 @@ trait 化する候補は以下。
 - strip planning
 - text layout orchestration
 
-つまり方針は、**構成は pragmatic、境界は selective abstraction** である。
+The approach is **pragmatic structure with selective abstraction at boundaries**.
 
 ---
 
-## 4. アーキテクチャ概要
+## 4. Architecture Overview
 
-### 4.1 論理構成
+### 4.1 Logical Structure
 
 ```mermaid
 flowchart LR
@@ -136,7 +136,7 @@ flowchart LR
     IO --> IMAGE[image decode]
 ```
 
-### 4.2 依存方向
+### 4.2 Dependency Direction
 
 ```mermaid
 flowchart TB
@@ -149,18 +149,18 @@ flowchart TB
     io --> core
 ```
 
-依存ルールは次の通り。
+The dependency rules are:
 
-- `core` は文書モデル、diff、viewport、layout などの純粋ロジックを持つ
-- `render` は `mdv` の中核であり、Markdown 正規化と strip 描画計画を持つ
-- `io` は file / watcher / external command / terminal graphics などの接続を持つ
-- `app` は scroll / reload / resize / watch を調停する
-- `ui` は terminal event と overlay を扱う
-- `cli` は設定入力を担う
+- `core` contains pure logic for the document model, diffing, viewport, and layout
+- `render` is central to `mdv` and handles Markdown normalization and strip render planning
+- `io` connects to files, watchers, external commands, and terminal graphics
+- `app` coordinates scrolling, reloading, resizing, and watching
+- `ui` handles terminal events and overlays
+- `cli` accepts configuration input
 
-### 4.3 testability のための境界
+### 4.3 Boundaries for Testability
 
-以下のように、**テスト価値が高いところだけ port 的抽象を入れる**。
+Introduce **port-like abstractions only where they provide substantial testing value**, as shown below.
 
 ```mermaid
 flowchart LR
@@ -179,26 +179,26 @@ flowchart LR
 
 ---
 
-## 5. 参考実装
+## 5. Reference Implementations
 
-既存実装はそのまま写経せず、**何を参考にし、何を持ち込まないか** を明確にする。
+Do not copy existing implementations verbatim. Clarify **what to learn from them and what to leave out**.
 
-| Project | 参考にする点 | 採用しない点 |
+| Project | Learn From | Do Not Adopt |
 | --- | --- | --- |
-| `awrit` | Kitty graphics protocol の扱い、image lifecycle、terminal 上の graphics cleanup | full browser 前提の責務、web navigation、DOM アプリ向けの複雑な event model |
-| `flint` | Markdown viewer としての UX、Mermaid / image / table / callout を重視する姿勢、`j/k` などの操作系 | Textual 前提の widget tree、Python runtime 前提の構造 |
+| `awrit` | Kitty graphics protocol handling, image lifecycle, and terminal graphics cleanup | Responsibilities of a full browser, web navigation, and a complex event model for DOM applications |
+| `flint` | Markdown viewer UX, emphasis on Mermaid, images, tables, and callouts, and controls such as `j/k` | A Textual-based widget tree and a structure that assumes a Python runtime |
 
-このプロジェクトでの位置づけは次の通り。
+Their roles in this project are:
 
-- `awrit` は **graphics adapter の参照先**
-- `flint` は **viewer UX と feature prioritization の参照先**
-- `mdv` 自身は Rust 製 single-binary viewer として別解を取る
+- `awrit` is a **reference for the graphics adapter**
+- `flint` is a **reference for viewer UX and feature prioritization**
+- `mdv` takes its own approach as a single-binary Rust viewer
 
 ---
 
-## 6. 実行シーケンス
+## 6. Execution Sequences
 
-### 6.1 起動から初回描画まで
+### 6.1 From Startup to First Render
 
 ```mermaid
 sequenceDiagram
@@ -212,20 +212,20 @@ sequenceDiagram
     participant Kitty
 
     User->>CLI: mdv README.md --watch
-    CLI->>App: Config を渡して起動
-    App->>FS: Markdown 読み込み
+    CLI->>App: start with Config
+    App->>FS: read Markdown
     FS-->>App: source bytes
     App->>Parser: parse + normalize
     Parser-->>App: Document
-    App->>Layout: layout index 作成
+    App->>Layout: build layout index
     Layout-->>App: offsets / total height
-    App->>Render: visible strips を要求
+    App->>Render: request visible strips
     Render-->>App: raster strips
     App->>Kitty: upload + place
     Kitty-->>User: first visible frame
 ```
 
-### 6.2 `watch` 更新時
+### 6.2 On a `watch` Update
 
 ```mermaid
 sequenceDiagram
@@ -243,8 +243,8 @@ sequenceDiagram
     Parser-->>App: new Document
     App->>Diff: old/new document compare
     Diff-->>App: dirty range
-    App->>Layout: first dirty index 以降を再計算
-    App->>Render: visible dirty strips を再描画
+    App->>Layout: recalculate from first dirty index onward
+    App->>Render: redraw visible dirty strips
     App->>Kitty: replace / delete unused
 ```
 
@@ -252,38 +252,38 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    START["CLI: `mdv file.md`"] --> READ["io::fs が source bytes を読む"]
-    READ --> PARSE["render::markdown が `comrak` parse"]
-    PARSE --> BLOCKS["normalize して `Vec<Block>` を作る"]
-    BLOCKS --> LAYOUT["core::layout が `LayoutIndex` を作る"]
-    LAYOUT --> VIEW["app が visible range を決定"]
-    VIEW --> SCENE["render::scene が visible blocks を scene 化"]
-    SCENE --> STRIP["render::strip が strip plan を組む"]
-    STRIP --> RASTER["tiny-skia 等で strip を rasterize"]
-    RASTER --> KITTY["io::kitty_graphics が graphics protocol を送る"]
-    KITTY --> GHOSTTY["Ghostty が image を terminal 上に表示"]
+    START["CLI: `mdv file.md`"] --> READ["io::fs reads source bytes"]
+    READ --> PARSE["render::markdown parses with `comrak`"]
+    PARSE --> BLOCKS["normalize into `Vec<Block>`"]
+    BLOCKS --> LAYOUT["core::layout builds `LayoutIndex`"]
+    LAYOUT --> VIEW["app determines the visible range"]
+    VIEW --> SCENE["render::scene builds scenes for visible blocks"]
+    SCENE --> STRIP["render::strip builds a strip plan"]
+    STRIP --> RASTER["rasterize strips with tiny-skia or similar"]
+    RASTER --> KITTY["io::kitty_graphics sends the graphics protocol"]
+    KITTY --> GHOSTTY["Ghostty displays images in the terminal"]
 ```
 
-このとき Ghostty 上に出るのは、Markdown source そのものではなく、**block から作られた strip image と最小限の text overlay** である。
+Ghostty displays **strip images built from blocks and a minimal text overlay**, rather than the Markdown source itself.
 
-### 6.4 scroll / reload の再描画フロー
+### 6.4 Redraw Flow for Scrolling and Reloading
 
 ```mermaid
 flowchart LR
     EVENT["scroll / reload / watch"] --> APP["app state update"]
     APP --> CORE["visible range / dirty range recalculation"]
     CORE --> CACHE{"strip cache hit?"}
-    CACHE -- yes --> REUSE["cached strip を再利用"]
-    CACHE -- no --> RERENDER["必要 strip だけ再 rasterize"]
+    CACHE -- yes --> REUSE["reuse cached strips"]
+    CACHE -- no --> RERENDER["rasterize only the required strips again"]
     REUSE --> PRESENT["place / replace / delete"]
     RERENDER --> PRESENT
 ```
 
 ---
 
-## 7. 推奨フォルダ構成
+## 7. Recommended Folder Structure
 
-以下を **実装ターゲットの最終構成** とする。現時点の repo は bootstrap 段階なので、順次この形に寄せる。
+The following is the **target structure for the implementation**. The repository is currently at the bootstrap stage and will gradually move toward this structure.
 
 ```text
 mdv/
@@ -383,59 +383,59 @@ mdv/
       └─ init.md
 ```
 
-### 7.1 各モジュールの責務
+### 7.1 Module Responsibilities
 
 | Path | Responsibility |
 | --- | --- |
-| `src/core` | 文書モデル、layout、diff、theme などの純粋ロジック |
-| `src/render` | Markdown 正規化、scene build、strip planning、描画寄りロジック |
-| `src/app` | ユースケース、状態遷移、scheduler |
-| `src/io` | filesystem、watch、kitty graphics、external command との接続 |
-| `src/ui` | terminal event loop、overlay、screen lifecycle |
-| `src/cli` | 引数解釈と設定入力 |
-| `src/ports` | trait を切るならここに集約 |
-| `src/support` | error、metrics、共通補助 |
+| `src/core` | Pure logic for the document model, layout, diffing, and themes |
+| `src/render` | Markdown normalization, scene building, strip planning, and rendering logic |
+| `src/app` | Use cases, state transitions, and scheduler |
+| `src/io` | Connections to the filesystem, watching, Kitty graphics, and external commands |
+| `src/ui` | terminal event loop, overlay, screen lifecycle |
+| `src/cli` | Argument parsing and configuration input |
+| `src/ports` | Central location for any boundary traits |
+| `src/support` | Errors, metrics, and shared helpers |
 
-### 7.2 trait を切る基準
+### 7.2 Criteria for Introducing Traits
 
-| Area | Trait 化 | Reason |
+| Area | Use a Trait | Reason |
 | --- | --- | --- |
-| file read / write | yes | integration test を軽くできる |
-| file watch | yes | debounce や watch event を差し替えやすい |
-| kitty graphics surface | yes | dry-run renderer と差し替えられる |
-| Mermaid external command | yes | renderer 有無を test で制御しやすい |
-| markdown normalize | no | 実装の中心であり、差し替え価値が低い |
-| layout / diff | no | pure function test で十分 |
-| scene builder | no | snapshot test に向いている |
-| strip planner | no | pure logic test に向いている |
+| file read / write | yes | Keep integration tests lightweight |
+| file watch | yes | Make debounce behavior and watch events easy to substitute |
+| kitty graphics surface | yes | Allow substitution with a dry-run renderer |
+| Mermaid external command | yes | Make renderer availability easy to control in tests |
+| markdown normalize | no | Central to the implementation, with little value in substitution |
+| layout / diff | no | Pure function tests are sufficient |
+| scene builder | no | Well suited to snapshot tests |
+| strip planner | no | Well suited to pure logic tests |
 
-### 7.3 テスト構成
+### 7.3 Test Structure
 
 | Path | Scope |
 | --- | --- |
-| `tests/unit/` | pure core / app ロジック |
-| `tests/integration/` | crate 内の複数 component を跨ぐ結合 |
-| `tests/e2e/` | 実バイナリ起動、CLI UX、ローカルファイル連携 |
-| `tests/fixtures/` | markdown fixture と画像 fixture |
+| `tests/unit/` | Pure core and app logic |
+| `tests/integration/` | Integration across multiple components within the crate |
+| `tests/e2e/` | Launching the actual binary, CLI UX, and local file integration |
+| `tests/fixtures/` | Markdown and image fixtures |
 | `tests/snapshots/` | `insta` snapshot |
 
-Cargo の自動検出に合わせるため、`tests/unit.rs`, `tests/integration.rs`, `tests/e2e.rs` は各ディレクトリへの entrypoint として置く。
+Use `tests/unit.rs`, `tests/integration.rs`, and `tests/e2e.rs` as entry points for their respective directories so Cargo can discover them automatically.
 
 ---
 
-## 8. GFM 対応方針
+## 8. GFM Support Strategy
 
-### 8.1 現状の答え
+### 8.1 Current Status
 
-**まだ「ちゃんと render できている」とは言えない。**
+**The project cannot yet claim to render correctly.**
 
-現時点で repo にあるのは CLI bootstrap までであり、実レンダラは未実装である。そのため、この設計書では **GFM をどう成立させるか** を明確化する。
+The repository currently contains only the CLI bootstrap; the actual renderer has not been implemented. This design therefore clarifies **how to implement GFM support**.
 
 ### 8.2 parse layer
 
-parse 層は `comrak` を使う。`comrak` の docs.rs では、同 crate が **CommonMark と GFM compatible parser** であることが明記されている。
+The parsing layer uses `comrak`. Its docs.rs documentation explicitly describes it as a **CommonMark- and GFM-compatible parser**.
 
-### 8.3 MVP の GFM render target
+### 8.3 GFM Rendering Targets for the MVP
 
 | Feature | Parse | Render Target in MVP |
 | --- | --- | --- |
@@ -449,48 +449,48 @@ parse 層は `comrak` を使う。`comrak` の docs.rs では、同 crate が **
 | alerts / callouts | normalized extension | yes |
 | images | yes | yes |
 | Mermaid code fences | custom handling | yes, with degraded fallback |
-| raw HTML blocks | parsed as source artifact | no, MVP は完全互換しない |
+| raw HTML blocks | parsed as source artifact | no, the MVP does not provide full compatibility |
 
-### 8.4 結論
+### 8.4 Conclusion
 
-MVP では **GFM のうち Markdown viewer として重要な部分を target にする**。GitHub の完全互換 renderer は目指さないが、README / 設計書 / 技術文書で日常的に使う構文は優先的に実装する。
+The MVP **targets the parts of GFM that matter for a Markdown viewer**. It does not aim for complete compatibility with GitHub rendering, but prioritizes syntax used routinely in READMEs, design documents, and technical documentation.
 
 ---
 
-## 9. ライブラリ・ツール選定
+## 9. Library and Tool Selection
 
-以下は **MVP で採用する具体候補** である。
+These are **concrete candidates for adoption in the MVP**.
 
 | Concern | Library / Tool | Role | Notes |
 | --- | --- | --- | --- |
-| CLI | `clap` | 引数解析 | `cargo install --path .` 後に `mdv file.md --watch --theme dark` を安定実装 |
-| Error | `thiserror` + `anyhow` | ドメイン error と app 境界 error | library / binary の責務分離がしやすい |
-| Logging | `tracing` + `tracing-subscriber` | runtime log / perf span | `watch` と render latency を追いやすい |
-| Markdown parse | `comrak` | CommonMark + GFM parse | docs.rs 上で GFM 対応が明確 |
-| Terminal I/O | `crossterm` | raw mode / alt screen / input / resize | Ghostty / Kitty の通常 I/O 制御に使う |
-| Text layout | `cosmic-text` | shaping / wrapping / font fallback | Rust で multi-line text を安定処理できる |
-| 2D raster | `tiny-skia` | strip rasterization | pure Rust で deterministic |
-| Syntax highlight | `syntect` | code block highlight | fenced code の MVP 品質を担保 |
-| Image decode | `image` | PNG/JPEG/WebP 等の decode | 埋め込み画像 block に使う |
-| File watch | `notify` | `--watch` 実装 | debounce を app 側でかける |
-| Cache | `lru` | strip / mermaid artifact cache | 容量上限を明示しやすい |
-| Snapshot test | `insta` | HTML ではなく scene / text snapshot | block normalize と render plan に使う |
-| CLI integration test | `assert_cmd`, `predicates`, `tempfile` | 起動系の integration | watch と reload も検証しやすい |
-| Perf benchmark | `criterion` | strip render / diff benchmark | p95 ではなく比較ベースの回帰検知に使う |
-| Local fast tests | `cargo-nextest` | optional | repo 必須依存にはしないが推奨 |
-| Mermaid render | `mmdc` (`@mermaid-js/mermaid-cli`) | optional external renderer | 利用可能なら SVG を生成、未導入なら degraded 表示 |
+| CLI | `clap` | Argument parsing | Reliably support `mdv file.md --watch --theme dark` after `cargo install --path .` |
+| Error | `thiserror` + `anyhow` | Domain errors and errors at app boundaries | Make library and binary responsibilities easy to separate |
+| Logging | `tracing` + `tracing-subscriber` | runtime log / perf span | Make `watch` behavior and render latency easy to trace |
+| Markdown parse | `comrak` | CommonMark + GFM parse | GFM support is explicitly documented on docs.rs |
+| Terminal I/O | `crossterm` | raw mode / alt screen / input / resize | Use for standard I/O control in Ghostty and Kitty |
+| Text layout | `cosmic-text` | shaping / wrapping / font fallback | Reliably handle multiline text in Rust |
+| 2D raster | `tiny-skia` | strip rasterization | Deterministic, pure Rust implementation |
+| Syntax highlight | `syntect` | code block highlight | Provide MVP-quality rendering of fenced code |
+| Image decode | `image` | Decode PNG, JPEG, WebP, and other formats | Use for embedded image blocks |
+| File watch | `notify` | Implement `--watch` | Apply debounce in the app layer |
+| Cache | `lru` | strip / mermaid artifact cache | Make capacity limits easy to specify |
+| Snapshot test | `insta` | Scene and text snapshots rather than HTML | Use for block normalization and render plans |
+| CLI integration test | `assert_cmd`, `predicates`, `tempfile` | Startup integration tests | Also make watch and reload behavior easy to verify |
+| Perf benchmark | `criterion` | strip render / diff benchmark | Use comparative regression detection rather than p95 measurements |
+| Local fast tests | `cargo-nextest` | optional | Recommended, but not a required repository dependency |
+| Mermaid render | `mmdc` (`@mermaid-js/mermaid-cli`) | optional external renderer | Generate SVG when available; use a degraded display when not installed |
 
-### 9.1 Mermaid 方針
+### 9.1 Mermaid Strategy
 
-Mermaid は MVP でサポートしたいが、Rust 単体で Mermaid layout engine を内包するより、**adapter で切って graceful degradation する** 方が実務的である。
+Mermaid support is desirable in the MVP, but **an adapter with graceful degradation** is more practical than embedding a Mermaid layout engine entirely in Rust.
 
-そのため user-facing 仕様は次のようにする。
+The user-facing behavior is therefore:
 
-- `mmdc` が利用可能: Mermaid block を SVG として描画
-- `mmdc` が利用不可: placeholder block を表示し、status overlay に理由を出す
-- core viewer は Mermaid 非対応環境でも起動できる
+- `mmdc` available: render Mermaid blocks as SVG
+- `mmdc` unavailable: display a placeholder block and explain why in the status overlay
+- The core viewer can start even when the environment does not support Mermaid
 
-### 9.2 参照した一次情報
+### 9.2 Primary Sources Consulted
 
 - `comrak`: https://docs.rs/comrak
 - `crossterm`: https://docs.rs/crate/crossterm/latest
@@ -505,9 +505,9 @@ Mermaid は MVP でサポートしたいが、Rust 単体で Mermaid layout engi
 
 ---
 
-## 10. コアデータ構造
+## 10. Core Data Structures
 
-### 10.1 データモデル全体像
+### 10.1 Data Model Overview
 
 ```mermaid
 classDiagram
@@ -549,35 +549,35 @@ classDiagram
     Document --> LayoutIndex
 ```
 
-### 10.2 主要構造体
+### 10.2 Main Structures
 
 | Type | Fields | Purpose |
 | --- | --- | --- |
-| `Document` | `path`, `revision`, `blocks`, `meta` | viewer が読む単一文書の全体状態 |
-| `Block` | `id`, `kind`, `span`, `source_hash`, `hint`, `payload` | 差分検知と render 単位の最小粒度 |
-| `Viewport` | `width_px`, `height_px`, `scroll_y_px` | 可視範囲を pixel ベースで表現 |
-| `LayoutIndex` | `y_offsets`, `total_height_px` | block の開始位置と全文書高さ |
-| `StripKey` | `revision`, `width_px`, `y_start_px`, `theme` | strip cache のキー |
-| `RenderStrip` | `key`, `height_px`, `png_bytes` | Kitty に送る最終成果物 |
-| `BlockDiff` | `inserted`, `removed`, `updated`, `first_dirty_index` | reload 時の差分 |
+| `Document` | `path`, `revision`, `blocks`, `meta` | Complete state of the single document being viewed |
+| `Block` | `id`, `kind`, `span`, `source_hash`, `hint`, `payload` | Smallest unit for change detection and rendering |
+| `Viewport` | `width_px`, `height_px`, `scroll_y_px` | Visible range expressed in pixels |
+| `LayoutIndex` | `y_offsets`, `total_height_px` | Block start positions and total document height |
+| `StripKey` | `revision`, `width_px`, `y_start_px`, `theme` | Strip cache key |
+| `RenderStrip` | `key`, `height_px`, `png_bytes` | Final artifact sent to Kitty |
+| `BlockDiff` | `inserted`, `removed`, `updated`, `first_dirty_index` | Changes detected on reload |
 
 ### 10.3 `BlockKind`
 
 | Variant | Payload | Notes |
 | --- | --- | --- |
-| `Heading` | `level`, `inlines` | `#` から `######` |
-| `Paragraph` | `inlines` | 標準テキスト block |
-| `List` | `ordered`, `items` | task list を内包 |
-| `BlockQuote` | `children` | callout 変換前の基本形 |
+| `Heading` | `level`, `inlines` | `#` through `######` |
+| `Paragraph` | `inlines` | Standard text block |
+| `List` | `ordered`, `items` | Includes task lists |
+| `BlockQuote` | `children` | Base form before callout conversion |
 | `Callout` | `kind`, `title`, `children` | GitHub style alert |
-| `CodeFence` | `language`, `code` | `syntect` 対象 |
-| `Table` | `header`, `rows` | MVP は列幅自動調整 |
+| `CodeFence` | `language`, `code` | Highlighted by `syntect` |
+| `Table` | `header`, `rows` | Automatic column widths in the MVP |
 | `Image` | `src`, `alt`, `title` | local file only |
-| `Mermaid` | `source` | adapter 経由で SVG 化 |
+| `Mermaid` | `source` | Converted to SVG through an adapter |
 | `Rule` | none | horizontal rule |
-| `Footnote` | `label`, `children` | block として保持 |
+| `Footnote` | `label`, `children` | Stored as a block |
 
-### 10.4 Rust スケッチ
+### 10.4 Rust Sketch
 
 ```rust
 pub struct Document {
@@ -617,9 +617,9 @@ pub struct StripKey {
 
 ---
 
-## 11. レンダリング仕様
+## 11. Rendering Specification
 
-### 11.1 描画パイプライン
+### 11.1 Rendering Pipeline
 
 ```mermaid
 flowchart LR
@@ -633,9 +633,9 @@ flowchart LR
     H --> I[Kitty graphics upload]
 ```
 
-### 11.2 Scene renderer を採る理由
+### 11.2 Why Use a Scene Renderer
 
-MVP で実装するのは browser ではなく viewer である。そのため renderer は次の部品に分ける。
+The MVP implements a viewer rather than a browser. Divide the renderer into these components:
 
 - text scene
 - code scene
@@ -644,47 +644,47 @@ MVP で実装するのは browser ではなく viewer である。そのため r
 - image scene
 - mermaid scene
 
-scene 化の利点は以下である。
+A scene model provides these benefits:
 
-- block 単位の再レイアウトが容易
-- `insta` で scene snapshot を取りやすい
-- strip 再描画の対象を限定できる
-- 将来の hybrid renderer で text block だけ terminal-native に移しやすい
+- Straightforward block-level relayout
+- Easy scene snapshots with `insta`
+- A limited set of strips to redraw
+- Easy migration of text blocks alone to terminal-native rendering in a future hybrid renderer
 
-### 11.3 Strip 設計
+### 11.3 Strip Design
 
 | Item | Initial Value | Rationale |
 | --- | --- | --- |
-| Strip width | viewport width | 横スクロールを持たないため |
-| Strip height | `384px` | update 粒度と upload 数の妥協点 |
-| Prerender range | 前後 `1.5` 画面分 | scroll 体感とメモリ使用量のバランス |
-| Cache policy | LRU | graphics memory の上限管理が容易 |
+| Strip width | viewport width | No horizontal scrolling |
+| Strip height | `384px` | A compromise between update granularity and upload count |
+| Prerender range | `1.5` screenfuls before and after | Balance perceived scroll responsiveness and memory use |
+| Cache policy | LRU | Easy enforcement of graphics memory limits |
 
-### 11.4 テーマ仕様
+### 11.4 Theme Specification
 
-MVP のテーマは固定 2 種類とする。
+The MVP provides two fixed themes.
 
 | Theme | Goal |
 | --- | --- |
-| `light` | GitHub README に近い既定テーマ |
-| `dark` | terminal 常用者向け dark theme |
+| `light` | Default theme resembling a GitHub README |
+| `dark` | Dark theme for frequent terminal users |
 
-テーマは `ThemeTokens` として保持し、renderer に色・spacing・font size を渡す。
+Store themes as `ThemeTokens`, passing colors, spacing, and font sizes to the renderer.
 
 ---
 
-## 12. CLI / Install / Interaction 仕様
+## 12. CLI / Install / Interaction Specification
 
 ### 12.1 local install
 
-開発中は以下でローカルインストールする。
+During development, install locally with:
 
 ```bash
 cargo install --path . --force
 mdv README.md
 ```
 
-`Cargo.toml` の package 名と binary 名は `mdv` に固定し、CLI entrypoint は常に `mdv` で起動できる状態を保つ。
+Keep both the package name and binary name in `Cargo.toml` fixed as `mdv`, so the CLI entry point is always available as `mdv`.
 
 ### 12.2 CLI
 
@@ -695,7 +695,7 @@ mdv docs/spec.md --theme dark
 mdv docs/spec.md --no-mermaid
 ```
 
-### 12.3 キーバインド
+### 12.3 Key Bindings
 
 | Key | Action |
 | --- | --- |
@@ -707,44 +707,44 @@ mdv docs/spec.md --no-mermaid
 | `G` | bottom |
 | `r` | reload |
 | `q` | quit |
-| `o` | focused link を既定ブラウザで開く |
+| `o` | Open the focused link in the default browser |
 
 ### 12.4 Overlay
 
-overlay は常時リッチにしない。MVP では下部 1 行の status bar と一時通知のみ。
+Keep the persistent overlay minimal. The MVP uses only a single-line status bar at the bottom and temporary notifications.
 
-表示項目は以下。
+Display the following:
 
 - file path
 - revision
 - theme
 - watch on/off
 - temporary warning
-- mermaid unavailable などの degraded reason
+- Reasons for degraded rendering, such as Mermaid being unavailable
 
 ---
 
-## 13. エラー処理と degraded policy
+## 13. Error Handling and Degradation Policy
 
 | Case | Policy |
 | --- | --- |
-| unsupported terminal | 起動を fail fast |
-| file read error | 起動失敗または reload error 表示 |
-| markdown parse error | fatal ではなく error block に落とす |
-| single image decode fail | 該当 block の placeholder 表示 |
+| unsupported terminal | Fail fast on startup |
+| file read error | Fail startup or display a reload error |
+| markdown parse error | Use an error block rather than a fatal error |
+| single image decode fail | Display a placeholder for the affected block |
 | mermaid render fail | placeholder + overlay warning |
-| strip raster fail | 該当 strip だけ再試行または error tile 表示 |
-| graphics cleanup fail | process 終了は継続、log のみ残す |
+| strip raster fail | Retry only the affected strip or display an error tile |
+| graphics cleanup fail | Continue process exit and log the failure only |
 
-起動失敗と block failure を混ぜないことが重要である。
+Keep startup failures distinct from block failures.
 
 ---
 
-## 14. テスト戦略
+## 14. Test Strategy
 
 ### 14.1 Unit test
 
-対象は以下。
+Cover the following:
 
 - markdown normalize
 - callout detection
@@ -756,7 +756,7 @@ overlay は常時リッチにしない。MVP では下部 1 行の status bar �
 
 ### 14.2 Snapshot test
 
-`insta` を使い、以下を snapshot 化する。
+Use `insta` to snapshot:
 
 - normalized block list
 - scene list
@@ -766,9 +766,9 @@ overlay は常時リッチにしない。MVP では下部 1 行の status bar �
 
 ### 14.3 Integration test
 
-対象は以下。
+Cover the following:
 
-- `mdv file.md` 起動
+- Launching `mdv file.md`
 - invalid terminal fail fast
 - scroll
 - reload
@@ -778,7 +778,7 @@ overlay は常時リッチにしない。MVP では下部 1 行の status bar �
 
 ### 14.4 Perf benchmark
 
-fixtures は少なくとも以下を持つ。
+Provide at least these fixtures:
 
 - `small-readme.md`
 - `medium-spec.md`
@@ -789,41 +789,41 @@ fixtures は少なくとも以下を持つ。
 
 ---
 
-## 15. マイルストーン
+## 15. Milestones
 
 | Milestone | Scope | Exit Criteria |
 | --- | --- | --- |
-| M0 Bootstrap | CLI / config / logging / alt screen | `mdv README.md` で空の viewer が起動 |
-| M1 Markdown Core | `comrak` / normalize / block model | block snapshot が安定 |
-| M2 Text Layout | text / heading / list / code の scene 化 | README が最低限読める |
-| M3 Strip Render | strip planner / rasterizer / kitty adapter | first visible paint が出る |
-| M4 Interaction | scroll / reload / resize / quit | 日常操作が破綻しない |
-| M5 Rich Blocks | table / image / callout / mermaid degraded | 主要 docs を読める |
-| M6 Watch + Hardening | watcher / diff / cache / metrics | watch が実用速度で動く |
+| M0 Bootstrap | CLI / config / logging / alt screen | `mdv README.md` launches an empty viewer |
+| M1 Markdown Core | `comrak` / normalize / block model | Stable block snapshots |
+| M2 Text Layout | Scenes for text, headings, lists, and code | A README is readable at a basic level |
+| M3 Strip Render | strip planner / rasterizer / kitty adapter | First visible paint is displayed |
+| M4 Interaction | scroll / reload / resize / quit | Everyday interactions work reliably |
+| M5 Rich Blocks | table / image / callout / mermaid degraded | Main documents are readable |
+| M6 Watch + Hardening | watcher / diff / cache / metrics | Watch updates run at a practical speed |
 
 ---
 
-## 16. MVP 完了条件
+## 16. MVP Completion Criteria
 
-以下を満たしたら MVP 実装開始条件ではなく、**MVP 完了条件** とみなす。
+The following are **MVP completion criteria**, not prerequisites for starting implementation:
 
-- `mdv README.md` が Ghostty / Kitty で実用表示できる
-- `--watch` でテキスト更新が体感上破綻しない
-- callout / table / image / code block が読める
-- Mermaid は render できるか、少なくとも degraded 表示で原因が分かる
-- `cargo fmt`, `cargo clippy`, `cargo test` が常に通る
-- GitHub Actions の CI が format / lint / test を通す
+- `mdv README.md` provides a usable display in Ghostty and Kitty
+- Text updates with `--watch` remain perceptually reliable
+- Callouts, tables, images, and code blocks are readable
+- Mermaid renders successfully or at least provides a degraded display that explains the cause
+- `cargo fmt`, `cargo clippy`, and `cargo test` consistently pass
+- GitHub Actions CI passes formatting, linting, and tests
 
 ---
 
-## 17. 今この repo で次にやること
+## 17. Next Steps for This Repository
 
-実装の次ステップは以下が妥当である。
+The following implementation steps are appropriate next:
 
-1. `thiserror`, `tracing`, `crossterm`, `comrak` を追加し、現在の CLI bootstrap を app 起動へ接続する。
-2. `src/app`, `src/core`, `src/render`, `src/io`, `src/ui` の skeleton を切る。
-3. `Document`, `Block`, `Viewport`, `LayoutIndex` を先に固定する。
-4. `README.md` 1 本を parse して block list をダンプできるところまで進める。
-5. その後に Kitty graphics adapter と strip renderer に入る。
+1. Add `thiserror`, `tracing`, `crossterm`, and `comrak`, and connect the current CLI bootstrap to app startup.
+2. Create skeletons for `src/app`, `src/core`, `src/render`, `src/io`, and `src/ui`.
+3. Establish `Document`, `Block`, `Viewport`, and `LayoutIndex` first.
+4. Get to the point where a single `README.md` can be parsed and its block list dumped.
+5. Then move on to the Kitty graphics adapter and strip renderer.
 
-この順序なら、viewer の中核である「正規化」と「差分単位」が最初に安定し、後半のレンダリングが大きく崩れにくい。
+This order stabilizes normalization and the units of change detection at the core of the viewer first, reducing the risk of major disruption during the later rendering work.

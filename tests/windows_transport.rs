@@ -212,7 +212,7 @@ fn escaped_tail(bytes: &[u8]) -> String {
 #[test]
 fn native_pty_preserves_rich_png_scrolling_resize_and_quit() {
     let directory = tempfile::Builder::new()
-        .prefix("mdv Unicode 日本語 ")
+        .prefix("mdv Unicode \u{65e5}\u{672c}\u{8a9e} ")
         .tempdir()
         .unwrap_or_else(|error| panic!("fixture directory should create: {error}"));
     let mut random = 0x1234_5678_u32;
@@ -226,10 +226,10 @@ fn native_pty_preserves_rich_png_scrolling_resize_and_quit() {
         Rgba([channel(), channel(), channel(), 255])
     });
     noise
-        .save(directory.path().join("画像 with spaces.png"))
+        .save(directory.path().join("\u{753b}\u{50cf} with spaces.png"))
         .unwrap_or_else(|error| panic!("fixture image should save: {error}"));
-    let document = directory.path().join("document 日本語.md");
-    std::fs::write(&document, "# Native Windows rendering\n\n![lossless local image](画像%20with%20spaces.png)\n\n**Bottom content**\n\n".repeat(3))
+    let document = directory.path().join("document \u{65e5}\u{672c}\u{8a9e}.md");
+    std::fs::write(&document, "# Native Windows rendering\n\n![lossless local image](\u{753b}\u{50cf}%20with%20spaces.png)\n\n**Bottom content**\n\n".repeat(3))
         .unwrap_or_else(|error| panic!("document should write: {error}"));
     let opened = Instant::now();
     let mut viewer = ViewerSession::start(&document);

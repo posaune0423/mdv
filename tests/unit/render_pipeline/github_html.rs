@@ -68,7 +68,7 @@ fn github_html_keeps_relative_image_reference_for_base_url_resolution() {
 
 #[test]
 fn github_html_uses_an_absolute_escaped_file_url_for_a_nonexistent_base_directory() {
-    let base_dir = std::path::Path::new("mdv assets # 日本語");
+    let base_dir = std::path::Path::new("mdv assets # \u{65e5}\u{672c}\u{8a9e}");
     let expected_path = std::env::current_dir()
         .unwrap_or_else(|error| panic!("current directory should be available: {error}"))
         .join(base_dir);

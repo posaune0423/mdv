@@ -12,12 +12,19 @@ pub fn successful_command(
     let command = command_path(directory);
 
     #[cfg(windows)]
-    let script = windows_success_script(png_path, args_path, counter_path);
-    #[cfg(not(windows))]
-    let script = unix_success_script(png_path, args_path, counter_path);
+    {
+        fs::write(&command, windows_success_script(png_path, args_path, counter_path))?;
+        make_executable(&command)?;
+    }
 
-    fs::write(&command, script)?;
-    make_executable(&command)?;
+    #[cfg(not(windows))]
+    {
+        fs::write(
+            dynamic_content_path(directory),
+            unix_success_script(png_path, args_path, counter_path),
+        )?;
+        link_launcher(&command)?;
+    }
     Ok(command)
 }
 
@@ -25,13 +32,25 @@ pub fn successful_command(
 pub fn failing_command(directory: &Path) -> io::Result<PathBuf> {
     let command = command_path(directory);
     #[cfg(windows)]
-    let script = "@echo off\r\n>&2 echo parse error near node A\r\nexit /b 7\r\n";
-    #[cfg(not(windows))]
-    let script = "#!/bin/sh\necho 'parse error near node A' >&2\nexit 7\n";
+    {
+        fs::write(&command, "@echo off\r\n>&2 echo parse error near node A\r\nexit /b 7\r\n")?;
+        make_executable(&command)?;
+    }
 
-    fs::write(&command, script)?;
-    make_executable(&command)?;
+    #[cfg(not(windows))]
+    {
+        fs::write(
+            dynamic_content_path(directory),
+            "#!/bin/sh\necho 'parse error near node A' >&2\nexit 7\n",
+        )?;
+        link_launcher(&command)?;
+    }
     Ok(command)
+}
+
+#[cfg(not(windows))]
+pub fn dynamic_content_path(directory: &Path) -> PathBuf {
+    directory.join("fake mmdc-body.sh")
 }
 
 #[cfg(windows)]
@@ -98,10 +117,9 @@ fn make_executable(_command: &Path) -> io::Result<()> {
 }
 
 #[cfg(not(windows))]
-fn make_executable(command: &Path) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let mut permissions = fs::metadata(command)?.permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(command, permissions)
+fn link_launcher(command: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/support/fake_mermaid_launcher.sh"),
+        command,
+    )
 }
