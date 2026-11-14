@@ -1,18 +1,18 @@
 ---
-description: 通常タスクで該当 Skill/Subagent を積極的に探して使う
+description: Proactively find and use relevant skills and subagents for routine tasks
 alwaysApply: true
 ---
 
-# Skill と Subagent を積極活用する
+# Proactively Use Skills and Subagents
 
-## 使い分け
+## Choosing Between Them
 
-- **Skill**: 専門知識が必要なタスク → 作業開始前に `http://SKILL.md` を読み、手順/制約をそのまま適用する。宣言だけで終わらせない。
-- **Subagent**: 独立コンテキストが有効なタスク（リファクタリング・レビュー・広範囲探索など）、または並列実行したい場合に委任する。
+- **Skill**: For tasks requiring specialized knowledge, read `.agents/skills/<skill-name>/SKILL.md` before starting work and apply its procedures and constraints exactly. Do not stop at announcing skill use.
+- **Subagent**: Delegate when an isolated context is useful (such as refactoring, reviews, or broad exploration), or when parallel execution is needed.
 
-※ 両者は併用可。Skill の知識を Subagent に渡して実行することもある。
-※ 小さいタスクで該当する Skill/Subagent がない場合は、通常フローで進める。
+Both can be used together. You may pass a skill's guidance to a subagent for execution.
+For small tasks without a relevant skill or subagent, use the normal workflow.
 
-## 利用時は明示
+## Announce Their Use
 
-使用する Skill/Subagent と理由は1行で明記してから進める
+Before proceeding, state the skill or subagent being used and the reason in one line.

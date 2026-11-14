@@ -37,4 +37,4 @@ Body: "- ${changes}\n- ${reasonImpact}"
 
 Example:
 git add -A -- -- routes/admin.php app/Http/Controllers/Admin/UserController.php
-git commit --no-verify --no-gpg-sign -m "✨ feat(routes): 管理画面ユーザー一覧を追加" -m "- 新規ルートとindex実装\n- 権限チェックを追加"
+git commit --no-verify --no-gpg-sign -m "✨ feat(routes): Add the admin user list" -m "- Implement the new route and index\n- Add permission checks"

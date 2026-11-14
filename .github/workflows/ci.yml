@@ -21,6 +21,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check repository language
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if git grep -I -n -P '[\p{Hiragana}\p{Katakana}\p{Han}\x{3000}-\x{303f}\x{ff01}-\x{ff60}]' -- .; then
+            echo 'Use English in tracked files; encode Unicode test data with escapes.' >&2
+            exit 1
+          else
+            result=$?
+            if [ "$result" -ne 1 ]; then exit "$result"; fi
+          fi
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
