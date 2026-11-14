@@ -9,132 +9,132 @@
 | Toolchain | Rust `1.92.0` |
 | Document Basis | Repository audit on 2026-03-29 |
 
-## 1. 技術概要
+## 1. Technical Overview
 
-`mdv` は Rust 製の single-binary CLI で、Markdown を一度 `Document` に正規化したうえで、2 つの出力経路に分岐する。
+`mdv` is a single-binary CLI written in Rust. It first normalizes Markdown into a `Document`, then branches into two output paths.
 
-- 対話モード: GitHub HTML 風に整形したページを PNG に snapshot し、Kitty graphics protocol で terminal に表示する
-- 非対話モード: `Document` から plain-text rendering を生成して stdout に出す
+- Interactive mode: snapshot a page styled like GitHub HTML to PNG and display it in the terminal using the Kitty graphics protocol
+- Non-interactive mode: generate plain-text rendering from `Document` and write it to stdout
 
-エントリポイントはシンプルで、`src/main.rs` が `mdv::cli::parse()` と `mdv::app::run()` を呼ぶだけになっている。
+The entry point is simple: `src/main.rs` only calls `mdv::cli::parse()` and `mdv::app::run()`.
 
-## 2. 主要依存
+## 2. Main Dependencies
 
-| Crate | 用途 |
+| Crate | Purpose |
 | --- | --- |
-| `clap` | CLI 引数解析 |
-| `anyhow` / `thiserror` | エラー文脈の付与 |
-| `comrak` | GFM ベースの Markdown parse と HTML 出力 |
-| `crossterm` | TTY 制御、キー入力、alternate screen |
-| `image` | 画像 decode、PNG 変換、寸法取得 |
-| `resvg` | SVG rasterize 関連 |
-| `syntect` | code block syntax highlight |
-| `serde` / `serde_json` | snapshot diagnostics の JSON 処理 |
-| `tracing` / `tracing-subscriber` | 起動、描画、外部コマンド周辺の trace |
+| `clap` | CLI argument parsing |
+| `anyhow` / `thiserror` | Add error context |
+| `comrak` | GFM-based Markdown parsing and HTML output |
+| `crossterm` | TTY control, keyboard input, and alternate screen |
+| `image` | Image decoding, PNG conversion, and dimension retrieval |
+| `resvg` | SVG rasterization |
+| `syntect` | Code block syntax highlighting |
+| `serde` / `serde_json` | JSON processing for snapshot diagnostics |
+| `tracing` / `tracing-subscriber` | Tracing for startup, rendering, and external commands |
 
-## 3. ランタイムモード
+## 3. Runtime Modes
 
 ### 3.1 Headless Mode
 
-条件:
+Condition:
 
-- `stdout` または `stdin` が TTY ではない
+- Either `stdout` or `stdin` is not a TTY
 
-挙動:
+Behavior:
 
-- `render::text::render_plain_text()` を使う
-- alternate screen は使わない
-- image / Mermaid はメタ情報ベースの degrade 表現を返す
+- Use `render::text::render_plain_text()`
+- Do not use the alternate screen
+- Return metadata-based degraded representations for images / Mermaid
 
 ### 3.2 Interactive Mode
 
-条件:
+Conditions:
 
-- `stdout` と `stdin` がともに TTY
-- Ghostty / Kitty / WezTerm, or a Unix terminal that answers the Kitty graphics support query
+- Both `stdout` and `stdin` are TTYs
+- The terminal is identified as Ghostty, Kitty, or WezTerm, or is a Unix terminal that answers the Kitty graphics support query
 
-挙動:
+Behavior:
 
-- `TerminalViewer::try_new()` を生成
-- raw mode と alternate screen に入る
-- graphic page を描画し、キー入力ループで scroll / reload / open link を処理する
+- Create a viewer with `TerminalViewer::try_new()`
+- Enter raw mode and the alternate screen
+- Draw the graphic page and handle scrolling, reloading, and opening links in the keyboard input loop
 
-制約:
+Constraints:
 
-- 現行実装では graphic page 生成が前提で、失敗時の runtime fallback はない
-- `io::snapshot` が macOS の WebKit/TIFF と Windows の Chromium/PNG を選択する。Windows の画像表示は WezTerm を使用する
+- The current implementation requires graphic page generation and has no runtime fallback on failure
+- `io::snapshot` selects WebKit/TIFF on macOS and Chromium/PNG on Windows. Windows image display uses WezTerm
 
-## 4. データフロー
+## 4. Data Flow
 
 ### 4.1 Parse Pipeline
 
-1. `app::run()` がファイル本文を読む
-2. `render::markdown::parse_document()` が `comrak` AST を走査する
-3. AST を `core::document::Document` と `BlockKind` 群へ正規化する
-4. `DocumentMeta` に title、links、source length を格納する
+1. `app::run()` reads the file contents
+2. `render::markdown::parse_document()` traverses the `comrak` AST
+3. The AST is normalized into `core::document::Document` and its `BlockKind` values
+4. `DocumentMeta` stores the title, links, and source length
 
-`Document` はこのアプリの共通中間表現であり、headless と interactive の双方がこれを起点にする。
+`Document` is the application's shared intermediate representation and the starting point for both headless and interactive modes.
 
 ### 4.2 Interactive Render Pipeline
 
-1. `render::github_html::build_github_html()` が GitHub 風 HTML を生成する
-2. Mermaid code fence は事前に `replace_mermaid_code_blocks()` で SVG か fallback HTML に差し替える
-3. WebKit worker が HTML を TIFF と diagnostics report に変換する
-4. `ui::page_graphics::build_graphic_page()` が RGBA と display size を作る
-5. `ui::terminal::graphics::resident` が可視領域を含む連続画像を最大2枚保持し、通常フレームでは source crop だけを更新する
-6. `ui::terminal` は約60Hzの期限で入力をまとめ、短いピクセル補間と synchronized output で画面を更新する。次の画像は background で lossless PNG 化し、全 chunk を続けて転送する
+1. `render::github_html::build_github_html()` generates GitHub-like HTML
+2. `replace_mermaid_code_blocks()` replaces Mermaid code fences with SVG or fallback HTML before rendering
+3. The WebKit worker converts HTML into TIFF and a diagnostics report
+4. `ui::page_graphics::build_graphic_page()` produces RGBA data and the display size
+5. `ui::terminal::graphics::resident` retains up to two contiguous images covering the visible region and updates only the source crop during normal frames
+6. `ui::terminal` batches input on an approximately 60 Hz schedule and updates the screen using brief pixel interpolation and synchronized output. The next image is encoded as a lossless PNG in the background, and all chunks are transmitted consecutively
 
 ### 4.3 Headless Render Pipeline
 
-1. `render_plain_text()` が `Document` を block ごとに走査する
-2. block を plain-text へ整形する
-3. image / Mermaid / footnote / table を可読な degrade 表現に変換する
-4. stdout に UTF-8 で出力する
+1. `render_plain_text()` traverses `Document` block by block
+2. Blocks are formatted as plain text
+3. Images / Mermaid / footnotes / tables are converted into readable degraded representations
+4. Output is written to stdout as UTF-8
 
-## 5. モジュール責務
+## 5. Module Responsibilities
 
-| Module | 責務 |
+| Module | Responsibility |
 | --- | --- |
-| `cli` | `MdvArgs` 定義、theme enum、引数 parse |
-| `app` | 起動 orchestration、TTY 判定、render mode 分岐 |
-| `core` | `Document`、`BlockKind`、テーマ token、layout 補助、diff |
-| `render::markdown` | GFM parse と `Document` 正規化 |
-| `render::text` | headless 表示と structured text layout |
-| `render::github_html` | GitHub CSS ベースの HTML 生成と Mermaid 埋め込み |
-| `render::svg` | SVG ベースの描画補助と関連テスト |
-| `io::fs` | ドキュメントの読み込みと更新時刻取得 |
-| `io::image_decoder` | ローカル画像の解決と PNG 化 |
-| `io::mermaid_cli` | `mmdc` / `npx @mermaid-js/mermaid-cli` 呼び出しと cache |
-| `io::webkit_snapshot` | Swift helper を使った HTML snapshot |
-| `io::browser` | 既定ブラウザ起動 |
-| `io::kitty_graphics` | Kitty graphics escape sequence 生成 |
-| `ui::terminal` | イベントループ、status line、graphics placement |
-| `ui::page_graphics` | full-page PNG の viewport 切り出し |
+| `cli` | `MdvArgs` definitions, theme enum, and argument parsing |
+| `app` | Startup orchestration, TTY detection, and render mode selection |
+| `core` | `Document`, `BlockKind`, theme tokens, layout helpers, and diffs |
+| `render::markdown` | GFM parsing and `Document` normalization |
+| `render::text` | Headless display and structured text layout |
+| `render::github_html` | HTML generation using GitHub CSS and Mermaid embedding |
+| `render::svg` | SVG rendering helpers and related tests |
+| `io::fs` | Read documents and retrieve modification times |
+| `io::image_decoder` | Resolve local images and convert them to PNG |
+| `io::mermaid_cli` | Invoke `mmdc` / `npx @mermaid-js/mermaid-cli` and cache results |
+| `io::webkit_snapshot` | HTML snapshots using a Swift helper |
+| `io::browser` | Launch the default browser |
+| `io::kitty_graphics` | Generate Kitty graphics escape sequences |
+| `ui::terminal` | Event loop, status line, and graphics placement |
+| `ui::page_graphics` | Crop viewports from full-page PNGs |
 
-## 6. 外部依存とシステム前提
+## 6. External Dependencies and System Requirements
 
 ### 6.1 Mermaid
 
-Mermaid は `MermaidCliRenderer::from_env()` で次の順に探索する。
+`MermaidCliRenderer::from_env()` searches for Mermaid in this order:
 
 1. `MDV_MERMAID_CMD`
 2. `mmdc`
 3. `npx -y @mermaid-js/mermaid-cli`
 
-レンダリング結果は cache directory に保存される。
+Rendering results are stored in the cache directory.
 
 ### 6.2 WebKit Snapshot
 
-HTML snapshot は Swift helper 経由で `WKWebView` を使っている。`build.rs` が macOS 向けに `snapshot.swift` をコンパイルし、実行ファイルを Rust バイナリへ埋め込む。`worker.rs` はユーザーと helper のバージョンごとに private な Unix socket を管理し、WebKit のプロセスと view を再利用する。worker は最後のリクエストから120秒で終了する。文書と assets は毎回読み直し、document ごとの read-access root、画像・フォントの readiness 判定と diagnostics を維持する。描画期限は25秒で、失敗後は view を破棄して次の文書を描画できる。
+HTML snapshots use `WKWebView` through a Swift helper. `build.rs` compiles `snapshot.swift` for macOS and embeds the executable in the Rust binary. `worker.rs` manages a private Unix socket for each user and helper version, reusing the WebKit process and view. The worker exits 120 seconds after its last request. Documents and assets are reread on every request, preserving per-document read-access roots, image/font readiness checks, and diagnostics. The rendering deadline is 25 seconds; after a failure, the view is discarded so the next document can be rendered.
 
-対話表示の内部転送には非圧縮 TIFF を使い、Rust 側では一度だけ RGBA に変換して保持する。端末へは可視 viewport の lossless PNG だけを送る。ページ全体の PNG 圧縮・再展開とスクロールごとの全ページ decode を省くことで、解像度・色・透明度・crop geometry を変更せず起動とスクロールのコストを減らす。既存の `render_html_to_png` API は PNG と diagnostics を返す。
+Internal transfers for interactive display use uncompressed TIFF, which Rust converts to RGBA once and retains. Only a lossless PNG of the visible viewport is sent to the terminal. Avoiding full-page PNG compression/decompression and full-page decoding on every scroll reduces startup and scrolling costs without changing resolution, color, transparency, or crop geometry. The existing `render_html_to_png` API returns PNG and diagnostics.
 
-生成物:
+Outputs:
 
-- `snapshot.png`（`render_html_to_png`）または `snapshot.tiff`（対話表示）
+- `snapshot.png` (`render_html_to_png`) or `snapshot.tiff` (interactive display)
 - `snapshot-report.json`
 
-diagnostics には以下が含まれる。
+Diagnostics include:
 
 - image readiness
 - Mermaid metrics
@@ -143,59 +143,59 @@ diagnostics には以下が含まれる。
 
 ### 6.3 Browser Open
 
-`io::browser` は OS ごとの既定ブラウザ起動コマンドを選ぶ。対話モードで `o` を押したときのみ使用する。
+`io::browser` selects the default-browser launch command for the OS. It is used only when `o` is pressed in interactive mode.
 
-## 7. テーマと見た目
+## 7. Themes and Appearance
 
-テーマは `Theme::Light` と `Theme::Dark` の 2 種類だけである。
+There are only two themes: `Theme::Light` and `Theme::Dark`.
 
-interactive path では次を組み合わせる。
+The interactive path combines:
 
-- GitHub の light / dark CSS アセット
-- 埋め込み `Mona Sans VF` と `Monaspace Neon Var`
-- `syntect` の syntax highlight theme
+- GitHub light / dark CSS assets
+- Embedded `Mona Sans VF` and `Monaspace Neon Var`
+- A `syntect` syntax highlighting theme
 
-headless path では `ThemeTokens` は持つが、最終出力は plain text 中心で、interactive ほど theme 差は大きくない。
+The headless path has `ThemeTokens`, but its final output is primarily plain text, so theme differences are less pronounced than in interactive mode.
 
-## 8. ビルド・検証・配布
+## 8. Build, Verification, and Distribution
 
-### 8.1 ローカル開発
+### 8.1 Local Development
 
 - `cargo build --release`
 - `cargo fmt --all`
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - `cargo test --workspace --all-targets --all-features`
 
-`Makefile` でも同等の entrypoint が定義されている。
+Equivalent entry points are also defined in `Makefile`.
 
 ### 8.2 CI
 
-GitHub Actions の `ci.yml` は次を実行する。
+GitHub Actions `ci.yml` runs:
 
 - format check
 - clippy
 - test
 
-Rust toolchain は `1.92.0` に固定されている。
+The Rust toolchain is pinned to `1.92.0`.
 
 ### 8.3 Distribution
 
-release automation は現在持たない。配布契約は次の 2 本だけである。
+There is currently no release automation. The distribution contract consists of two paths:
 
-- `scripts/install.sh` は GitHub `main` 上の追跡対象 `bin/mdv` を取得して install directory に配置する
+- `scripts/install.sh` downloads the tracked `bin/mdv` from GitHub `main` and places it in the installation directory
 - `mdv update` compares the tracked binary for the current OS and replaces it when its contents differ and GitHub `main` has a newer version. Equal versions are not updated, so publishing a new binary requires incrementing the version in `Cargo.toml`.
 
-repo の `bin/mdv` は install / update の実体であり、`main` への push 後に `ci.yml` の macOS job が自動生成して必要時のみ commit する。ローカルでは `make build-tracked-bin` で同じ packaging path を再現できるが、追跡 binary の更新責務は人手ではなく CI が持つ。
+The repository's `bin/mdv` is the artifact used for installation and updates. After a push to `main`, the macOS job in `ci.yml` generates it automatically and commits it only when necessary. Locally, `make build-tracked-bin` reproduces the same packaging path, but CI, rather than manual work, owns updates to the tracked binary.
 
-## 9. テスト戦略
+## 9. Test Strategy
 
-テストは 3 層に分かれている。
+Tests are divided into three layers:
 
-- `tests/unit`: parser、renderer、snapshot、terminal 補助、Mermaid adapter などの単体確認
-- `tests/integration`: CLI と出力契約の確認
-- `tests/e2e`: rich fixture や asset 解決を含む実行経路の確認
+- `tests/unit`: unit checks for the parser, renderer, snapshots, terminal helpers, Mermaid adapter, and related components
+- `tests/integration`: checks for CLI and output contracts
+- `tests/e2e`: checks for execution paths involving rich fixtures and asset resolution
 
-特に重要なのは次。
+Particularly important areas are:
 
 - headless rendering contract
 - GitHub HTML typography fidelity
@@ -203,25 +203,25 @@ repo の `bin/mdv` は install / update の実体であり、`main` への push 
 - Mermaid diagnostics
 - terminal scroll / graphics placement
 
-## 10. 既知の技術的制約
+## 10. Known Technical Constraints
 
-1. Windows の画像表示には対応端末（WezTerm）とインストール済み Edge/Chrome が必要
-2. native compositor の描画・入力の感触は各端末・OSで別途確認が必要
-3. link open は first link 固定で、link focus state を持たない
+1. Windows image display requires a supported terminal (WezTerm) and an installed Edge/Chrome browser
+2. Native compositor rendering and input feel require separate verification for each terminal and OS
+3. Opening links always uses the first link; there is no link focus state
 4. Terminal detection accepts Ghostty / Kitty / WezTerm and Unix terminals that answer the Kitty graphics support query
-5. README の platform statement と現実装の runtime contract に差がある
+5. The README's platform statement differs from the current implementation's runtime contract
 
-## 11. 改善候補
+## 11. Potential Improvements
 
-- Linux でも動く snapshot backend か structured TUI fallback を用意する
-- `Document` の `revision` や `SourceSpan` を reload diff に活用する
-- interactive path の fallback を `render::text::render_document()` に戻す
-- 複数リンクナビゲーションや検索 UI を足す場合は `DocumentMeta` と UI state を拡張する
+- Provide a snapshot backend that works on Linux or a structured TUI fallback
+- Use `Document`'s `revision` and `SourceSpan` for reload diffs
+- Restore the interactive path's fallback to `render::text::render_document()`
+- Extend `DocumentMeta` and UI state when adding multi-link navigation or a search UI
 
 ## Windows backend
 
-`io::snapshot::render_html_to_raster` はOSに応じて既存WebKitか `io::chromium_snapshot` を選択します。Windowsはインストール済みEdge/Chromeを専用profile・sandbox有効で利用し、CSS viewportとdeviceScaleFactor=2を固定してlossless PNGを取得します。通常のブラウザprofileへ接続せず、画像完成結果のキャッシュもしません。
+`io::snapshot::render_html_to_raster` selects WebKit on macOS and Chromium on Windows. Windows uses a dedicated Edge/Chrome profile with sandboxing, a fixed CSS viewport, deviceScaleFactor=2, and lossless PNG output. It never connects to a normal browser profile. Both interactive backends now share the persistent decoded-page cache described in `DEVELOPMENT.md`.
 
-WindowsのWezTermにはOSC1337で可視領域のPNGを送り、小数位置のスクロール補間を維持します。ConPTYがKitty画像命令を透過するかに依存しない構成です。Windows Terminalはこの画像転送方式の対象外です。macOS Ghostty/Kittyの常駐画像方式は変更しません。
+On Windows, the visible region is sent to WezTerm as a PNG over OSC1337, preserving fractional-position scroll interpolation. This does not depend on ConPTY passing Kitty image commands through. Windows Terminal is not supported by this image transport. The resident-image approach used by Ghostty/Kitty on macOS remains unchanged.
 
-Windowsの更新には `bin/mdv.exe` と実行中exeを置換できるAPIを使用します。非対応OS/architectureでmacOSバイナリをダウンロードすることはありません。
+Windows updates use `bin/mdv.exe` and an API capable of replacing a running executable. Unsupported OS/architecture combinations never download a macOS binary.

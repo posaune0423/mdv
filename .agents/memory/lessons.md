@@ -1,5 +1,9 @@
 # Lessons
 
+- When the user requests the create-pr template, resolve the repository template first and use the shared create-pr default layout if none exists. Do not substitute an older local skill's short prose format for the requested structured body.
+
+- Keep every Git-tracked project artifact in English, even when the user conversation is in Japanese. Encode Unicode-only test data with escapes so language cleanup does not weaken coverage.
+
 - Do not call an implementation a rich markdown viewer until it has been validated in a real TTY and is visibly distinct from raw markdown output.
 - Do not use a repaint-on-every-poll loop for an interactive graphics viewer; redraw must be driven by state changes and placement diffs or the result will flicker and hide input bugs.
 - Typography and code rendering are part of fidelity; if the viewer still looks small or flat next to GitHub, revisit font scale and syntax highlighting before calling the design pass complete.
@@ -42,3 +46,5 @@
 
 - Windows image support must validate the renderer and the console transport separately: Kitty keyboard support does not imply Kitty graphics, and ConPTY can filter image APCs. Keep lossless image tests, native Windows process tests, and terminal compositor proof distinct.
 - In pinned `headless_chrome`, `connect_with_timeout` configures idle event-loop lifetime, not a connection deadline. Inspect the actual API before using it for a timeout guarantee; keep an owned-process watchdog and use direct CDP target discovery when Edge lifecycle/target events are unreliable.
+
+- Before creating a PR, resolve its body template and language from the shared create-pr skill as well as any repository-local copy. A local skill with only a sentence limit does not provide the shared default template. Pass the actual headings and language to the PR worker, and verify the published body yourself.

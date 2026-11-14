@@ -27,7 +27,7 @@ If you live in [Ghostty](https://ghostty.org/), [Kitty](https://sw.kovidgoyal.ne
 | **Mermaid diagrams**         | Flowcharts, sequence diagrams, and more — rendered inline                                      |
 | **Syntax highlighting**      | 100+ languages via [syntect](https://github.com/trishume/syntect)                              |
 | **System/light/dark themes** | `system` by default, with explicit `light` / `dark` overrides                                  |
-| **Watch mode**               | `--watch` auto-reloads on file change                                                          |
+| **Auto-refresh**             | Files reload on save by default (`--watch=false` disables it)                                                          |
 | **Quick update**             | `mdv update` selects the CI-generated macOS `bin/mdv` or Windows `bin/mdv.exe` from `main`      |
 | **Pipe-friendly**            | Plain-text fallback when stdout is not a TTY — works in CI and scripts                         |
 | **Vim navigation**           | `j`/`k`/`g`/`G`/PageUp/PageDown                                                                |
@@ -84,12 +84,19 @@ mdv README.md
 ```bash
 mdv README.md                           # system theme (default)
 mdv --theme dark notes.md               # dark theme
-mdv --watch docs/guide.md               # auto-reload on save
+mdv docs/guide.md                       # auto-reload on save (default)
+mdv --watch=false docs/guide.md         # keep the current view until manual reload
 mdv --no-mermaid spec.md                # skip Mermaid rendering
 mdv update                              # install a newer version published on main
 mdv --version                           # print the current version
 mdv ./README.md | head -n 50            # plain-text output (pipe/CI)
 ```
+
+### Fast reopening
+
+Interactive pages are cached on disk so reopening an unchanged document skips HTML generation and browser rendering. The cache includes the source content, local image contents, theme, viewport width, and renderer identity; changed inputs trigger a fresh render. Press `r` to force a fresh render. Headless output is unchanged.
+
+The page cache is bounded to 512 MiB (128 MiB per page). Use `MDV_CACHE_DIR` to choose its location. Cache read/write failures fall back to normal rendering.
 
 ### Keyboard shortcuts
 

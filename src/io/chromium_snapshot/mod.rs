@@ -810,17 +810,17 @@ mod tests {
     }
 
     fn rich_html(base_url: &str, font_url: &str, theme: &str) -> String {
+        let greeting = "\u{3053}\u{3093}\u{306b}\u{3061}\u{306f}";
         format!(
             r#"<!doctype html><html><head><base href="{base_url}"><style>
             @font-face {{ font-family: "Mona Sans VF"; src: url("{font_url}") format("woff2"); }}
             body {{ margin:0; background:{theme}; color:#f0f6fc; font-family:"Mona Sans VF", sans-serif; }}
             .spacer {{ height:1500px; }} .tail {{ height:48px; background:rgb(1,35,70); }}
-            </style></head><body><h1>{heading}</h1><strong>Fresh asset</strong>
+            </style></head><body><h1>{greeting} raster</h1><strong>Fresh asset</strong>
             <img src="pixel image.png" width="24" height="24"><img src="icon image.svg" width="24" height="24">
             <img src="http://127.0.0.1:9/remote-badge.svg" width="24" height="24">
             <svg class="mdv-mermaid-diagram" viewBox="0 0 40 40"><rect width="40" height="40"/></svg>
-            <div class="spacer"></div><div class="tail"></div></body></html>"#,
-            heading = "\u{3053}\u{3093}\u{306b}\u{3061}\u{306f} raster",
+            <div class="spacer"></div><div class="tail"></div></body></html>"#
         )
     }
 
@@ -831,7 +831,7 @@ mod tests {
     #[test]
     fn chromium_renders_fresh_full_page_assets_at_device_scale_two() -> Result<()> {
         let root = tempfile::tempdir()?;
-        let base = root.path().join(format!("unicode space {}", "\u{65e5}\u{672c}\u{8a9e}"));
+        let base = root.path().join("unicode space \u{65e5}\u{672c}\u{8a9e}");
         fs::create_dir_all(&base)?;
         let font_url = format!(
             "data:font/woff2;base64,{}",

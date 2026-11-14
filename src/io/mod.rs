@@ -5,6 +5,7 @@ pub mod fs;
 pub mod image_decoder;
 pub mod kitty_graphics;
 pub mod mermaid_cli;
+pub(crate) mod page_cache;
 pub mod self_update;
 pub mod snapshot;
 pub mod webkit_snapshot;
