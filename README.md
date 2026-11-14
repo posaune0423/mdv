@@ -22,7 +22,7 @@ If you live in [Ghostty](https://ghostty.org/), [Kitty](https://sw.kovidgoyal.ne
 
 |                              |                                                                                                |
 | ---------------------------- | ---------------------------------------------------------------------------------------------- |
-| **GitHub CSS rendering**     | GitHub styles rendered by WebKit on macOS or installed Edge/Chrome on Windows |
+| **GitHub CSS rendering**     | GitHub styles rendered by WebKit on macOS or installed Edge/Chrome/Chromium on Windows and Linux |
 | **Inline images**            | PNG, JPEG, GIF, WebP rendered directly in the terminal                                         |
 | **Mermaid diagrams**         | Flowcharts, sequence diagrams, and more — rendered inline                                      |
 | **Syntax highlighting**      | 100+ languages via [syntect](https://github.com/trishume/syntect)                              |
@@ -59,6 +59,19 @@ mdv README.md
 ```
 
 Windows Terminal and the legacy console can still use the plain-text pipeline (`Get-Content README.md | mdv -`); image viewing requires WezTerm. Windows ARM64 native binaries are not distributed.
+
+On **Linux**, install a native, non-Snap Chrome or Chromium yourself and build from source; prebuilt Linux binaries and `mdv update` are not available. Run in a terminal that supports Kitty graphics:
+
+```bash
+cargo install --git https://github.com/posaune0423/mdv.git --locked --force
+mdv README.md
+```
+
+Set `MDV_BROWSER` when the native browser executable is not on `PATH`. Snap launchers are rejected because their sandbox cannot read the host snapshot workspace:
+
+```bash
+MDV_BROWSER=/path/to/chrome mdv README.md
+```
 
 **Run** (in a supported terminal):
 
@@ -101,9 +114,9 @@ The page cache is bounded to 512 MiB (128 MiB per page). Use `MDV_CACHE_DIR` to 
 
 ## Requirements
 
-- **Terminal**: macOS: [Ghostty](https://ghostty.org/), [Kitty](https://sw.kovidgoyal.net/kitty/), [WezTerm](https://wezterm.org/), or a terminal that answers the Kitty graphics support query (such as Rex); Windows: WezTerm
+- **Terminal**: macOS: [Ghostty](https://ghostty.org/), [Kitty](https://sw.kovidgoyal.net/kitty/), [WezTerm](https://wezterm.org/), or a terminal that answers the Kitty graphics support query (such as Rex); Windows: WezTerm; Linux: a terminal that supports Kitty graphics
 - **Protocol ecosystem**: The [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) is also implemented by Ghostty, Konsole, st (with a patch), Warp, wayst, WezTerm, iTerm2, and xterm.js
-- **Rich rendering**: macOS uses its system WebKit; Windows x64 uses installed Microsoft Edge or Chrome. Both produce lossless page images. Linux remains a plain-text/headless target.
+- **Rich rendering**: macOS uses its system WebKit; Windows x64 uses installed Microsoft Edge or Chrome; Linux uses installed Chrome or Chromium. Each backend produces lossless page images.
 - **Mermaid** (optional): `mmdc` or `npx @mermaid-js/mermaid-cli`, or set `MDV_MERMAID_CMD`
 
 ## Installation
@@ -121,7 +134,7 @@ The page cache is bounded to 512 MiB (128 MiB per page). Use `MDV_CACHE_DIR` to 
 | `mdv update` fails                 | Confirm the current `mdv` location is writable and GitHub `main` exposes the expected [`bin/mdv`](bin/mdv) artifact. |
 | Plain text instead of rich viewer  | Requires a TTY in a supported terminal. Pipes and redirects trigger headless mode by design.                        |
 | Mermaid diagrams show placeholders | Install `mmdc` or use `npx @mermaid-js/mermaid-cli`. Use `--no-mermaid` to skip entirely.                            |
-| Graphic / snapshot issues          | macOS uses WebKit; Windows requires installed Edge/Chrome and WezTerm. See [docs/TECH.md](docs/TECH.md).                                           |
+| Graphic / snapshot issues          | macOS uses WebKit; Windows requires installed Edge/Chrome and WezTerm; Linux requires installed Chrome/Chromium and a Kitty graphics terminal. See [docs/TECH.md](docs/TECH.md). |
 
 ## Documentation
 

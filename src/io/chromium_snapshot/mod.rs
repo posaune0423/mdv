@@ -8,6 +8,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(target_os = "linux")]
+use std::io::Read;
+
 use anyhow::{Context, Result, bail, ensure};
 use headless_chrome::{
     Tab,
@@ -609,6 +612,11 @@ fn browser_executable() -> Result<PathBuf> {
         installed_windows_browser()
     }
 
+    #[cfg(target_os = "linux")]
+    {
+        installed_linux_browser()
+    }
+
     #[cfg(all(test, target_os = "macos"))]
     {
         let chrome = PathBuf::from("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
@@ -616,8 +624,87 @@ fn browser_executable() -> Result<PathBuf> {
         Ok(chrome)
     }
 
-    #[cfg(not(any(windows, all(test, target_os = "macos"))))]
-    bail!("Chromium snapshot rendering is only supported on Windows");
+    #[cfg(not(any(windows, target_os = "linux", all(test, target_os = "macos"))))]
+    bail!("Chromium snapshot rendering is only supported on Windows and Linux");
+}
+
+#[cfg(target_os = "linux")]
+fn installed_linux_browser() -> Result<PathBuf> {
+    let names = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"];
+    let search_path = std::env::var_os("PATH");
+    let paths = search_path.as_deref().map(std::env::split_paths).into_iter().flatten();
+    if let Some(browser) = find_linux_browser_in_paths(paths, &names) {
+        return Ok(browser);
+    }
+
+    let chrome = PathBuf::from("/opt/google/chrome/chrome");
+    if is_usable_linux_browser(&chrome) {
+        return Ok(chrome);
+    }
+    bail!(
+        "no supported native browser found; set MDV_BROWSER to a non-Snap Chrome or Chromium executable"
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn find_linux_browser_in_paths(
+    paths: impl IntoIterator<Item = PathBuf>,
+    names: &[&str],
+) -> Option<PathBuf> {
+    paths.into_iter().find_map(|directory| {
+        names
+            .iter()
+            .map(|name| directory.join(name))
+            .find(|candidate| is_usable_linux_browser(candidate))
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn is_usable_linux_browser(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    path.is_file()
+        && fs::metadata(path).is_ok_and(|metadata| metadata.permissions().mode() & 0o111 != 0)
+        && !is_snap_launcher(path)
+}
+
+#[cfg(target_os = "linux")]
+fn is_snap_launcher(path: &Path) -> bool {
+    const MAX_SCRIPT_PREFIX_BYTES: usize = 64 * 1024;
+    const SNAP_LAUNCHER_PATTERNS: &[&[u8]] = &[
+        b"snap run chromium",
+        b"snap run chromium-browser",
+        b"/snap/bin/chromium",
+        b"/snap/bin/chromium-browser",
+    ];
+
+    let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    if canonical.starts_with("/snap") || canonical.file_name().is_some_and(|name| name == "snap") {
+        return true;
+    }
+
+    let mut prefix = vec![0; MAX_SCRIPT_PREFIX_BYTES];
+    let Ok(mut file) = fs::File::open(path) else {
+        return false;
+    };
+    let Ok(length) = file.read(&mut prefix) else {
+        return false;
+    };
+    prefix.truncate(length);
+    prefix.starts_with(b"#!")
+        && SNAP_LAUNCHER_PATTERNS
+            .iter()
+            .any(|pattern| prefix.windows(pattern.len()).any(|part| part == *pattern))
+}
+
+#[cfg(target_os = "linux")]
+fn validate_linux_browser(path: &Path, variable: &str) -> Result<()> {
+    ensure!(
+        is_usable_linux_browser(path),
+        "{variable} must name an executable native Chrome or Chromium binary, not a Snap launcher: {}",
+        path.display()
+    );
+    Ok(())
 }
 
 fn environment_browser(variable: &str) -> Result<Option<PathBuf>> {
@@ -630,6 +717,8 @@ fn environment_browser(variable: &str) -> Result<Option<PathBuf>> {
         "{variable} must name an existing browser executable: {}",
         path.display()
     );
+    #[cfg(target_os = "linux")]
+    validate_linux_browser(&path, variable)?;
     Ok(Some(path))
 }
 
@@ -663,6 +752,57 @@ mod tests {
     use anyhow::Result;
     use image::{Rgba, RgbaImage};
 
+    #[cfg(target_os = "linux")]
+    use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(target_os = "linux")]
+    fn write_linux_browser(path: &Path, body: &str, executable: bool) -> Result<()> {
+        fs::write(path, body)?;
+        let mode = if executable { 0o700 } else { 0o600 };
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_browser_discovery_skips_non_executable_and_snap_launchers() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let unusable = root.path().join("google-chrome");
+        let snap_run = root.path().join("chromium-browser");
+        let snap_path = root.path().join("chromium-snap-path");
+        let native = root.path().join("chromium");
+        let native_data = root.path().join("google-chrome-stable");
+        write_linux_browser(&unusable, "#!/bin/sh\n", false)?;
+        write_linux_browser(
+            &snap_run,
+            "#!/bin/sh\nexec /usr/bin/snap run chromium \"$@\"\n",
+            true,
+        )?;
+        write_linux_browser(&snap_path, "#!/bin/sh\nexec /snap/bin/chromium \"$@\"\n", true)?;
+        write_linux_browser(&native, "#!/bin/sh\nexit 0\n", true)?;
+        write_linux_browser(&native_data, "\x7fELFsnap run chromium", true)?;
+
+        assert!(!is_usable_linux_browser(&unusable));
+        assert!(!is_usable_linux_browser(&snap_run));
+        assert!(!is_usable_linux_browser(&snap_path));
+        assert!(is_snap_launcher(Path::new("/snap/bin/chromium")));
+        assert!(is_usable_linux_browser(&native));
+        assert!(is_usable_linux_browser(&native_data));
+        assert_eq!(
+            find_linux_browser_in_paths(
+                [root.path().to_path_buf()],
+                &["google-chrome", "chromium-browser", "chromium"],
+            ),
+            Some(native),
+            "PATH discovery must continue past unusable candidates"
+        );
+        let error = validate_linux_browser(&snap_path, "MDV_BROWSER")
+            .err()
+            .unwrap_or_else(|| panic!("a Snap launcher must be rejected"));
+        assert!(error.to_string().contains("MDV_BROWSER"));
+        Ok(())
+    }
+
     fn file_url(path: &Path) -> Result<String> {
         Ok(Url::from_directory_path(path)
             .map_err(|_| anyhow::anyhow!("fixture directory cannot become file URL"))?
@@ -684,7 +824,10 @@ mod tests {
         )
     }
 
-    #[cfg_attr(not(windows), ignore = "requires Chrome; run explicitly with MDV_TEST_BROWSER")]
+    #[cfg_attr(
+        not(any(windows, target_os = "linux")),
+        ignore = "requires Chrome; run explicitly with MDV_TEST_BROWSER"
+    )]
     #[test]
     fn chromium_renders_fresh_full_page_assets_at_device_scale_two() -> Result<()> {
         let root = tempfile::tempdir()?;
@@ -746,7 +889,10 @@ mod tests {
         Ok(())
     }
 
-    #[cfg_attr(not(windows), ignore = "requires Chrome; run explicitly with MDV_TEST_BROWSER")]
+    #[cfg_attr(
+        not(any(windows, target_os = "linux")),
+        ignore = "requires Chrome; run explicitly with MDV_TEST_BROWSER"
+    )]
     #[test]
     fn chromium_reports_missing_local_images() -> Result<()> {
         let base = tempfile::tempdir()?;
