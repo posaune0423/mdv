@@ -104,7 +104,7 @@ Constraints:
 | `render::svg` | SVG rendering helpers and related tests |
 | `io::fs` | Read documents and retrieve modification times |
 | `io::image_decoder` | Resolve local images and convert them to PNG |
-| `io::mermaid_cli` | Invoke `mmdc` / `npx @mermaid-js/mermaid-cli` and cache results |
+| `io::mermaid_cli` | Explicit or installed `mmdc` execution and cache; no automatic package installation |
 | `io::webkit_snapshot` | HTML snapshots using a Swift helper |
 | `io::browser` | Launch the default browser |
 | `io::kitty_graphics` | Generate Kitty graphics escape sequences |
@@ -119,7 +119,8 @@ Constraints:
 
 1. `MDV_MERMAID_CMD`
 2. `mmdc`
-3. `npx -y @mermaid-js/mermaid-cli`
+
+If neither is available, Mermaid is reported as unavailable. There is no automatic `npx` fallback; renderer executables and `PATH` must be trusted.
 
 Rendering results are stored in the cache directory.
 

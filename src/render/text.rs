@@ -160,7 +160,7 @@ pub fn render_plain_text(document: &Document, theme: Theme, mermaid_mode: Mermai
         lines.push(String::new());
     }
 
-    lines.join("\n")
+    sanitize_multiline_plain_text(&lines.join("\n"))
 }
 
 #[must_use]
@@ -367,7 +367,38 @@ pub fn render_document(
         });
     }
 
-    RenderedDocument { lines, graphics }
+    let mut rendered = RenderedDocument { lines, graphics };
+    for line in &mut rendered.lines {
+        line.plain_text = sanitize_terminal_line(&line.plain_text);
+        line.display_text = sanitize_terminal_line(&line.display_text);
+        for span in &mut line.spans {
+            span.text = sanitize_terminal_line(&span.text);
+        }
+    }
+    rendered
+}
+
+#[must_use]
+pub(crate) fn sanitize_terminal_line(text: &str) -> String {
+    let mut sanitized = String::with_capacity(text.len());
+    let mut column = 0;
+    for character in text.chars() {
+        if character == '\t' {
+            let spaces = 8 - column % 8;
+            sanitized.extend(std::iter::repeat_n(' ', spaces));
+            column += spaces;
+        } else if !character.is_control() {
+            sanitized.push(character);
+            column += 1;
+        }
+    }
+    sanitized
+}
+
+fn sanitize_multiline_plain_text(text: &str) -> String {
+    text.chars()
+        .filter(|character| !character.is_control() || matches!(character, '\n' | '\t'))
+        .collect()
 }
 
 fn push_wrapped_display_line(

@@ -45,7 +45,7 @@ Examples:
 ## Environment variables (common)
 
 - MDV_INSTALL_DIR: install script target directory (default ~/.local/bin).
-- MDV_MERMAID_CMD: optional explicit command for Mermaid CLI; otherwise mmdc or npx @mermaid-js/mermaid-cli may be used (see docs/TECH.md).
+- MDV_MERMAID_CMD: optional explicit trusted executable for Mermaid CLI; otherwise an installed mmdc is used. mdv does not automatically install npm packages (see docs/TECH.md).
 
 ## Troubleshooting (short)
 

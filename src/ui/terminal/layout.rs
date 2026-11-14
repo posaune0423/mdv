@@ -71,7 +71,8 @@ pub(super) fn render_graphic_page(
 }
 
 pub(super) fn fit_to_width(line: &str, width: usize) -> String {
-    let mut fitted: String = line.chars().take(width).collect();
+    let mut fitted: String =
+        crate::render::text::sanitize_terminal_line(line).chars().take(width).collect();
     let current = fitted.chars().count();
     if current < width {
         fitted.push_str(&" ".repeat(width - current));
@@ -106,5 +107,5 @@ pub(super) fn article_wrap_width(viewport_width: u16) -> u16 {
 }
 
 pub(super) fn truncate_visible(text: &str, width: usize) -> String {
-    text.chars().take(width.max(1)).collect()
+    crate::render::text::sanitize_terminal_line(text).chars().take(width.max(1)).collect()
 }

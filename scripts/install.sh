@@ -116,6 +116,17 @@ EOF
   printf '%s' "$RESET"
 }
 
+os=$(uname -s)
+arch=$(uname -m)
+if [ "$os/$arch" = "Darwin/x86_64" ] &&
+  [ "$(sysctl -in sysctl.proc_translated 2>/dev/null || true)" = "1" ]; then
+  arch=arm64
+fi
+case "$os/$arch" in
+Darwin/arm64) ;;
+*) die "unsupported platform: $os/$arch. This installer provides macOS arm64 only; use scripts/install.ps1 on Windows x64, or build from source for plain-text mode on Linux." ;;
+esac
+
 command -v curl >/dev/null 2>&1 || die "curl is required"
 
 install_dir="$DEFAULT_INSTALL_DIR"

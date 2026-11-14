@@ -23,7 +23,7 @@ If you live in [Ghostty](https://ghostty.org/), [Kitty](https://sw.kovidgoyal.ne
 |                              |                                                                                                |
 | ---------------------------- | ---------------------------------------------------------------------------------------------- |
 | **GitHub CSS rendering**     | GitHub styles rendered by WebKit on macOS or installed Edge/Chrome on Windows |
-| **Inline images**            | PNG, JPEG, GIF, WebP rendered directly in the terminal                                         |
+| **Inline images**            | PNG, JPEG, GIF, WebP rendered as static images in the terminal; no GIF/video playback          |
 | **Mermaid diagrams**         | Flowcharts, sequence diagrams, and more — rendered inline                                      |
 | **Syntax highlighting**      | 100+ languages via [syntect](https://github.com/trishume/syntect)                              |
 | **System/light/dark themes** | `system` by default, with explicit `light` / `dark` overrides                                  |
@@ -42,6 +42,8 @@ curl -fsSL https://raw.githubusercontent.com/posaune0423/mdv/main/scripts/instal
 ```
 
 This installs the CI-generated macOS Apple Silicon [`bin/mdv`](bin/mdv) artifact from `main`.
+
+The shell installer rejects Linux and Intel Macs before downloading or changing an existing installation. Linux has no prebuilt binary or rich-rendering backend; build from a reviewed checkout with `cargo install --path . --locked`, then use plain-text output, for example `mdv README.md | less`. `cargo install mdv` and `pip install mdv` refer to unrelated projects.
 
 On **Windows x64**, install [WezTerm](https://wezterm.org/install/windows.html) and Microsoft Edge (or Chrome), then run in PowerShell:
 
@@ -96,7 +98,7 @@ The page cache is bounded to 512 MiB (128 MiB per page). Use `MDV_CACHE_DIR` to 
 | `PageUp` / `PageDown` | Page scroll          |
 | Mouse wheel / trackpad | Smooth scroll      |
 | `r`                   | Reload file          |
-| `o`                   | Open link in browser |
+| `o`                   | Open the first document link if it uses HTTP, HTTPS, or mailto |
 | `q`                   | Quit                 |
 
 ## Requirements
@@ -104,7 +106,7 @@ The page cache is bounded to 512 MiB (128 MiB per page). Use `MDV_CACHE_DIR` to 
 - **Terminal**: macOS: [Ghostty](https://ghostty.org/), [Kitty](https://sw.kovidgoyal.net/kitty/), [WezTerm](https://wezterm.org/), or a terminal that answers the Kitty graphics support query (such as Rex); Windows: WezTerm
 - **Protocol ecosystem**: The [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) is also implemented by Ghostty, Konsole, st (with a patch), Warp, wayst, WezTerm, iTerm2, and xterm.js
 - **Rich rendering**: macOS uses its system WebKit; Windows x64 uses installed Microsoft Edge or Chrome. Both produce lossless page images. Linux remains a plain-text/headless target.
-- **Mermaid** (optional): `mmdc` or `npx @mermaid-js/mermaid-cli`, or set `MDV_MERMAID_CMD`
+- **Mermaid** (optional): install a trusted `mmdc` on `PATH`, or set `MDV_MERMAID_CMD` to a trusted renderer executable. `mdv` never automatically installs Mermaid through `npx`.
 
 ## Installation
 
@@ -120,10 +122,12 @@ The page cache is bounded to 512 MiB (128 MiB per page). Use `MDV_CACHE_DIR` to 
 | `mdv: command not found`           | Ensure `$HOME/.local/bin` is on `PATH`, then restart the terminal.                                                   |
 | `mdv update` fails                 | Confirm the current `mdv` location is writable and GitHub `main` exposes the expected [`bin/mdv`](bin/mdv) artifact. |
 | Plain text instead of rich viewer  | Requires a TTY in a supported terminal. Pipes and redirects trigger headless mode by design.                        |
-| Mermaid diagrams show placeholders | Install `mmdc` or use `npx @mermaid-js/mermaid-cli`. Use `--no-mermaid` to skip entirely.                            |
+| Mermaid diagrams show placeholders | Install a trusted `mmdc` or set `MDV_MERMAID_CMD`. Use `--no-mermaid` to skip entirely.                            |
 | Graphic / snapshot issues          | macOS uses WebKit; Windows requires installed Edge/Chrome and WezTerm. See [docs/TECH.md](docs/TECH.md).                                           |
 
 ## Documentation
+
+See [SECURITY.md](SECURITY.md) for document trust boundaries and installation limitations. Browser viewing, text selection, and animated media are not currently supported.
 
 - [llm.txt](llm.txt) — Agent-oriented install & CLI summary
 - [GFM features & authoring](docs/MARKDOWN.md)
