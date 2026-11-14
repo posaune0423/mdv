@@ -60,14 +60,14 @@ mdv README.md
 
 Windows Terminal and the legacy console can still use the plain-text pipeline (`Get-Content README.md | mdv -`); image viewing requires WezTerm. Windows ARM64 native binaries are not distributed.
 
-On **Linux**, install Chrome or Chromium yourself and build from source; prebuilt Linux binaries and `mdv update` are not available. Run in a terminal that supports Kitty graphics:
+On **Linux**, install a native, non-Snap Chrome or Chromium yourself and build from source; prebuilt Linux binaries and `mdv update` are not available. Run in a terminal that supports Kitty graphics:
 
 ```bash
-cargo install --path . --locked --force
+cargo install --git https://github.com/posaune0423/mdv.git --locked --force
 mdv README.md
 ```
 
-Set `MDV_BROWSER` when the browser executable is not on `PATH`:
+Set `MDV_BROWSER` when the native browser executable is not on `PATH`. Snap launchers are rejected because their sandbox cannot read the host snapshot workspace:
 
 ```bash
 MDV_BROWSER=/path/to/chrome mdv README.md
