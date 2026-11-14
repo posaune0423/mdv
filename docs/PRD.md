@@ -50,7 +50,7 @@ Frequent terminal users commonly encounter the following friction when reading M
 | 1 | Run `mdv README.md` to read a document | Graphic page display in an interactive TTY; plain-text display otherwise |
 | 2 | Inspect illustrated design documents such as the rich fixture | Resolve local images and render them when display is available |
 | 3 | Read specifications containing Mermaid | Render when a renderer is available; otherwise degrade to an unavailable indicator |
-| 4 | Preview a document while editing it | Watch for changes and reload with `--watch` |
+| 4 | Preview while editing | Reload saved changes automatically; `--watch=false` opts out |
 | 5 | Read Markdown in a shell pipeline | Output headless formatting when stdout is not a TTY |
 
 ## 5. Current Product Scope
@@ -125,7 +125,7 @@ Non-interactive mode uses the plain-text renderer and degrades rich elements as 
 3. Return plain text instead of launching the viewer in non-interactive contexts
 4. Resolve local images using relative paths
 5. Keep the overall process running when no Mermaid renderer is available
-6. Detect file updates and reload with `--watch`
+6. Detect file content changes and reload automatically by default; `--watch=false` disables polling.
 7. Default to `system`, with explicit `light` / `dark` overrides
 8. Provide basic keyboard navigation
 9. Use `update` to compare the current `mdv` executable against the tracked `bin/mdv` on GitHub `main`, overwriting the installation only when they differ

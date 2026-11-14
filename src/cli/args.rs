@@ -16,8 +16,9 @@ pub struct MdvArgs {
     /// Markdown file to open.
     pub path: Option<PathBuf>,
 
-    /// Reload the document when the file changes.
-    #[arg(long)]
+    /// Automatically reload changed files; use --watch=false to disable.
+    #[arg(long, action = clap::ArgAction::Set, default_value_t = true,
+        num_args = 0..=1, default_missing_value = "true", require_equals = true)]
     pub watch: bool,
 
     /// Color theme used by the viewer.

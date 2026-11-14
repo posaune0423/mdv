@@ -13,7 +13,7 @@ uv run scripts/benchmark-startup.py --runs 7 --output /tmp/mdv-startup.json --ca
 
 Measurement starts immediately before process creation and ends when the PTY receives the first page image transmission and placement command. The default size is 120 columns by 40 rows, with 8 by 16 px cells. The benchmark verifies PNG transmission, so a plain-text fallback does not count as success. It saves the first run, individual run values, median, and binary SHA-256 to JSON; `--capture` saves the PNG of the first transmitted viewport. It does not include the time Ghostty/Kitty's compositor takes to display the image. Use the same document, theme, and dimensions for comparisons, do not run builds or tests concurrently, and do not equate the first run with an empty OS cache.
 
-The rendering worker is reused for 120 seconds. Record startup without an existing worker separately from opening another document with an already running worker. Completed images are not cached; changes to local images, documents, themes, and dimensions are reflected in every render. The worker helper and logs are stored in `/tmp/mdv-render-<effective-uid>-<helper-hash>/`, whose parent directory is accessible only to its owner. Headless display does not start a worker. Retaining the worker and decoded RGBA data uses additional memory.
+The rendering worker is reused for 120 seconds. Record startup without a worker separately from a warm worker. Decoded pages are now cached across launches, with invalidation for source content, local assets, theme, dimensions, and executable identity. Use a fresh `MDV_CACHE_DIR` for a cold page-cache run, then repeat with the same directory for warm runs. Remote assets have a short cache lifetime; press `r` to force a fresh render. Worker helpers and logs are stored under `/tmp/mdv-render-<effective-uid>-<helper-hash>/`. Headless output does not use the worker or page cache.
 
 Set `MDV_PROFILE_STARTUP=1 RUST_LOG=mdv=info` to output timings for each Rust stage. Use `--transcript /tmp/mdv-startup.pty` to save raw PTY output. To enable per-stage helper logs, first start the worker from a command with those environment variables set.
 
@@ -110,3 +110,7 @@ MDV_TEST_BROWSER='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' 
 ```
 
 For distribution, CI builds macOS/Windows artifacts from the same source SHA, and a single publisher updates `bin/mdv` and `bin/mdv.exe` together. If main has advanced, old artifacts are not applied to newer source; publication is left to the next run. PRs produce downloadable artifacts without modifying the binaries on main.
+
+## Automatic refresh
+
+Interactive file watching is enabled by default. Every 250 ms the viewer compares the current UTF-8 source with the displayed source, detecting saves even when timestamps are preserved or move backward. Missing files during atomic saves are retried. Reload clamps scroll to the new document and schedules a frame without requiring keyboard input. `--watch=false` disables polling; `--watch` remains accepted. This polls the Markdown file, not remote assets.

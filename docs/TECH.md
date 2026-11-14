@@ -220,7 +220,7 @@ Particularly important areas are:
 
 ## Windows backend
 
-`io::snapshot::render_html_to_raster` selects the existing WebKit backend or `io::chromium_snapshot` according to the OS. Windows uses an installed Edge/Chrome browser with a dedicated profile and sandboxing enabled, capturing lossless PNGs with a fixed CSS viewport and deviceScaleFactor=2. It neither connects to the normal browser profile nor caches completed images.
+`io::snapshot::render_html_to_raster` selects WebKit on macOS and Chromium on Windows. Windows uses a dedicated Edge/Chrome profile with sandboxing, a fixed CSS viewport, deviceScaleFactor=2, and lossless PNG output. It never connects to a normal browser profile. Both interactive backends now share the persistent decoded-page cache described in `DEVELOPMENT.md`.
 
 On Windows, the visible region is sent to WezTerm as a PNG over OSC1337, preserving fractional-position scroll interpolation. This does not depend on ConPTY passing Kitty image commands through. Windows Terminal is not supported by this image transport. The resident-image approach used by Ghostty/Kitty on macOS remains unchanged.
 
