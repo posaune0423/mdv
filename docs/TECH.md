@@ -220,7 +220,7 @@ repo の `bin/mdv` は install / update の実体であり、`main` への push 
 
 ## Windows backend
 
-`io::snapshot::render_html_to_raster` はOSに応じて既存WebKitか `io::chromium_snapshot` を選択します。Windowsはインストール済みEdge/Chromeを専用profile・sandbox有効で利用し、CSS viewportとdeviceScaleFactor=2を固定してlossless PNGを取得します。通常のブラウザprofileへ接続せず、画像完成結果のキャッシュもしません。
+`io::snapshot::render_html_to_raster` selects WebKit on macOS and Chromium on Windows. Windows uses a dedicated Edge/Chrome profile with sandboxing, a fixed CSS viewport, deviceScaleFactor=2, and lossless PNG output. It never connects to a normal browser profile. Both interactive backends now share the persistent decoded-page cache described in `DEVELOPMENT.md`.
 
 WindowsのWezTermにはOSC1337で可視領域のPNGを送り、小数位置のスクロール補間を維持します。ConPTYがKitty画像命令を透過するかに依存しない構成です。Windows Terminalはこの画像転送方式の対象外です。macOS Ghostty/Kittyの常駐画像方式は変更しません。
 

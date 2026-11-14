@@ -42,3 +42,5 @@
 
 - Windows image support must validate the renderer and the console transport separately: Kitty keyboard support does not imply Kitty graphics, and ConPTY can filter image APCs. Keep lossless image tests, native Windows process tests, and terminal compositor proof distinct.
 - In pinned `headless_chrome`, `connect_with_timeout` configures idle event-loop lifetime, not a connection deadline. Inspect the actual API before using it for a timeout guarantee; keep an owned-process watchdog and use direct CDP target discovery when Edge lifecycle/target events are unreliable.
+
+- Before creating a PR, resolve its body template and language from the shared create-pr skill as well as any repository-local copy. A local skill with only a sentence limit does not provide the shared default template. Pass the actual headings and language to the PR worker, and verify the published body yourself.

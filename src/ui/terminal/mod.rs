@@ -2,7 +2,7 @@ use std::{
     cmp,
     collections::BTreeSet,
     io::{self, Write},
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
 };
 
 use anyhow::Result;
@@ -80,7 +80,6 @@ pub struct TerminalViewer {
     pending_image_deletes: Vec<String>,
     clear_text: bool,
     last_status: Option<String>,
-    last_modified: Option<SystemTime>,
     warning: Option<String>,
     needs_redraw: bool,
     pending_layout_refresh: bool,
@@ -124,9 +123,8 @@ impl TerminalViewer {
         source_text: String,
     ) -> Result<Self> {
         let cell_metrics = current_cell_metrics();
-        let last_modified = source.modified_at().ok();
         let (graphic_page, rendered, warning) =
-            match render_graphic_page(&config, &document, &source_text, cell_metrics) {
+            match render_graphic_page(&config, &document, &source_text, cell_metrics, true) {
                 Ok(page) => (Some(page), None, None),
                 Err(error) => (
                     None,
@@ -154,7 +152,6 @@ impl TerminalViewer {
             pending_image_deletes: Vec::new(),
             clear_text: true,
             last_status: None,
-            last_modified,
             warning,
             needs_redraw: true,
             pending_layout_refresh: false,
@@ -175,9 +172,8 @@ impl TerminalViewer {
         source_text: String,
     ) -> Self {
         let cell_metrics = current_cell_metrics();
-        let last_modified = source.modified_at().ok();
         let (graphic_page, rendered, warning) =
-            match render_graphic_page(&config, &document, &source_text, cell_metrics) {
+            match render_graphic_page(&config, &document, &source_text, cell_metrics, true) {
                 Ok(page) => (Some(page), None, None),
                 Err(error) => (
                     None,
@@ -205,7 +201,6 @@ impl TerminalViewer {
             pending_image_deletes: Vec::new(),
             clear_text: true,
             last_status: None,
-            last_modified,
             warning,
             needs_redraw: true,
             pending_layout_refresh: false,
@@ -263,6 +258,7 @@ impl TerminalViewer {
         };
         let mut next_frame = Instant::now();
         let mut last_motion_tick = Instant::now();
+        let mut next_watch_check = Instant::now();
         loop {
             if event::poll(Duration::ZERO)? {
                 let events = self.read_pending_events()?;
@@ -288,8 +284,11 @@ impl TerminalViewer {
                 }
                 next_frame = following_frame(next_frame, now);
             }
-            if self.config.watch && self.maybe_reload() {
-                continue;
+            if self.config.watch && Instant::now() >= next_watch_check {
+                next_watch_check = Instant::now() + Duration::from_millis(250);
+                if self.maybe_reload() {
+                    continue;
+                }
             }
 
             let wait = if self.needs_redraw
@@ -415,7 +414,7 @@ impl TerminalViewer {
     fn draw(&mut self) -> Result<()> {
         let _span = tracing::info_span!("terminal.draw").entered();
         if self.pending_layout_refresh {
-            self.rerender();
+            self.rerender(true);
             let _ = self.set_scroll(cmp::min(self.scroll, self.max_scroll()));
             self.pending_layout_refresh = false;
         }
@@ -524,37 +523,41 @@ impl TerminalViewer {
     }
 
     fn maybe_reload(&mut self) -> bool {
-        let Ok(modified) = self.source.modified_at() else {
+        // Compare content rather than mtime: editors may replace a file atomically or
+        // preserve timestamps. Retry transient missing/partial files on the next poll.
+        let Ok(content) = self.source.read_to_string() else {
             return false;
         };
-
-        let should_reload = self.last_modified.is_none_or(|current| modified > current);
-
-        if should_reload {
-            self.reload();
-            self.last_modified = Some(modified);
-            return true;
+        if content == self.source_text {
+            return false;
         }
-        false
+        self.apply_source(content, true);
+        true
     }
 
     fn reload(&mut self) {
         match self.source.read_to_string() {
-            Ok(content) => match parse_document(self.source.path().clone(), &content) {
-                Ok(document) => {
-                    self.document = document;
-                    self.source_text = content;
-                    self.rerender();
-                    let _ = self.set_scroll(cmp::min(self.scroll, self.max_scroll()));
-                }
-                Err(error) => {
-                    self.warning = Some(format!("reload failed: {error}"));
-                }
-            },
+            Ok(content) => self.apply_source(content, false),
+            Err(error) => {
+                self.warning = Some(format!("reload failed: {error}"));
+                self.needs_redraw = true;
+            }
+        }
+    }
+
+    fn apply_source(&mut self, content: String, use_cache: bool) {
+        match parse_document(self.source.path().clone(), &content) {
+            Ok(document) => {
+                self.document = document;
+                self.source_text = content;
+                self.rerender(use_cache);
+                let _ = self.set_scroll(cmp::min(self.scroll, self.max_scroll()));
+            }
             Err(error) => {
                 self.warning = Some(format!("reload failed: {error}"));
             }
         }
+        self.needs_redraw = true;
     }
 
     fn open_focused_link(&mut self) {
@@ -573,7 +576,7 @@ impl TerminalViewer {
         }
     }
 
-    fn rerender(&mut self) {
+    fn rerender(&mut self, use_cache: bool) {
         self.pending_image_deletes.extend(self.page_graphics.reset());
         self.clear_text = true;
         self.last_status = None;
@@ -582,6 +585,7 @@ impl TerminalViewer {
             &self.document,
             &self.source_text,
             self.cell_metrics,
+            use_cache,
         ) {
             Ok(graphic_page) => {
                 self.graphic_page = Some(graphic_page);

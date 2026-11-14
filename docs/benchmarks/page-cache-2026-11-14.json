@@ -1,0 +1,96 @@
+{
+  "metric": "process spawn to complete Kitty page placement received on PTY",
+  "fixture": "examples/rich_markdown.md --no-mermaid --theme light",
+  "terminal": {
+    "columns": 120,
+    "rows": 40,
+    "cell_px": [
+      8,
+      16
+    ]
+  },
+  "before": {
+    "measured_at": "2026-11-14T16:42:18.334721+00:00",
+    "command": [
+      "/Users/asumayamada/ghq/github.com/posaune0423/mdv/target/release/mdv",
+      "examples/rich_markdown.md",
+      "--no-mermaid",
+      "--theme",
+      "light"
+    ],
+    "cwd": "/Users/asumayamada/ghq/github.com/posaune0423/mdv",
+    "platform": "macOS-27.3-arm64-arm-64bit",
+    "binary_sha256": "91b7c4f269b429a0c02741f83d0ccb9654e11b46b211fcaf740e65ab9818ca6e",
+    "input_files_sha256": {
+      "examples/rich_markdown.md": "ea8b32020fc4fa2ebf12323396763c002a73c04c3c2522a597f03b7721cdd639"
+    },
+    "terminal": {
+      "columns": 120,
+      "rows": 40,
+      "cell_px": [
+        8,
+        16
+      ]
+    },
+    "metric": "process spawn to complete Kitty page placement received on PTY",
+    "samples_ms": [
+      471.06824995717034,
+      181.71575001906604,
+      141.76420797593892,
+      127.43891699938104,
+      134.9114580079913
+    ],
+    "first_ms": 471.06824995717034,
+    "median_ms": 141.76420797593892,
+    "min_ms": 127.43891699938104,
+    "max_ms": 471.06824995717034
+  },
+  "after_installed": {
+    "measured_at": "2026-11-14T16:54:17.399545+00:00",
+    "command": [
+      "/Users/asumayamada/.local/bin/mdv",
+      "/Users/asumayamada/ghq/github.com/posaune0423/mdv/examples/rich_markdown.md",
+      "--no-mermaid",
+      "--theme",
+      "light"
+    ],
+    "cwd": "/Users/asumayamada/Library/Application Support/orca/codex-accounts/e49cb106-8a3b-432b-9cb6-8eaa2cfadabd/home/worktrees/markdown-cache/mdv",
+    "platform": "macOS-27.3-arm64-arm-64bit-Mach-O",
+    "binary_sha256": "d5713d06fb9caa3168f2d465b9e08b2a50dbfd13db40a5afdb57e0070758cef5",
+    "input_files_sha256": {
+      "/Users/asumayamada/ghq/github.com/posaune0423/mdv/examples/rich_markdown.md": "ea8b32020fc4fa2ebf12323396763c002a73c04c3c2522a597f03b7721cdd639"
+    },
+    "terminal": {
+      "columns": 120,
+      "rows": 40,
+      "cell_px": [
+        8,
+        16
+      ]
+    },
+    "metric": "process spawn to complete Kitty page placement received on PTY",
+    "samples_ms": [
+      148.34520797012374,
+      18.981709028594196,
+      19.159625051543117,
+      17.94504199642688,
+      17.60316704167053,
+      17.54245802294463
+    ],
+    "first_ms": 148.34520797012374,
+    "median_ms": 18.463375512510538,
+    "min_ms": 17.54245802294463,
+    "max_ms": 148.34520797012374
+  },
+  "uncached_reopen_median_ms": 138.33783299196512,
+  "cached_reopen_median_ms": 17.94504199642688,
+  "pixel_identical": true,
+  "refresh": {
+    "equal_timestamp_save_ms": 298.73074998613447,
+    "atomic_save_ms": 252.7554999687709,
+    "warm_reopen_ms": 13.887166976928711,
+    "refreshed_equals_reopened": true,
+    "local_image_invalidation": true,
+    "quit": true
+  }
+}
