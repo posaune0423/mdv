@@ -42,9 +42,8 @@ pub fn run(args: MdvArgs) -> Result<()> {
         if !crate::ui::terminal::is_supported_terminal(
             std::env::var("TERM_PROGRAM").ok().as_deref(),
             std::env::var("TERM").ok().as_deref(),
-        ) && !crate::ui::terminal::is_supported_tmux_outer_terminal(
-            std::env::var("LC_TERMINAL").ok().as_deref(),
-        ) && !crate::ui::terminal::probe::supports_kitty_graphics().unwrap_or(false)
+        ) && !crate::ui::terminal::has_known_tmux_outer_terminal()
+            && !crate::ui::terminal::probe::supports_kitty_graphics().unwrap_or(false)
         {
             bail!(
                 "interactive mode requires a Kitty graphics-compatible terminal or WezTerm (Windows: WezTerm)"

@@ -817,7 +817,7 @@ Reopening unchanged local Markdown must bypass HTML/browser rendering. Changed M
 - [x] Compare the closed contribution with the resident-image renderer and identify shared-image and chunk-interleaving failures.
 - [x] Add failing encoder tests for complete tmux transfer envelopes, input-buffer limits, and pane-relative placements.
 - [x] Add tmux transport configuration, scoped image namespaces, wrapped graphics queries, and scoped cleanup.
-- [x] Verify formatting, a fresh-target full local suite, Clippy, cross-process image namespaces, and an isolated tmux 3.7c server configuration query.
+- [x] Verify formatting, a fresh-target full local suite (211 passed, 4 ignored), Clippy, cross-process image namespaces, and an isolated tmux 3.7c server configuration query.
 - [ ] Validate rich rendering through a native Ghostty or Kitty tmux client before calling the feature fully accepted.
 
 Review notes: the source transfer and renderer tests demonstrate byte framing, cross-process namespace isolation, scoped cleanup, and target-pane tmux configuration handling. An outer PTY experiment confirms tmux receives the passthrough stream, and native Ghostty validation is now in progress in a dedicated test window. Copy mode, nested tmux, multiple clients, and visibility transitions remain unsupported until native client evidence exists.

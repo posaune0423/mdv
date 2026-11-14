@@ -102,6 +102,27 @@ pub fn is_supported_tmux_outer_terminal(outer_terminal: Option<&str>) -> bool {
     })
 }
 
+#[must_use]
+pub fn known_tmux_outer_terminal_from(
+    in_tmux: bool,
+    lc_terminal: Option<&str>,
+    queried_client: Result<bool, anyhow::Error>,
+) -> bool {
+    in_tmux && (queried_client.unwrap_or(false) || is_supported_tmux_outer_terminal(lc_terminal))
+}
+
+#[must_use]
+pub fn has_known_tmux_outer_terminal() -> bool {
+    let pane = std::env::var("TMUX_PANE").ok().filter(|pane| !pane.is_empty());
+    let in_tmux = std::env::var("TMUX").is_ok() && pane.is_some();
+    let queried_client = pane.map_or_else(|| Ok(false), |pane| tmux::known_outer_terminal(&pane));
+    known_tmux_outer_terminal_from(
+        in_tmux,
+        std::env::var("LC_TERMINAL").ok().as_deref(),
+        queried_client,
+    )
+}
+
 fn graphics_protocol(term_program: Option<&str>, term: Option<&str>) -> Option<GraphicsProtocol> {
     if term_program.is_some_and(|value| value.eq_ignore_ascii_case("wezterm")) {
         Some(GraphicsProtocol::Inline)

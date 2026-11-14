@@ -69,9 +69,23 @@ pub fn parse_input_buffer_size(output: &str) -> Result<usize> {
     (size > 0).then_some(size).context("tmux input-buffer-size must be positive")
 }
 
+pub fn known_outer_terminal(pane: &str) -> Result<bool> {
+    let identity =
+        run_tmux(["display-message", "-p", "-t", pane, "#{client_termname},#{client_termtype}"])?;
+    Ok(parse_client_terminal_identity(&identity))
+}
+
+#[must_use]
+pub fn parse_client_terminal_identity(identity: &str) -> bool {
+    let identity = identity.trim().to_ascii_lowercase();
+    identity.contains("ghostty") || identity.contains("kitty")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{PaneGeometry, parse_input_buffer_size, parse_pane_geometry};
+    use super::{
+        PaneGeometry, parse_client_terminal_identity, parse_input_buffer_size, parse_pane_geometry,
+    };
 
     #[test]
     fn parses_pane_geometry() {
@@ -90,5 +104,12 @@ mod tests {
     fn rejects_non_positive_input_buffer_sizes() {
         assert_eq!(parse_input_buffer_size("1048576\n").ok(), Some(1_048_576));
         assert!(parse_input_buffer_size("0").is_err());
+    }
+
+    #[test]
+    fn recognizes_ghostty_and_kitty_client_identities() {
+        assert!(parse_client_terminal_identity("xterm-ghostty,ghostty 1.4.0\n"));
+        assert!(parse_client_terminal_identity("xterm-kitty,kitty"));
+        assert!(!parse_client_terminal_identity("screen,xterm-256color"));
     }
 }
