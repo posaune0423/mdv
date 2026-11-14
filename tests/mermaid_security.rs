@@ -33,7 +33,9 @@ fn does_not_execute_npx_from_path_when_mmdc_is_unavailable() {
 
     assert!(
         output.status.success(),
-        "isolated probe failed: {}",
+        "isolated probe failed ({:?}):\nstdout:\n{}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
 }
@@ -65,7 +67,9 @@ fn uses_an_installed_mmdc_without_executing_npx() {
 
     assert!(
         output.status.success(),
-        "isolated probe failed: {}",
+        "isolated probe failed ({:?}):\nstdout:\n{}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
 }
@@ -179,7 +183,7 @@ fn write_fake_mmdc(directory: &Path) {
     let command = directory.join("mmdc.cmd");
     fs::write(
         &command,
-        "@echo off\r\nsetlocal EnableExtensions DisableDelayedExpansion\r\nset \"out=\"\r\n:arguments\r\nif \"%~1\"==\"\" goto done\r\nif \"%~1\"==\"-o\" set \"out=%~2\"\r\nshift\r\ngoto arguments\r\n:done\r\n<nul set /p \"=<svg></svg>\">\"%out%\"\r\n",
+        "@echo off\r\nsetlocal EnableExtensions DisableDelayedExpansion\r\nset \"out=\"\r\n:arguments\r\nif \"%~1\"==\"\" goto done\r\nif \"%~1\"==\"-o\" set \"out=%~2\"\r\nshift\r\ngoto arguments\r\n:done\r\n<nul set /p \"=<svg></svg>\">\"%out%\"\r\nexit /b 0\r\n",
     )
     .unwrap_or_else(|error| panic!("fake mmdc should be written: {error}"));
 }
