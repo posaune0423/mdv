@@ -74,3 +74,40 @@ pub fn encode_delete(command: DeleteCommand) -> String {
         }
     }
 }
+
+const SUPPORT_QUERY_ID: u32 = 31;
+
+/// Kitty graphics query followed by DA1, which terminals answer last.
+#[must_use]
+pub fn encode_support_query() -> String {
+    format!("\u{1b}_Gi={SUPPORT_QUERY_ID},s=1,v=1,a=q,t=d,f=24;AAAA\u{1b}\\\u{1b}[c")
+}
+
+/// Whether `OK` preceded the DA1 reply, or `None` until DA1 arrives.
+#[must_use]
+pub fn parse_support_reply(reply: &[u8]) -> Option<bool> {
+    let da1_start = find_primary_device_attributes(reply)?;
+    let before_da1 = String::from_utf8_lossy(reply.get(..da1_start)?);
+    Some(before_da1.split("\u{1b}_G").skip(1).any(is_support_query_ok))
+}
+
+fn is_support_query_ok(apc: &str) -> bool {
+    let Some((body, _)) = apc.split_once("\u{1b}\\") else {
+        return false;
+    };
+    let id = format!("i={SUPPORT_QUERY_ID}");
+    body.split_once(';')
+        .is_some_and(|(keys, message)| message == "OK" && keys.split(',').any(|key| key == id))
+}
+
+fn find_primary_device_attributes(reply: &[u8]) -> Option<usize> {
+    const PREFIX: &[u8] = b"\x1b[?";
+    reply.windows(PREFIX.len()).enumerate().find_map(|(start, window)| {
+        if window != PREFIX {
+            return None;
+        }
+        let params = reply.get(start + PREFIX.len()..)?;
+        let terminator = params.iter().find(|byte| !matches!(byte, b'0'..=b'9' | b';'))?;
+        (*terminator == b'c').then_some(start)
+    })
+}

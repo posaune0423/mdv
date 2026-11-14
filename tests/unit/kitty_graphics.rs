@@ -1,6 +1,7 @@
 use base64::Engine as _;
 use mdv::io::kitty_graphics::{
-    DeleteCommand, KittyImagePlacement, encode_delete, encode_place, encode_transmit_png,
+    DeleteCommand, KittyImagePlacement, encode_delete, encode_place, encode_support_query,
+    encode_transmit_png, parse_support_reply,
 };
 
 #[test]
@@ -86,4 +87,15 @@ fn encodes_delete_specific_placement_command() {
 fn encodes_delete_image_data_command() {
     let escape = encode_delete(DeleteCommand::Image { image_id: 7 });
     assert_eq!(escape, "\u{1b}_Ga=d,d=I,i=7\u{1b}\\");
+}
+
+#[test]
+fn support_reply_requires_ok_before_device_attributes() {
+    assert_eq!(encode_support_query(), "\u{1b}_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\u{1b}\\\u{1b}[c");
+    assert_eq!(parse_support_reply(b"\x1b_Gi=31;OK\x1b\\\x1b[?62;22c"), Some(true));
+    assert_eq!(parse_support_reply(b"\x1b[?62;22c"), Some(false));
+    assert_eq!(parse_support_reply(b"\x1b[?62;22c\x1b_Gi=31;OK\x1b\\"), Some(false));
+    assert_eq!(parse_support_reply(b"\x1b_Gi=31;ENOTSUPPORTED\x1b\\\x1b[?62;22c"), Some(false));
+    assert_eq!(parse_support_reply(b"\x1b_Gi=7;OK\x1b\\\x1b[?62;22c"), Some(false));
+    assert_eq!(parse_support_reply(b"\x1b_Gi=31;OK\x1b\\\x1b[?62;2"), None);
 }

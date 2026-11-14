@@ -51,7 +51,7 @@ Behavior:
 Conditions:
 
 - Both `stdout` and `stdin` are TTYs
-- The terminal is identified as Ghostty, Kitty, or WezTerm
+- The terminal is identified as Ghostty, Kitty, or WezTerm, or is a Unix terminal that answers the Kitty graphics support query
 
 Behavior:
 
@@ -183,7 +183,7 @@ The Rust toolchain is pinned to `1.92.0`.
 There is currently no release automation. The distribution contract consists of two paths:
 
 - `scripts/install.sh` downloads the tracked `bin/mdv` from GitHub `main` and places it in the installation directory
-- `mdv update` compares the current executable byte-for-byte against `bin/mdv` on GitHub `main` and replaces it only when they differ
+- `mdv update` compares the tracked binary for the current OS and replaces it when its contents differ and GitHub `main` has a newer version. Equal versions are not updated, so publishing a new binary requires incrementing the version in `Cargo.toml`.
 
 The repository's `bin/mdv` is the artifact used for installation and updates. After a push to `main`, the macOS job in `ci.yml` generates it automatically and commits it only when necessary. Locally, `make build-tracked-bin` reproduces the same packaging path, but CI, rather than manual work, owns updates to the tracked binary.
 
@@ -208,7 +208,7 @@ Particularly important areas are:
 1. Windows image display requires a supported terminal (WezTerm) and an installed Edge/Chrome browser
 2. Native compositor rendering and input feel require separate verification for each terminal and OS
 3. Opening links always uses the first link; there is no link focus state
-4. Terminal detection is limited to Ghostty / Kitty / WezTerm
+4. Terminal detection accepts Ghostty / Kitty / WezTerm and Unix terminals that answer the Kitty graphics support query
 5. The README's platform statement differs from the current implementation's runtime contract
 
 ## 11. Potential Improvements
