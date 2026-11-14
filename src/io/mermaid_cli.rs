@@ -1,23 +1,21 @@
 use std::{
-    ffi::OsString,
     fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result, bail};
+use tempfile::TempDir;
 use tracing::info_span;
 
 use crate::cli::Theme;
 
-static WORKSPACE_COUNTER: AtomicU64 = AtomicU64::new(0);
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 #[derive(Clone, Debug)]
 pub struct MermaidCliRenderer {
     command: PathBuf,
-    base_args: Vec<OsString>,
     cache_dir: PathBuf,
 }
 
@@ -27,46 +25,25 @@ impl MermaidCliRenderer {
         if let Some(command) = std::env::var_os("MDV_MERMAID_CMD") {
             return Self {
                 command: PathBuf::from(command),
-                base_args: Vec::new(),
                 cache_dir: default_cache_root().join("mermaid"),
             };
         }
 
         if let Some(command) = command_from_path("mmdc") {
-            return Self {
-                command,
-                base_args: Vec::new(),
-                cache_dir: default_cache_root().join("mermaid"),
-            };
+            return Self { command, cache_dir: default_cache_root().join("mermaid") };
         }
 
-        if let Some(command) = command_from_path("npx") {
-            return Self {
-                command,
-                base_args: vec![OsString::from("-y"), OsString::from("@mermaid-js/mermaid-cli")],
-                cache_dir: default_cache_root().join("mermaid"),
-            };
-        }
-
-        Self {
-            command: PathBuf::from("mmdc"),
-            base_args: Vec::new(),
-            cache_dir: default_cache_root().join("mermaid"),
-        }
+        Self { command: PathBuf::from("mmdc"), cache_dir: default_cache_root().join("mermaid") }
     }
 
     #[must_use]
     pub fn new(command: impl Into<PathBuf>) -> Self {
-        Self {
-            command: command.into(),
-            base_args: Vec::new(),
-            cache_dir: default_cache_root().join("mermaid"),
-        }
+        Self { command: command.into(), cache_dir: default_cache_root().join("mermaid") }
     }
 
     #[must_use]
     pub fn with_cache_dir(command: impl Into<PathBuf>, cache_dir: PathBuf) -> Self {
-        Self { command: command.into(), base_args: Vec::new(), cache_dir }
+        Self { command: command.into(), cache_dir }
     }
 
     pub fn render_png(&self, source: &str, theme: Theme) -> Result<Vec<u8>> {
@@ -116,13 +93,12 @@ impl MermaidCliRenderer {
         }
 
         let workspace = create_workspace()?;
-        let input = workspace.join("diagram.mmd");
-        let output = workspace.join(format!("diagram.{extension}"));
+        let input = workspace.path().join("diagram.mmd");
+        let output = workspace.path().join(format!("diagram.{extension}"));
 
         fs::write(&input, source)?;
         let mut command = Command::new(&self.command);
         command
-            .args(&self.base_args)
             .arg("-i")
             .arg(&input)
             .arg("-o")
@@ -159,7 +135,6 @@ impl MermaidCliRenderer {
             let _ = fs::create_dir_all(parent);
         }
         let _ = fs::write(&cache_path, &rendered);
-        let _ = fs::remove_dir_all(workspace);
         Ok(rendered)
     }
 
@@ -177,15 +152,8 @@ impl MermaidCliRenderer {
             .unwrap_or_else(|| "default".to_string());
         let width_key = width_px.unwrap_or_default().to_string();
         let theme_key = mermaid_theme_name(theme);
-        let base_args = self
-            .base_args
-            .iter()
-            .map(|value| value.to_string_lossy())
-            .collect::<Vec<_>>()
-            .join("\u{1f}");
         let key = stable_cache_key(&[
             self.command.to_string_lossy().as_ref(),
-            base_args.as_str(),
             extension,
             width_key.as_str(),
             scale_key.as_str(),
@@ -204,12 +172,12 @@ fn mermaid_theme_name(theme: Theme) -> &'static str {
     }
 }
 
-fn create_workspace() -> Result<PathBuf> {
-    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-    let counter = WORKSPACE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("mdv-mermaid-{timestamp}-{counter}"));
-    fs::create_dir_all(&dir)?;
-    Ok(dir)
+fn create_workspace() -> Result<TempDir> {
+    let mut builder = tempfile::Builder::new();
+    builder.prefix("mdv-mermaid-");
+    #[cfg(unix)]
+    builder.permissions(fs::Permissions::from_mode(0o700));
+    builder.tempdir().context("failed to create private mermaid render workspace")
 }
 
 #[allow(dead_code)]

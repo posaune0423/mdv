@@ -44,7 +44,7 @@ use crate::{
         markdown::parse_document,
         text::{
             RenderedDocument, RenderedGraphicContent, RenderedLine, RenderedLineKind,
-            scaled_graphic_height,
+            sanitize_terminal_line, scaled_graphic_height,
         },
     },
     ui::page_graphics::{GraphicPage, total_rows},
@@ -799,7 +799,7 @@ impl TerminalViewer {
             if line.display_text.is_empty() {
                 format!("╰{}╯", "─".repeat(width.saturating_sub(2)))
             } else {
-                let label = format!("─ {} ", line.display_text);
+                let label = format!("─ {} ", sanitize_terminal_line(&line.display_text));
                 let fill = "─".repeat(width.saturating_sub(label.chars().count() + 2));
                 format!("╭{label}{fill}╮")
             }

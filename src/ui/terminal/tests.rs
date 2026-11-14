@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::Cursor;
+use std::{io::Cursor, path::PathBuf};
 
 use crossterm::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent, MouseEventKind,
@@ -13,6 +13,7 @@ use crate::{
     io::fs::FileSystemDocumentSource,
     render::text::{
         RenderedDocument, RenderedGraphic, RenderedGraphicContent, RenderedLine, RenderedLineKind,
+        render_document,
     },
     ui::page_graphics::build_graphic_page,
 };
@@ -266,6 +267,60 @@ fn try_new_degrades_gracefully_when_graphic_mode_unavailable() {
     assert!(viewer.warning.is_some(), "warning should be set when graphic mode is unavailable");
 }
 
+#[test]
+fn status_line_strips_controls_from_source_path_and_warning() {
+    let mut viewer = sample_viewer("# Title\n");
+    viewer.source = FileSystemDocumentSource::new(PathBuf::from("unsafe\n\u{1b}[2J\u{7}"));
+    viewer.warning =
+        Some("reload\r\u{1b}]8;;https://example.com\u{1b}\\\u{9b}31m\u{8}".to_string());
+
+    let status = viewer.status_line(200);
+
+    assert!(status.chars().all(|character| !character.is_control()));
+}
+
+#[test]
+fn structured_code_rendering_strips_controls_before_highlighting() {
+    let source = "```rust\u{1b}[31m\nvalue\u{1b}]8;;https://example.com\u{7}x\u{1b}\\\u{9b}31m\u{8}\r\n```\n";
+    let document = crate::render::markdown::parse_document(PathBuf::from("code.md"), source)
+        .unwrap_or_else(|error| panic!("document should parse: {error}"));
+    let rendered = render_document(&document, Theme::Light, MermaidMode::Disabled, 80, 0.5);
+
+    assert!(
+        rendered
+            .lines
+            .iter()
+            .all(|line| line.display_text.chars().all(|character| !character.is_control()))
+    );
+    assert!(
+        rendered
+            .lines
+            .iter()
+            .all(|line| line.plain_text.chars().all(|character| !character.is_control()))
+    );
+
+    let viewer = sample_viewer("# Title\n");
+    let mut frame = Vec::new();
+    for line in &rendered.lines {
+        viewer
+            .draw_line(
+                &mut frame,
+                line,
+                80,
+                crate::core::theme::ThemeTokens::for_theme(Theme::Light),
+            )
+            .unwrap_or_else(|error| panic!("structured line should draw: {error}"));
+    }
+    let frame = String::from_utf8(frame)
+        .unwrap_or_else(|error| panic!("terminal frame should be UTF-8: {error}"));
+
+    assert!(!frame.contains("\u{1b}]"));
+    assert!(!frame.contains("\u{1b}[31m"));
+    assert!(
+        frame.chars().all(|character| !matches!(character, '\u{7}' | '\u{8}' | '\r' | '\u{9b}'))
+    );
+}
+
 fn sample_viewer(source: &str) -> TerminalViewer {
     let file = NamedTempFile::new()
         .unwrap_or_else(|error| panic!("temp markdown should be created: {error}"));
@@ -303,4 +358,17 @@ fn key_event(ch: char) -> Event {
     let mut key = KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE);
     key.kind = KeyEventKind::Press;
     Event::Key(key)
+}
+
+#[test]
+fn terminal_text_expands_tabs_without_losing_code_whitespace() {
+    let document = crate::render::markdown::parse_document(
+        PathBuf::from("tabs.md"),
+        "```python\n\tprint(1)\necho\thello\n```\n",
+    )
+    .unwrap_or_else(|error| panic!("document should parse: {error}"));
+    let rendered = render_document(&document, Theme::Light, MermaidMode::Disabled, 80, 0.5);
+    assert!(rendered.lines.iter().any(|line| line.plain_text == "        print(1)"));
+    assert!(rendered.lines.iter().any(|line| line.plain_text == "echo    hello"));
+    assert_eq!(crate::render::text::sanitize_terminal_line("a\u{1b}\tb"), "a       b");
 }

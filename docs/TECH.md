@@ -104,7 +104,7 @@
 | `render::svg` | SVG ベースの描画補助と関連テスト |
 | `io::fs` | ドキュメントの読み込みと更新時刻取得 |
 | `io::image_decoder` | ローカル画像の解決と PNG 化 |
-| `io::mermaid_cli` | `mmdc` / `npx @mermaid-js/mermaid-cli` 呼び出しと cache |
+| `io::mermaid_cli` | Explicit or installed `mmdc` execution and cache; no automatic package installation |
 | `io::webkit_snapshot` | Swift helper を使った HTML snapshot |
 | `io::browser` | 既定ブラウザ起動 |
 | `io::kitty_graphics` | Kitty graphics escape sequence 生成 |
@@ -119,7 +119,8 @@ Mermaid は `MermaidCliRenderer::from_env()` で次の順に探索する。
 
 1. `MDV_MERMAID_CMD`
 2. `mmdc`
-3. `npx -y @mermaid-js/mermaid-cli`
+
+If neither is available, Mermaid is reported as unavailable. There is no automatic `npx` fallback; renderer executables and `PATH` must be trusted.
 
 レンダリング結果は cache directory に保存される。
 
