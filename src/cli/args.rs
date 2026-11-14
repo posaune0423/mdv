@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[derive(Clone, Debug, Eq, Parser, PartialEq)]
 #[command(
     name = "mdv",
-    about = "High-fidelity Markdown viewer for Ghostty and Kitty",
+    about = "High-fidelity Markdown viewer for image-capable terminals",
     arg_required_else_help = true,
     args_conflicts_with_subcommands = true
 )]

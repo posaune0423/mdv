@@ -14,9 +14,9 @@
 
 `mdv` is a blazing-fast Markdown viewer built in Rust. It renders rich Markdown images in your terminal using the [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) or WezTerm's lossless inline-image transport, including typography, images, diagrams, syntax highlighting, and GFM features like callouts.
 
-If you live in [Ghostty](https://ghostty.org/) or [Kitty](https://sw.kovidgoyal.net/kitty/), you no longer need to leave the terminal to read a README.
+If you live in [Ghostty](https://ghostty.org/), [Kitty](https://sw.kovidgoyal.net/kitty/), or another compatible terminal, you no longer need to leave the terminal to read a README.
 
-The [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) is also implemented by terminals including Ghostty, Konsole, st (with a patch), Warp, wayst, WezTerm, iTerm2, and xterm.js. `mdv` enables interactive mode in Ghostty, Kitty, and WezTerm. On Windows, use WezTerm: its lossless inline-image transport works through the Windows console, while Windows Terminal does not currently support this viewer’s image path.
+`mdv` recognizes Ghostty, Kitty, and WezTerm directly. On macOS, other terminals such as Rex are detected automatically by querying [Kitty Graphics Protocol support](https://sw.kovidgoyal.net/kitty/graphics-protocol/#querying-support-and-available-transmission-mediums); no terminal-name override is needed. On Windows, use WezTerm: its lossless inline-image transport works through the Windows console, while Windows Terminal does not currently support this viewer’s image path.
 
 ## Features
 
@@ -62,7 +62,7 @@ mdv README.md
 
 Windows Terminal and the legacy console can still use the plain-text pipeline (`Get-Content README.md | mdv -`); image viewing requires WezTerm. Windows ARM64 native binaries are not distributed.
 
-**Run** (in Ghostty or Kitty):
+**Run** (in a supported terminal):
 
 ```bash
 mdv README.md
@@ -75,7 +75,7 @@ mdv README.md                           # system theme (default)
 mdv --theme dark notes.md               # dark theme
 mdv --watch docs/guide.md               # auto-reload on save
 mdv --no-mermaid spec.md                # skip Mermaid rendering
-mdv update                              # replace this mdv if main/bin/mdv changed
+mdv update                              # install a newer version published on main
 mdv --version                           # print the current version
 mdv ./README.md | head -n 50            # plain-text output (pipe/CI)
 ```
@@ -96,7 +96,7 @@ mdv ./README.md | head -n 50            # plain-text output (pipe/CI)
 
 ## Requirements
 
-- **Terminal**: macOS: [Ghostty](https://ghostty.org/), [Kitty](https://sw.kovidgoyal.net/kitty/), or [WezTerm](https://wezterm.org/); Windows: WezTerm
+- **Terminal**: macOS: [Ghostty](https://ghostty.org/), [Kitty](https://sw.kovidgoyal.net/kitty/), [WezTerm](https://wezterm.org/), or a terminal that answers the Kitty graphics support query (such as Rex); Windows: WezTerm
 - **Protocol ecosystem**: The [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) is also implemented by Ghostty, Konsole, st (with a patch), Warp, wayst, WezTerm, iTerm2, and xterm.js
 - **Rich rendering**: macOS uses its system WebKit; Windows x64 uses installed Microsoft Edge or Chrome. Both produce lossless page images. Linux remains a plain-text/headless target.
 - **Mermaid** (optional): install a trusted `mmdc` on `PATH`, or set `MDV_MERMAID_CMD` to a trusted renderer executable. `mdv` never automatically installs Mermaid through `npx`.
@@ -114,7 +114,7 @@ mdv ./README.md | head -n 50            # plain-text output (pipe/CI)
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `mdv: command not found`           | Ensure `$HOME/.local/bin` is on `PATH`, then restart the terminal.                                                   |
 | `mdv update` fails                 | Confirm the current `mdv` location is writable and GitHub `main` exposes the expected [`bin/mdv`](bin/mdv) artifact. |
-| Plain text instead of rich viewer  | Requires a TTY in Ghostty or Kitty. Pipes and redirects trigger headless mode by design.                             |
+| Plain text instead of rich viewer  | Requires a TTY in a supported terminal. Pipes and redirects trigger headless mode by design.                        |
 | Mermaid diagrams show placeholders | Install a trusted `mmdc` or set `MDV_MERMAID_CMD`. Use `--no-mermaid` to skip entirely.                            |
 | Graphic / snapshot issues          | macOS uses WebKit; Windows requires installed Edge/Chrome and WezTerm. See [docs/TECH.md](docs/TECH.md).                                           |
 
