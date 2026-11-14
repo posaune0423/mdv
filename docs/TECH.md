@@ -51,7 +51,7 @@ Behavior:
 Conditions:
 
 - Both `stdout` and `stdin` are TTYs
-- The terminal is identified as Ghostty or Kitty
+- The terminal is identified as Ghostty, Kitty, or WezTerm
 
 Behavior:
 
@@ -208,7 +208,7 @@ Particularly important areas are:
 1. Windows image display requires a supported terminal (WezTerm) and an installed Edge/Chrome browser
 2. Native compositor rendering and input feel require separate verification for each terminal and OS
 3. Opening links always uses the first link; there is no link focus state
-4. Terminal detection is limited to Ghostty / Kitty
+4. Terminal detection is limited to Ghostty / Kitty / WezTerm
 5. The README's platform statement differs from the current implementation's runtime contract
 
 ## 11. Potential Improvements

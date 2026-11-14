@@ -7,7 +7,7 @@ alwaysApply: true
 
 ## Choosing Between Them
 
-- **Skill**: For tasks requiring specialized knowledge, read `http://SKILL.md` before starting work and apply its procedures and constraints exactly. Do not stop at announcing skill use.
+- **Skill**: For tasks requiring specialized knowledge, read `.agents/skills/<skill-name>/SKILL.md` before starting work and apply its procedures and constraints exactly. Do not stop at announcing skill use.
 - **Subagent**: Delegate when an isolated context is useful (such as refactoring, reviews, or broad exploration), or when parallel execution is needed.
 
 Both can be used together. You may pass a skill's guidance to a subagent for execution.
