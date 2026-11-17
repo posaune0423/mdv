@@ -30,7 +30,8 @@ fn single_snapshot_apis_include_delayed_remote_images() -> anyhow::Result<()> {
             };
             stream.set_read_timeout(Some(Duration::from_secs(2)))?;
             let mut request = [0; 4096];
-            stream.read(&mut request)?;
+            let received = stream.read(&mut request)?;
+            anyhow::ensure!(received > 0, "image client closed without a request");
             std::thread::sleep(Duration::from_millis(600));
             let svg = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><path fill='red' d='M0 0h24v24H0z'/></svg>";
             let _ = write!(
