@@ -3,7 +3,7 @@
 use std::{path::Path, sync::atomic::AtomicBool};
 
 use anyhow::Result;
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 use anyhow::bail;
 
 /// Renders an HTML document into the lossless raster consumed by `GraphicPage`.
@@ -37,9 +37,16 @@ pub(crate) fn render_html_with_pending_assets(
             .map(|result| (result.png_bytes, false))
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(target_os = "linux")]
+    {
+        let _ = (wait_for_remote, cancelled);
+        crate::io::chromium_snapshot::render_html_to_png(html, base_dir, width)
+            .map(|result| (result.png_bytes, false))
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = (html, base_dir, width, wait_for_remote, cancelled);
-        bail!("interactive HTML rasterization is only supported on macOS and Windows");
+        bail!("interactive HTML rasterization is only supported on macOS, Windows, and Linux");
     }
 }
