@@ -17,6 +17,7 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
     private let reportURL: URL
     private let viewportWidth: CGFloat
     private let outputFormat: String
+    private let waitForRemote: Bool
     private(set) var done = false
     private(set) var failure: String?
     private var latestProbe: [String: Any] = [:]
@@ -34,6 +35,7 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
         reportURL: URL,
         viewportWidth: CGFloat,
         outputFormat: String = "png",
+        waitForRemote: Bool = false,
         webView: WKWebView? = nil,
         completion: ((String?) -> Void)? = nil
     ) {
@@ -43,6 +45,7 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
         self.reportURL = reportURL
         self.viewportWidth = viewportWidth
         self.outputFormat = outputFormat
+        self.waitForRemote = waitForRemote
         self.completion = completion
         if let webView {
             self.webView = webView
@@ -66,10 +69,32 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
         navigation = webView.loadFileURL(htmlURL, allowingReadAccessTo: readAccessURL)
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         guard !done, navigation === self.navigation else { return }
-        profile("navigation_finished")
-        self.awaitVisualStability(attempt: 0)
+        profile("navigation_committed")
+        awaitDocumentReady()
+    }
+
+    private func awaitDocumentReady() {
+        guard !done else { return }
+        // didFinish waits for every remote image. Start the bounded asset wait
+        // once the new document has been parsed, while keeping local assets and
+        // fonts in the visual-readiness checks below.
+        webView.evaluateJavaScript("document.readyState !== 'loading'") { result, error in
+            guard !self.done else { return }
+            if let error {
+                self.fail(error.localizedDescription)
+                return
+            }
+            if result as? Bool == true {
+                profile("document_ready")
+                self.awaitVisualStability(attempt: 0)
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                    self.awaitDocumentReady()
+                }
+            }
+        }
     }
 
     func webView(
@@ -183,7 +208,7 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
             return image.naturalWidth > 0;
           });
           const remoteImagesReady = images.every((image) => (
-            !image.blocking || image.complete
+            image.blocking || image.complete
           ));
           const mermaidsReady = mermaids.every((diagram) => (
             diagram.renderedWidth > 0 && diagram.renderedHeight > 0
@@ -223,7 +248,8 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
             let imagesReady = (payload["imagesReady"] as? Bool) ?? true
             let remoteImagesReady = (payload["remoteImagesReady"] as? Bool) ?? true
             let mermaidsReady = (payload["mermaidsReady"] as? Bool) ?? true
-            let visualsReady = fontsReady && imagesReady && mermaidsReady && (remoteImagesReady || attempt >= 8)
+            let remoteReady = remoteImagesReady || (!self.waitForRemote && attempt >= 8)
+            let visualsReady = fontsReady && imagesReady && mermaidsReady && remoteReady
             let currentHeight = Double(snapshotHeight)
             if visualsReady {
                 if abs(self.lastMeasuredHeight - currentHeight) < 0.5 {
@@ -236,7 +262,7 @@ final class SnapshotRunner: NSObject, WKNavigationDelegate {
             }
             self.lastMeasuredHeight = currentHeight
 
-            if (visualsReady && self.stableProbeCount >= 1) || attempt >= 40 {
+            if (visualsReady && self.stableProbeCount >= 1) || (attempt >= 40 && remoteReady) {
                 if let failure = self.assetFailureMessage(from: payload) {
                     self.fail(failure)
                     return
@@ -350,6 +376,7 @@ private struct SnapshotRequest: Decodable {
     let width: UInt32
     let outputFormat: String?
     let timeoutMs: UInt32?
+    let waitForRemote: Bool?
 
     enum CodingKeys: String, CodingKey {
         case htmlPath = "html_path"
@@ -359,6 +386,7 @@ private struct SnapshotRequest: Decodable {
         case width
         case outputFormat = "output_format"
         case timeoutMs = "timeout_ms"
+        case waitForRemote = "wait_for_remote"
     }
 }
 
@@ -393,6 +421,7 @@ private final class SnapshotServer {
     private var currentRunner: SnapshotRunner?
     private var idleTimer: Timer?
     private var renderTimer: Timer?
+    private var connectionTimer: Timer?
     private var rendering = false
     private(set) var isStopped = false
 
@@ -597,6 +626,7 @@ private final class SnapshotServer {
             reportURL: URL(fileURLWithPath: request.reportPath),
             viewportWidth: CGFloat(request.width),
             outputFormat: request.outputFormat ?? "png",
+            waitForRemote: request.waitForRemote ?? false,
             webView: webView
         ) { [weak self] failure in
             DispatchQueue.main.async {
@@ -607,6 +637,16 @@ private final class SnapshotServer {
         renderTimer = Timer.scheduledTimer(withTimeInterval: Double(request.timeoutMs ?? 25_000) / 1000, repeats: false) { [weak self, weak runner] _ in
             guard let self, let runner, self.currentRunner === runner else { return }
             runner.cancel("snapshot rendering timed out")
+        }
+        connectionTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self, weak runner] _ in
+            guard let self, let runner, self.currentRunner === runner else { return }
+            var byte: UInt8 = 0
+            let count = Darwin.recv(connection, &byte, 1, MSG_PEEK | MSG_DONTWAIT)
+            if count == 0 {
+                runner.cancel("snapshot rendering cancelled")
+            } else if count < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR {
+                runner.cancel("snapshot rendering connection closed")
+            }
         }
 
         dataStore.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) { [weak self, weak runner] in
@@ -632,6 +672,8 @@ private final class SnapshotServer {
     private func completeRender(on connection: Int32, failure: String?) {
         renderTimer?.invalidate()
         renderTimer = nil
+        connectionTimer?.invalidate()
+        connectionTimer = nil
         if failure != nil {
             reusableWebView?.navigationDelegate = nil
             reusableWebView = nil

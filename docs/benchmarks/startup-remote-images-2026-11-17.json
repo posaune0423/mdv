@@ -1,0 +1,109 @@
+{
+  "baseline_installed": {
+    "measured_at": "2026-11-17T15:49:27.549180+00:00",
+    "command": [
+      "/Users/asumayamada/.local/bin/mdv",
+      "README.md"
+    ],
+    "cwd": "/Users/asumayamada/ghq/github.com/posaune0423/mdv",
+    "platform": "macOS-27.3-arm64-arm-64bit",
+    "binary_sha256": "d5713d06fb9caa3168f2d465b9e08b2a50dbfd13db40a5afdb57e0070758cef5",
+    "input_files_sha256": {
+      "README.md": "db51f7bef3a3a7dc750db38814d88ce55ecca39b0aef5ca495f256b4042de846"
+    },
+    "terminal": {
+      "columns": 120,
+      "rows": 40,
+      "cell_px": [
+        8,
+        16
+      ]
+    },
+    "metric": "process spawn to complete Kitty page placement received on PTY",
+    "samples_ms": [
+      3451.4568750000763,
+      90.9252500000548,
+      91.75129100003687
+    ],
+    "first_ms": 3451.4568750000763,
+    "median_ms": 91.75129100003687,
+    "min_ms": 90.9252500000548,
+    "max_ms": 3451.4568750000763
+  },
+  "baseline_profiled_uncached": {
+    "measured_at": "2026-11-17T15:50:19.004279+00:00",
+    "command": [
+      "/Users/asumayamada/.local/bin/mdv",
+      "README.md"
+    ],
+    "cwd": "/Users/asumayamada/ghq/github.com/posaune0423/mdv",
+    "platform": "macOS-27.3-arm64-arm-64bit",
+    "binary_sha256": "d5713d06fb9caa3168f2d465b9e08b2a50dbfd13db40a5afdb57e0070758cef5",
+    "input_files_sha256": {
+      "README.md": "db51f7bef3a3a7dc750db38814d88ce55ecca39b0aef5ca495f256b4042de846"
+    },
+    "terminal": {
+      "columns": 120,
+      "rows": 40,
+      "cell_px": [
+        8,
+        16
+      ]
+    },
+    "metric": "process spawn to complete Kitty page placement received on PTY",
+    "samples_ms": [
+      3257.1441249997406
+    ],
+    "first_ms": 3257.1441249997406,
+    "median_ms": 3257.1441249997406,
+    "min_ms": 3257.1441249997406,
+    "max_ms": 3257.1441249997406
+  },
+  "final_installed_first": {
+    "binary": "/Users/asumayamada/.local/bin/mdv",
+    "frames_ms": [
+      800.933833000272
+    ],
+    "first_ms": 800.933833000272,
+    "last_update_ms": 800.933833000272
+  },
+  "final_installed_cached": {
+    "measured_at": "2026-11-17T16:10:14.082341+00:00",
+    "command": [
+      "/Users/asumayamada/.local/bin/mdv",
+      "README.md"
+    ],
+    "cwd": "/Users/asumayamada/ghq/github.com/posaune0423/mdv",
+    "platform": "macOS-27.3-arm64-arm-64bit",
+    "binary_sha256": "652e25fef3e7154193c3215727e42b715c781926b3b7826b698404e2405c0735",
+    "input_files_sha256": {
+      "README.md": "526005f90a671af469f1726355fa15ab4bab870da38529efb91441f178ce14ac"
+    },
+    "terminal": {
+      "columns": 120,
+      "rows": 40,
+      "cell_px": [
+        8,
+        16
+      ]
+    },
+    "metric": "process spawn to complete Kitty page placement received on PTY",
+    "samples_ms": [
+      76.13845800005947,
+      77.92004099974292,
+      72.01033300043491
+    ],
+    "first_ms": 76.13845800005947,
+    "median_ms": 76.13845800005947,
+    "min_ms": 72.01033300043491,
+    "max_ms": 77.92004099974292
+  },
+  "notes": [
+    "PTY image placement receipt, not terminal compositor paint time.",
+    "Baseline README had no performance documentation paragraph; the new paragraph is below the captured viewport.",
+    "Final first-open measurement used 120 columns and 80 rows; baseline and cached samples used 120 columns and 40 rows.",
+    "Final first-open measurement followed installation of a newly signed executable with no matching page-cache entry; WebKit worker state was not independently isolated. Cached samples bypass HTML and WebKit.",
+    "Before/after completed README captures at 120 columns and 80 rows were exactly equal in RGBA pixels.",
+    "Remote image response time varies; these samples are observations, not a universal latency bound."
+  ]
+}
