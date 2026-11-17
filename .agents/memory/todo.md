@@ -23,8 +23,8 @@ Slow remote images must not block the entire Markdown page until network complet
 - [x] Complete dedicated Codex review after CodeRabbit authentication failure.
 - [x] Reproduce and fix the single-snapshot API regression: one-shot PNG/raster calls must wait for remote images because they have no completion channel.
 - [x] Integrate current main while preserving Linux rendering and publish PR #21: https://github.com/posaune0423/mdv/pull/21.
-- [ ] Verify final-head CI and review feedback.
-- Local merged-head verification: formatting and all-target/all-feature Clippy passed; 204 tests passed, 3 intentionally ignored. CI is pending.
+- [x] Verify CI and review feedback: run 44138402451 on b8b74e8 passed all four platform checks/builds; the main-only tracked-binary refresh was intentionally skipped; no review threads were open. PR #21 is ready for review.
+- Local merged-head verification: formatting and all-target/all-feature Clippy passed; 204 tests passed, 3 intentionally ignored. The final documentation-only commit is rechecked remotely after this record.
 
 ## Current Task
 
