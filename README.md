@@ -83,6 +83,8 @@ mdv ./README.md | head -n 50            # plain-text output (pipe/CI)
 
 Interactive pages are cached on disk so reopening an unchanged document skips HTML generation and browser rendering. The cache includes the source content, local image contents, theme, viewport width, and renderer identity; changed inputs trigger a fresh render. Press `r` to force a fresh render. Headless output is unchanged.
 
+On macOS, slow remote images no longer hold up the entire page. The viewer shows the local content first, then updates the page when those images finish loading. Only the completed page is cached.
+
 The page cache is bounded to 512 MiB (128 MiB per page). Use `MDV_CACHE_DIR` to choose its location. Cache read/write failures fall back to normal rendering.
 
 ### Keyboard shortcuts

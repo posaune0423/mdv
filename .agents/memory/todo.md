@@ -1,3 +1,29 @@
+## Startup latency investigation (2026-11-17)
+
+- [x] Measure the installed binary through a real PTY and profile `mdv README.md`.
+- [x] Reproduce remote image loading blocking first display with a controlled regression.
+- [x] Remove the blocking wait while preserving local assets, typography, and diagnostics.
+- [x] Run quality checks and compare installed-binary startup and captured output.
+
+### Acceptance
+
+Slow remote images must not block the entire Markdown page until network completion. Preserve local image failures, loaded image fidelity, worker reuse, and automatic refresh. Record cold and cached timings separately; PTY receipt is not terminal compositor paint time.
+
+### Review and verification
+
+- Reproduced `mdv README.md` at 3.45 seconds initially and about 0.09 seconds with a page-cache hit. A profiled cache miss spent 3.16 of 3.26 seconds inside WebKit rasterization.
+- WebKit previously waited for navigation completion before starting its remote-image budget, so remote downloads blocked the entire page. Begin probing after DOM parsing, correct the remote readiness predicate, and complete pending images on a separate background worker. Cache only completed pages.
+- The real HTTP regression failed before the fix. It now proves that a hanging image does not block the initial snapshot and a delayed successful image appears in the completed pixels. Source/resize invalidation and cancellation tests prevent stale updates; disconnecting a cancelled request releases the remote worker promptly.
+- Final fmt, all-target/all-feature Clippy, full tests (203 passed, 3 ignored), diff check, and tracked-language check passed. CodeRabbit required reauthentication; independent agent review found and prompted the background-cancellation fix.
+- Installed the signed release at `/Users/asumayamada/.local/bin/mdv`, backing up the previous binary at `/tmp/mdv-before-startup-fix-20261117`. First README display after installation was 0.80 seconds; cached median was 0.076 seconds. Terminal geometry and cache-state limits are recorded in `docs/benchmarks/startup-remote-images-2026-11-17.json`.
+- Real PTY verification confirmed initial local content, eventual remote-image pixels, cached reopening without refetching, and quit. Before/after completed README viewport captures were exactly equal in RGBA pixels. Native compositor paint latency and Windows execution were not measured; the Windows rendering path is unchanged.
+
+## Startup pull request review (2026-11-17)
+
+- [x] Complete dedicated Codex review after CodeRabbit authentication failure.
+- [x] Reproduce and fix the single-snapshot API regression: one-shot PNG/raster calls must wait for remote images because they have no completion channel.
+- [ ] Integrate current main while preserving Linux rendering, publish the PR, and verify CI and review feedback.
+
 ## Current Task
 
 - [x] Establish a reproducible case where double-escaped entities such as `&nbsp;` remain after raw HTML restoration

@@ -2,6 +2,7 @@ use std::{
     cmp,
     collections::BTreeSet,
     io::{self, Write},
+    sync::mpsc::TryRecvError,
     time::{Duration, Instant},
 };
 
@@ -30,8 +31,8 @@ use self::{
     graphics::{GraphicsProtocol, PageGraphics, collect_graphics_commands, resize_graphic_space},
     highlight::highlight_code_terminal,
     layout::{
-        article_origin, article_wrap_width, current_cell_metrics, fit_to_width,
-        render_graphic_page, truncate_visible,
+        GraphicRender, PendingGraphicPage, article_origin, article_wrap_width,
+        current_cell_metrics, fit_to_width, render_graphic_page, truncate_visible,
     },
     scroll::ScrollMotion,
 };
@@ -74,6 +75,7 @@ pub struct TerminalViewer {
     source_text: String,
     rendered: Option<RenderedDocument>,
     graphic_page: Option<GraphicPage>,
+    pending_graphic_page: Option<PendingGraphicPage>,
     scroll: usize,
     scroll_motion: ScrollMotion,
     page_graphics: PageGraphics,
@@ -123,10 +125,11 @@ impl TerminalViewer {
         source_text: String,
     ) -> Result<Self> {
         let cell_metrics = current_cell_metrics();
-        let (graphic_page, rendered, warning) =
+        let (graphic_page, pending_graphic_page, rendered, warning) =
             match render_graphic_page(&config, &document, &source_text, cell_metrics, true) {
-                Ok(page) => (Some(page), None, None),
+                Ok(GraphicRender { page, pending }) => (Some(page), pending, None, None),
                 Err(error) => (
+                    None,
                     None,
                     Some(render_document(
                         &document,
@@ -146,6 +149,7 @@ impl TerminalViewer {
             source_text,
             rendered,
             graphic_page,
+            pending_graphic_page,
             scroll: 0,
             scroll_motion: ScrollMotion::default(),
             page_graphics: PageGraphics::new(current_graphics_protocol()),
@@ -172,10 +176,11 @@ impl TerminalViewer {
         source_text: String,
     ) -> Self {
         let cell_metrics = current_cell_metrics();
-        let (graphic_page, rendered, warning) =
+        let (graphic_page, pending_graphic_page, rendered, warning) =
             match render_graphic_page(&config, &document, &source_text, cell_metrics, true) {
-                Ok(page) => (Some(page), None, None),
+                Ok(GraphicRender { page, pending }) => (Some(page), pending, None, None),
                 Err(error) => (
+                    None,
                     None,
                     Some(render_document(
                         &document,
@@ -195,6 +200,7 @@ impl TerminalViewer {
             source_text,
             rendered,
             graphic_page,
+            pending_graphic_page,
             scroll: 0,
             scroll_motion: ScrollMotion::default(),
             page_graphics: PageGraphics::new(current_graphics_protocol()),
@@ -260,6 +266,7 @@ impl TerminalViewer {
         let mut last_motion_tick = Instant::now();
         let mut next_watch_check = Instant::now();
         loop {
+            self.poll_pending_graphic_page();
             if event::poll(Duration::ZERO)? {
                 let events = self.read_pending_events()?;
                 if self.apply_event_batch(events) {
@@ -341,6 +348,7 @@ impl TerminalViewer {
                 Event::Resize(_, _) => {
                     flush_scroll(self, &mut next_scroll, &mut scroll_dirty);
                     self.cell_metrics = current_cell_metrics();
+                    self.pending_graphic_page = None;
                     self.pending_layout_refresh = true;
                     self.needs_redraw = true;
                 }
@@ -577,6 +585,7 @@ impl TerminalViewer {
     }
 
     fn rerender(&mut self, use_cache: bool) {
+        self.pending_graphic_page = None;
         self.pending_image_deletes.extend(self.page_graphics.reset());
         self.clear_text = true;
         self.last_status = None;
@@ -587,8 +596,9 @@ impl TerminalViewer {
             self.cell_metrics,
             use_cache,
         ) {
-            Ok(graphic_page) => {
-                self.graphic_page = Some(graphic_page);
+            Ok(GraphicRender { page, pending }) => {
+                self.graphic_page = Some(page);
+                self.pending_graphic_page = pending;
                 self.rendered = None;
                 self.warning = None;
             }
@@ -609,6 +619,38 @@ impl TerminalViewer {
         self.clear_all_graphics = true;
         self.scroll = cmp::min(self.scroll, self.max_scroll());
         self.scroll_motion.jump(self.scroll);
+    }
+
+    fn poll_pending_graphic_page(&mut self) {
+        let result = self.pending_graphic_page.as_ref().map(|pending| pending.receiver.try_recv());
+        match result {
+            Some(Ok(Ok(page))) => {
+                self.pending_graphic_page = None;
+                self.pending_image_deletes.extend(self.page_graphics.reset());
+                self.clear_text = true;
+                self.last_status = None;
+                self.graphic_page = Some(page);
+                self.rendered = None;
+                self.warning = None;
+                self.transmitted_graphics.clear();
+                self.visible_placements.clear();
+                self.clear_all_graphics = true;
+                self.scroll = cmp::min(self.scroll, self.max_scroll());
+                self.scroll_motion.jump(self.scroll);
+                self.needs_redraw = true;
+            }
+            Some(Ok(Err(error))) => {
+                self.pending_graphic_page = None;
+                self.warning = Some(format!("remote image refresh failed: {error}"));
+                self.needs_redraw = true;
+            }
+            Some(Err(TryRecvError::Disconnected)) => {
+                self.pending_graphic_page = None;
+                self.warning = Some("remote image refresh stopped unexpectedly".to_string());
+                self.needs_redraw = true;
+            }
+            Some(Err(TryRecvError::Empty)) | None => {}
+        }
     }
 
     fn set_scroll(&mut self, next_scroll: usize) -> bool {

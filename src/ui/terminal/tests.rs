@@ -1,5 +1,6 @@
 use std::fs;
 use std::io::Cursor;
+use std::sync::mpsc;
 
 use crossterm::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent, MouseEventKind,
@@ -234,6 +235,66 @@ fn resize_events_defer_layout_refresh_until_draw() {
 }
 
 #[test]
+fn completed_pending_graphic_page_replaces_the_initial_page_and_schedules_redraw() {
+    let mut viewer = sample_viewer(&long_document(64));
+    let initial = graphic_page_with_height(40);
+    let completed = graphic_page_with_height(80);
+    let (sender, receiver) = mpsc::channel();
+    viewer.graphic_page = Some(initial);
+    viewer.pending_graphic_page = Some(super::layout::PendingGraphicPage::new(receiver));
+    viewer.needs_redraw = false;
+    viewer.visible_placements = vec![(7, 7)];
+    viewer.transmitted_graphics.insert(7);
+    viewer.scroll = usize::MAX;
+    sender
+        .send(Ok(completed.clone()))
+        .unwrap_or_else(|error| panic!("send completed page: {error}"));
+
+    viewer.poll_pending_graphic_page();
+
+    assert_eq!(viewer.graphic_page, Some(completed));
+    assert!(viewer.pending_graphic_page.is_none());
+    assert!(viewer.needs_redraw);
+    assert!(viewer.clear_all_graphics);
+    assert!(viewer.visible_placements.is_empty());
+    assert!(viewer.transmitted_graphics.is_empty());
+    assert_eq!(viewer.scroll, viewer.max_scroll());
+}
+
+#[test]
+fn source_refresh_and_resize_discard_stale_pending_graphic_pages() -> anyhow::Result<()> {
+    let mut viewer = sample_viewer("# Before\n");
+    let (source_sender, source_receiver) = mpsc::channel();
+    viewer.pending_graphic_page = Some(super::layout::PendingGraphicPage::new(source_receiver));
+    fs::write(viewer.source.path(), "# After\n")?;
+
+    assert!(viewer.maybe_reload());
+    assert!(viewer.pending_graphic_page.is_none());
+    assert!(source_sender.send(Ok(graphic_page_with_height(80))).is_err());
+    viewer.poll_pending_graphic_page();
+    assert!(viewer.graphic_page.is_none(), "stale source result must not replace the new render");
+
+    let (resize_sender, resize_receiver) = mpsc::channel();
+    viewer.pending_graphic_page = Some(super::layout::PendingGraphicPage::new(resize_receiver));
+    assert!(!viewer.apply_event_batch([Event::Resize(120, 40)]));
+    assert!(viewer.pending_graphic_page.is_none());
+    assert!(resize_sender.send(Ok(graphic_page_with_height(80))).is_err());
+    viewer.poll_pending_graphic_page();
+    assert!(viewer.graphic_page.is_none(), "stale resize result must not replace the current page");
+    Ok(())
+}
+
+#[test]
+fn dropping_a_pending_page_cancels_its_background_render() {
+    let (_, receiver) = mpsc::channel();
+    let pending = super::layout::PendingGraphicPage::new(receiver);
+    let cancelled = pending.cancelled.clone();
+    assert!(!cancelled.load(std::sync::atomic::Ordering::Relaxed));
+    drop(pending);
+    assert!(cancelled.load(std::sync::atomic::Ordering::Relaxed));
+}
+
+#[test]
 fn try_new_degrades_gracefully_when_graphic_mode_unavailable() {
     let file = NamedTempFile::new()
         .unwrap_or_else(|error| panic!("temp markdown should be created: {error}"));
@@ -290,6 +351,18 @@ fn sample_viewer(source: &str) -> TerminalViewer {
         document,
         source.to_string(),
     )
+}
+
+fn graphic_page_with_height(height: u32) -> crate::ui::page_graphics::GraphicPage {
+    let image = ImageBuffer::from_pixel(8, height, Rgba([0, 0, 0, 255]));
+    crate::ui::page_graphics::GraphicPage {
+        width_cells: 1,
+        display_width_px: 8,
+        display_height_px: height,
+        image_width_px: 8,
+        image_height_px: height,
+        image: std::sync::Arc::new(image),
+    }
 }
 
 fn long_document(paragraphs: usize) -> String {

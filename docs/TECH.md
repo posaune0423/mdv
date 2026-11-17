@@ -129,6 +129,8 @@ HTML snapshots use `WKWebView` through a Swift helper. `build.rs` compiles `snap
 
 Internal transfers for interactive display use uncompressed TIFF, which Rust converts to RGBA once and retains. Only a lossless PNG of the visible viewport is sent to the terminal. Avoiding full-page PNG compression/decompression and full-page decoding on every scroll reduces startup and scrolling costs without changing resolution, color, transparency, or crop geometry. The existing `render_html_to_png` API returns PNG and diagnostics.
 
+On macOS, readiness probing starts after document parsing instead of waiting for navigation completion, which includes remote image downloads. Local images and fonts remain required. Remote images get a short initial wait; if any remain pending, a background render waits for them and replaces the page without blocking input. That render uses a separate worker and lock so it cannot delay foreground requests. Only completed pages enter the persistent cache, and edits or resizes discard obsolete background results.
+
 Outputs:
 
 - `snapshot.png` (`render_html_to_png`) or `snapshot.tiff` (interactive display)

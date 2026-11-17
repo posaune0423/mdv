@@ -1,4 +1,11 @@
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver},
+    },
+};
 
 use anyhow::Result;
 use crossterm::terminal;
@@ -6,7 +13,7 @@ use tracing::info_span;
 
 use crate::{
     core::{config::AppConfig, document::Document},
-    io::{page_cache::PageCache, snapshot::render_html_to_raster},
+    io::{page_cache::PageCache, snapshot::render_html_with_pending_assets},
     render::github_html::build_github_html,
     ui::{
         page_graphics::{GraphicPage, build_graphic_page},
@@ -16,13 +23,35 @@ use crate::{
 
 const GRAPHIC_PAGE_ZOOM: f32 = 1.55;
 
+pub(super) struct GraphicRender {
+    pub(super) page: GraphicPage,
+    pub(super) pending: Option<PendingGraphicPage>,
+}
+
+pub(super) struct PendingGraphicPage {
+    pub(super) receiver: Receiver<Result<GraphicPage>>,
+    pub(super) cancelled: Arc<AtomicBool>,
+}
+
+impl PendingGraphicPage {
+    pub(super) fn new(receiver: Receiver<Result<GraphicPage>>) -> Self {
+        Self { receiver, cancelled: Arc::new(AtomicBool::new(false)) }
+    }
+}
+
+impl Drop for PendingGraphicPage {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
+}
+
 pub(super) fn render_graphic_page(
     config: &AppConfig,
     document: &Document,
     source_text: &str,
     cell_metrics: CellMetrics,
     use_cache: bool,
-) -> Result<GraphicPage> {
+) -> Result<GraphicRender> {
     let _span = info_span!("startup.render_graphic_page").entered();
     if cfg!(test) {
         anyhow::bail!("graphic mode disabled during tests");
@@ -41,7 +70,7 @@ pub(super) fn render_graphic_page(
     );
     if use_cache && let Some(page) = cache.as_ref().and_then(PageCache::load) {
         tracing::debug!("page cache hit");
-        return Ok(page);
+        return Ok(GraphicRender { page, pending: None });
     }
     let base_dir = document
         .path
@@ -55,19 +84,47 @@ pub(super) fn render_graphic_page(
     if let Some(cache) = cache.as_mut() {
         cache.prepare(&html);
     }
-    let snapshot = {
+    let (snapshot, remote_assets_pending) = {
         let _span = info_span!("startup.render_html_to_raster").entered();
-        render_html_to_raster(&html, base_dir, snapshot_width_px)?
+        render_html_with_pending_assets(&html, base_dir, snapshot_width_px, false, None)?
     };
 
     let page = {
         let _span = info_span!("startup.build_graphic_page").entered();
         build_graphic_page(&snapshot, viewport_width, display_width_px)?
     };
+    if remote_assets_pending {
+        let (sender, receiver) = mpsc::channel();
+        let pending = PendingGraphicPage::new(receiver);
+        let cancelled = pending.cancelled.clone();
+        let base_dir = base_dir.to_path_buf();
+        std::thread::spawn(move || {
+            let completed = (|| -> Result<GraphicPage> {
+                let (snapshot, pending) = render_html_with_pending_assets(
+                    &html,
+                    &base_dir,
+                    snapshot_width_px,
+                    true,
+                    Some(&cancelled),
+                )?;
+                anyhow::ensure!(
+                    !pending,
+                    "remote assets remained pending after the completion render"
+                );
+                let page = build_graphic_page(&snapshot, viewport_width, display_width_px)?;
+                if let Some(cache) = cache {
+                    cache.store(&html, &page);
+                }
+                Ok(page)
+            })();
+            let _ = sender.send(completed);
+        });
+        return Ok(GraphicRender { page, pending: Some(pending) });
+    }
     if let Some(cache) = cache {
         cache.store(&html, &page);
     }
-    Ok(page)
+    Ok(GraphicRender { page, pending: None })
 }
 
 pub(super) fn fit_to_width(line: &str, width: usize) -> String {
